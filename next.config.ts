@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import path from "path";
 
 const nextConfig: NextConfig = {
   typescript: {
@@ -11,7 +12,7 @@ const nextConfig: NextConfig = {
     domains: [],
     unoptimized: false,
   },
-  outputFileTracingRoot: __dirname,
+  outputFileTracingRoot: path.join(__dirname),
 };
 
 export default nextConfig;
