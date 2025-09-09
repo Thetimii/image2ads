@@ -11,6 +11,9 @@ const poppins = Poppins({
 export const metadata: Metadata = {
   title: "Image 2 Ads",
   description: "Turn Plain Product Photos into Stunning Ads",
+  icons: {
+    icon: '/favicon.ico',
+  },
 };
 
 export default function RootLayout({

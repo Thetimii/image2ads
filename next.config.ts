@@ -11,6 +11,7 @@ const nextConfig: NextConfig = {
     domains: [],
     unoptimized: false,
   },
+  outputFileTracingRoot: __dirname,
 };
 
 export default nextConfig;
