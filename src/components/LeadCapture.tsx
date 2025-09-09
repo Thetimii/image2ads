@@ -44,7 +44,7 @@ const LeadCapture = () => {
         setSubmitStatus('error');
         setErrorMessage(result.error || 'Something went wrong');
       }
-    } catch (error) {
+    } catch {
       setSubmitStatus('error');
       setErrorMessage('Network error. Please try again.');
     } finally {
@@ -128,7 +128,7 @@ const LeadCapture = () => {
             
             {submitStatus === 'success' && (
               <div className="p-4 rounded-xl bg-green-500/20 border border-green-500/50 text-green-200">
-                🎉 Successfully added to waitlist! We'll notify you when we launch.
+                🎉 Successfully added to waitlist! We&apos;ll notify you when we launch.
               </div>
             )}
             
@@ -171,7 +171,7 @@ const LeadCapture = () => {
           className="mt-12 text-center"
         >
           <p className="text-gray-400 text-sm">
-            We're currently in development. Join the waitlist to be notified when we launch.
+            We&apos;re currently in development. Join the waitlist to be notified when we launch.
           </p>
         </motion.div>
       </div>
