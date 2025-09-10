@@ -58,7 +58,7 @@
 
 /* Base */
 body {
-  background: var(--gradient-background);
+  background: linear-gradient(90deg, #00C9FF 0%, #92FE9D 100%);
   background-attachment: fixed;
   color: var(--text-primary);
   font-family: var(--font-poppins);
