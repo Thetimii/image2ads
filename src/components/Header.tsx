@@ -49,12 +49,14 @@ const Header = () => {
           className="h-16 w-auto"
         />
       </div>
-      <button 
+      
+      <button
         onClick={scrollToSignup}
-        className="px-8 py-3 text-white font-semibold rounded-full bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 transition-all duration-300 hover:scale-105 shadow-lg hover:shadow-purple-500/25"
+        className="bg-white/20 backdrop-blur-lg text-white font-semibold py-3 px-6 rounded-full text-base border-2 border-white/30 hover:border-[#00C9FF]/50 hover:bg-gradient-to-r hover:from-[#00C9FF]/30 hover:to-[#92FE9D]/30 transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl drop-shadow-sm"
       >
-        Get Early Access
+        Join Waitlist
       </button>
+    
     </header>
   );
 };

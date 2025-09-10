@@ -49,13 +49,13 @@ const BeforeAfterGallery = () => {
   }, []);
 
   return (
-    <section ref={sectionRef} className="py-24 px-6 relative min-h-[200vh]">
+    <section ref={sectionRef} className="py-8 px-6 relative min-h-[200vh]">
       <div 
         ref={containerRef}
         className="sticky top-0 h-screen flex flex-col justify-center"
       >
         <motion.h2 
-          className="text-5xl md:text-6xl font-bold text-center mb-6 bg-gradient-to-r from-white via-blue-200 to-purple-200 bg-clip-text text-transparent"
+          className="text-5xl md:text-6xl font-bold text-center mb-6 text-white drop-shadow-lg"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8 }}
@@ -66,7 +66,7 @@ const BeforeAfterGallery = () => {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8, delay: 0.1 }}
-          className="text-xl text-gray-300 text-center mb-16 max-w-2xl mx-auto"
+          className="text-xl text-center mb-16 max-w-2xl mx-auto text-white/90 drop-shadow-md font-medium"
         >
           See the transformation in action
         </motion.p>
@@ -102,9 +102,9 @@ const BeforeAfterGallery = () => {
                   
                   {/* Before Image (on top) - controlled by scroll */}
                   <div 
-                    className="absolute inset-0 bg-gray-800 transition-transform duration-75 ease-out"
+                    className="absolute inset-0 transition-transform duration-100 ease-out overflow-hidden"
                     style={{
-                      transform: `translateY(-${imageProgress * 100}%)`
+                      clipPath: `inset(0 0 ${imageProgress * 100}% 0)`,
                     }}
                   >
                     <Image 
@@ -115,6 +115,14 @@ const BeforeAfterGallery = () => {
                       sizes="256px"
                       onError={(e) => {
                         e.currentTarget.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAwIiBoZWlnaHQ9IjMwMCIgdmlld0JveD0iMCAwIDQwMCAzMDAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSI0MDAiIGhlaWdodD0iMzAwIiBmaWxsPSIjMzc0MTUxIi8+Cjx0ZXh0IHg9IjIwMCIgeT0iMTUwIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTYiIGZpbGw9IiM5Q0E0QUYiIHRleHQtYW5jaG9yPSJtaWRkbGUiPkJlZm9yZTwvdGV4dD4KPHN2Zz4=';
+                      }}
+                    />
+                    
+                    {/* Smooth gradient transition at the bottom */}
+                    <div 
+                      className="absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-transparent to-black/20 pointer-events-none"
+                      style={{
+                        transform: `translateY(${Math.max(0, (imageProgress - 0.9) * 200)}px)`,
                       }}
                     />
                     

@@ -10,12 +10,12 @@ const HowItWorks = () => {
   ];
 
   return (
-    <section className="py-24 px-6 relative">
+    <section className="py-16 px-6 relative">
       <motion.h2 
         initial={{ opacity: 0, y: 20 }}
         whileInView={{ opacity: 1, y: 0 }}
         viewport={{ once: true }}
-        className="text-5xl md:text-6xl font-bold text-center mb-6 bg-gradient-to-r from-white via-blue-200 to-purple-200 bg-clip-text text-transparent"
+        className="text-5xl md:text-6xl font-bold text-center mb-6 text-white drop-shadow-lg"
       >
         How It Works
       </motion.h2>
@@ -24,7 +24,7 @@ const HowItWorks = () => {
         whileInView={{ opacity: 1, y: 0 }}
         viewport={{ once: true }}
         transition={{ delay: 0.1 }}
-        className="text-xl text-gray-300 text-center mb-16 max-w-2xl mx-auto"
+        className="text-xl text-center mb-16 max-w-2xl mx-auto text-white/90 drop-shadow-md font-medium"
       >
         Three simple steps to transform your product photos into high-converting ads
       </motion.p>
@@ -40,10 +40,10 @@ const HowItWorks = () => {
             whileHover={{ scale: 1.05, y: -10 }}
             className="relative group"
           >
-            <div className="gradient-card rounded-3xl p-8 text-center h-full border border-white/20 group-hover:border-white/40 transition-all duration-300">
+            <div className="bg-white/20 backdrop-blur-lg rounded-3xl p-8 text-center h-full border-2 border-white/30 group-hover:border-white/50 transition-all duration-300 shadow-xl">
               <div className="text-7xl mb-6 group-hover:scale-110 transition-transform duration-300">{step.icon}</div>
-              <h3 className="text-2xl font-bold text-white mb-4">{step.title}</h3>
-              <p className="text-gray-300 leading-relaxed">{step.desc}</p>
+              <h3 className="text-2xl font-bold text-white mb-4 drop-shadow-md">{step.title}</h3>
+              <p className="text-white/90 leading-relaxed font-medium drop-shadow-sm">{step.desc}</p>
               
               <div className={`absolute inset-0 bg-gradient-to-br ${step.color} opacity-0 group-hover:opacity-10 rounded-3xl transition-opacity duration-300`}></div>
             </div>
