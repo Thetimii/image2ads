@@ -80,32 +80,32 @@ export default function Hero() {
           initial={{ opacity: 0, y: 50 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8, delay: 0.3 }}
-          className="mt-20 flex flex-col md:flex-row justify-center items-center space-y-12 md:space-y-0 md:space-x-16"
+          className="mt-16 flex flex-col md:flex-row justify-center items-center space-y-10 md:space-y-0 md:space-x-12"
         >
           <div className="text-center">
-            <p className="text-gray-800 mb-6 font-bold text-xl bg-white/80 backdrop-blur-sm rounded-full px-6 py-2 inline-block shadow-lg">Before</p>
-            <div className="relative w-96 h-[500px] md:w-[450px] md:h-[580px] rounded-2xl overflow-hidden shadow-2xl border-4 border-gray-300/50 hover:scale-105 transition-transform duration-300">
+            <p className="text-gray-800 mb-4 font-semibold text-lg bg-white/70 backdrop-blur-sm rounded-full px-4 py-2 inline-block shadow-md">Before</p>
+            <div className="relative w-72 h-80 md:w-80 md:h-96 rounded-xl overflow-hidden shadow-xl border-2 border-gray-300/40 hover:scale-105 transition-transform duration-300">
               <Image
                 src="/before1.jpg"
                 alt="Product image before transformation"
                 fill
                 className="object-cover"
-                sizes="(max-width: 768px) 384px, 450px"
+                sizes="(max-width: 768px) 288px, 320px"
               />
             </div>
           </div>
           
-          <div className="text-6xl md:text-8xl text-blue-600 rotate-90 md:rotate-0 font-bold drop-shadow-lg">→</div>
+          <div className="text-4xl md:text-5xl text-blue-600 rotate-90 md:rotate-0 font-bold drop-shadow-md">→</div>
           
           <div className="text-center">
-            <p className="text-gray-800 mb-6 font-bold text-xl bg-white/80 backdrop-blur-sm rounded-full px-6 py-2 inline-block shadow-lg">After</p>
-            <div className="relative w-96 h-[500px] md:w-[450px] md:h-[580px] rounded-2xl overflow-hidden shadow-2xl border-4 border-blue-300/50 hover:scale-105 transition-transform duration-300">
+            <p className="text-gray-800 mb-4 font-semibold text-lg bg-white/70 backdrop-blur-sm rounded-full px-4 py-2 inline-block shadow-md">After</p>
+            <div className="relative w-72 h-80 md:w-80 md:h-96 rounded-xl overflow-hidden shadow-xl border-2 border-blue-300/40 hover:scale-105 transition-transform duration-300">
               <Image
                 src="/after1.jpg"
                 alt="Professional ad after AI transformation"
                 fill
                 className="object-cover"
-                sizes="(max-width: 768px) 384px, 450px"
+                sizes="(max-width: 768px) 288px, 320px"
               />
             </div>
           </div>
