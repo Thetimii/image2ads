@@ -11,7 +11,7 @@ const Footer = () => {
   };
 
   return (
-    <footer className="py-12 px-6 bg-white/20 backdrop-blur-lg border-t border-white/30 shadow-lg">
+    <footer className="py-12 px-6 bg-white/10 backdrop-blur-md border-t border-white/20 shadow-lg">
       <div className="max-w-6xl mx-auto">
         <div className="flex flex-col md:flex-row justify-between items-center mb-12">
           <div className="mb-8 md:mb-0">
@@ -45,7 +45,7 @@ const Footer = () => {
           </div>
         </div>
         
-        <div className="flex flex-col md:flex-row justify-between items-center pt-6 sm:pt-8 border-t border-white/30">
+        <div className="flex flex-col md:flex-row justify-between items-center pt-6 sm:pt-8 border-t border-white/20">
           <p className="text-slate-700 mb-4 md:mb-0 text-sm sm:text-base">
             &copy; 2025 Image 2 Ads. All rights reserved.
           </p>
