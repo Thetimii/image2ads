@@ -14,7 +14,7 @@ export default function Contact() {
         
         <div className="prose prose-lg max-w-none">
           <p className="text-xl text-gray-700 mb-8">
-            Have questions about Image 2 Ads? We'd love to hear from you!
+            Have questions about Image 2 Ads? We&apos;d love to hear from you!
           </p>
           
           <div className="grid md:grid-cols-2 gap-8">
@@ -65,7 +65,7 @@ export default function Contact() {
                 
                 <div>
                   <h3 className="font-semibold text-gray-800">Do you offer refunds?</h3>
-                  <p className="text-gray-700">Yes, we offer a 30-day money-back guarantee if you're not satisfied.</p>
+                  <p className="text-gray-700">Yes, we offer a 30-day money-back guarantee if you&apos;re not satisfied.</p>
                 </div>
               </div>
             </div>
