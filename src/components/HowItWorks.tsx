@@ -40,16 +40,16 @@ const HowItWorks = () => {
             whileHover={{ scale: 1.05, y: -10 }}
             className="relative group"
           >
-            <div className="gradient-card rounded-3xl p-8 text-center h-full border border-white/20 group-hover:border-white/40 transition-all duration-300">
+            <div className="gradient-card rounded-3xl p-8 text-center h-full border border-gray-300/30 group-hover:border-blue-400/50 transition-all duration-300 bg-white/20 backdrop-blur-sm shadow-xl">
               <div className="text-7xl mb-6 group-hover:scale-110 transition-transform duration-300">{step.icon}</div>
-              <h3 className="text-2xl font-bold text-white mb-4">{step.title}</h3>
-              <p className="text-gray-300 leading-relaxed">{step.desc}</p>
+              <h3 className="text-2xl font-bold text-gray-800 mb-4">{step.title}</h3>
+              <p className="text-gray-700 leading-relaxed font-medium">{step.desc}</p>
               
-              <div className={`absolute inset-0 bg-gradient-to-br ${step.color} opacity-0 group-hover:opacity-10 rounded-3xl transition-opacity duration-300`}></div>
+              <div className={`absolute inset-0 bg-gradient-to-br ${step.color} opacity-0 group-hover:opacity-20 rounded-3xl transition-opacity duration-300`}></div>
             </div>
             
             {index < steps.length - 1 && (
-              <div className="hidden md:block absolute top-1/2 -right-4 w-8 h-0.5 bg-gradient-to-r from-white/30 to-transparent"></div>
+              <div className="hidden md:block absolute top-1/2 -right-4 w-8 h-0.5 bg-gradient-to-r from-blue-400/60 to-transparent"></div>
             )}
           </motion.div>
         ))}
