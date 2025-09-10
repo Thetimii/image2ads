@@ -2,18 +2,18 @@ import Link from 'next/link';
 
 export default function Contact() {
   return (
-    <div className="min-h-screen py-16 px-6">
+    <div className="min-h-screen py-12 sm:py-16 px-4 sm:px-6">
       <div className="max-w-4xl mx-auto">
-        <Link href="/" className="text-white hover:text-[#00C9FF] mb-8 inline-block font-medium drop-shadow-md transition-colors duration-300">
+        <Link href="/" className="text-white hover:text-[#00C9FF] mb-6 sm:mb-8 inline-block font-medium drop-shadow-md transition-colors duration-300">
           ← Back to Home
         </Link>
         
-        <h1 className="text-4xl md:text-5xl font-bold mb-8 text-white drop-shadow-lg">
+        <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold mb-6 sm:mb-8 text-white drop-shadow-lg">
           Contact Us
         </h1>
         
-        <div className="bg-white/20 backdrop-blur-lg rounded-3xl p-8 border-2 border-white/30 shadow-xl">
-          <p className="text-xl text-white/95 mb-8 font-medium drop-shadow-sm">
+        <div className="bg-white/20 backdrop-blur-lg rounded-3xl p-6 sm:p-8 border-2 border-white/30 shadow-xl">
+          <p className="text-lg sm:text-xl text-white/95 mb-6 sm:mb-8 font-medium drop-shadow-sm">
             Have questions about Image 2 Ads? We'd love to hear from you!
           </p>
           

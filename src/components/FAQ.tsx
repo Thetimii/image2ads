@@ -15,9 +15,9 @@ const FAQ = () => {
   const [openIndex, setOpenIndex] = useState<number | null>(null);
 
   return (
-    <section className="py-24 px-6 relative">
+    <section className="py-16 sm:py-24 px-4 sm:px-6 relative">
       <motion.h2 
-        className="text-5xl md:text-6xl font-bold text-center mb-6 text-white drop-shadow-lg"
+        className="text-3xl sm:text-5xl md:text-6xl font-bold text-center mb-4 sm:mb-6 text-white drop-shadow-lg"
         initial={{ opacity: 0, y: 20 }}
         whileInView={{ opacity: 1, y: 0 }}
         viewport={{ once: true }}
@@ -29,7 +29,7 @@ const FAQ = () => {
         whileInView={{ opacity: 1, y: 0 }}
         viewport={{ once: true }}
         transition={{ delay: 0.1 }}
-        className="text-xl text-center mb-16 max-w-2xl mx-auto text-white/90 drop-shadow-md font-medium"
+        className="text-lg sm:text-xl text-center mb-12 sm:mb-16 max-w-2xl mx-auto text-white/90 drop-shadow-md font-medium px-4"
       >
         Everything you need to know about our AI-powered service
       </motion.p>
@@ -46,12 +46,12 @@ const FAQ = () => {
           >
             <motion.div
               onClick={() => setOpenIndex(openIndex === index ? null : index)}
-              className="bg-white/20 backdrop-blur-lg rounded-2xl p-6 border-2 border-white/30 cursor-pointer flex justify-between items-center hover:border-white/50 transition-all duration-300 group shadow-xl"
+              className="bg-white/20 backdrop-blur-lg rounded-2xl p-4 sm:p-6 border-2 border-white/30 cursor-pointer flex justify-between items-center hover:border-white/50 transition-all duration-300 group shadow-xl"
               whileHover={{ scale: 1.01 }}
             >
-              <h3 className="font-semibold text-lg text-white pr-4 group-hover:text-blue-200 transition-colors drop-shadow-md">{faq.q}</h3>
+              <h3 className="font-semibold text-base sm:text-lg text-white pr-4 group-hover:text-blue-200 transition-colors drop-shadow-md">{faq.q}</h3>
               <motion.span 
-                className="text-2xl text-white flex-shrink-0 drop-shadow-md"
+                className="text-xl sm:text-2xl text-white flex-shrink-0 drop-shadow-md"
                 animate={{ rotate: openIndex === index ? 45 : 0 }}
                 transition={{ duration: 0.2 }}
               >
@@ -67,7 +67,7 @@ const FAQ = () => {
                   transition={{ duration: 0.3 }}
                   className="overflow-hidden"
                 >
-                  <div className="p-6 mt-2 rounded-2xl bg-white/25 backdrop-blur-sm border-2 border-white/20 text-white/95 leading-relaxed font-medium drop-shadow-sm shadow-lg">
+                  <div className="p-4 sm:p-6 mt-2 rounded-2xl bg-white/25 backdrop-blur-sm border-2 border-white/20 text-white/95 leading-relaxed font-medium drop-shadow-sm shadow-lg text-sm sm:text-base">
                     {faq.a}
                   </div>
                 </motion.div>

@@ -49,13 +49,13 @@ const BeforeAfterGallery = () => {
   }, []);
 
   return (
-    <section ref={sectionRef} className="py-8 px-6 relative min-h-[200vh]">
+    <section ref={sectionRef} className="py-6 sm:py-8 px-4 sm:px-6 relative min-h-[150vh] sm:min-h-[200vh]">
       <div 
         ref={containerRef}
         className="sticky top-0 h-screen flex flex-col justify-center"
       >
         <motion.h2 
-          className="text-5xl md:text-6xl font-bold text-center mb-6 text-white drop-shadow-lg"
+          className="text-3xl sm:text-5xl md:text-6xl font-bold text-center mb-4 sm:mb-6 text-white drop-shadow-lg"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8 }}
@@ -66,12 +66,12 @@ const BeforeAfterGallery = () => {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8, delay: 0.1 }}
-          className="text-xl text-center mb-16 max-w-2xl mx-auto text-white/90 drop-shadow-md font-medium"
+          className="text-lg sm:text-xl text-center mb-8 sm:mb-16 max-w-2xl mx-auto text-white/90 drop-shadow-md font-medium px-4"
         >
           See the transformation in action
         </motion.p>
         
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-7xl mx-auto">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 sm:gap-8 max-w-7xl mx-auto">
           {images.map((image, index) => {
             // Calculate individual progress for each image with stagger
             const imageProgress = Math.max(0, Math.min(1, (scrollProgress - index * 0.15) / 0.7));
@@ -82,19 +82,19 @@ const BeforeAfterGallery = () => {
                 initial={{ opacity: 0, y: 50 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.5, delay: index * 0.1 }}
-                className="gradient-card rounded-2xl p-6 border border-white/20"
+                className="bg-white/20 backdrop-blur-lg rounded-2xl p-4 sm:p-6 border-2 border-white/30 shadow-xl"
               >
-                <h3 className="text-lg font-semibold text-gray-300 text-center mb-6">Before → After</h3>
+                <h3 className="text-base sm:text-lg font-semibold text-white text-center mb-4 sm:mb-6 drop-shadow-md">Before → After</h3>
                 
                 {/* Layered Image Container */}
-                <div className="relative rounded-xl overflow-hidden border border-gray-600 h-96 w-64 mx-auto">
+                <div className="relative rounded-xl overflow-hidden border-2 border-white/30 h-64 w-48 sm:h-80 sm:w-60 md:h-96 md:w-64 mx-auto">
                   {/* After Image (underneath) */}
                   <Image 
                     src={image.after} 
                     alt="After transformation" 
                     fill
                     className="object-cover"
-                    sizes="256px"
+                    sizes="(max-width: 640px) 192px, (max-width: 768px) 240px, 256px"
                     onError={(e) => {
                       e.currentTarget.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAwIiBoZWlnaHQ9IjMwMCIgdmlld0JveD0iMCAwIDQwMCAzMDAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxkZWZzPgo8bGluZWFyR3JhZGllbnQgaWQ9ImciIHgxPSIwJSIgeTE9IjAlIiB4Mj0iMTAwJSIgeTI9IjEwMCUiPgo8c3RvcCBvZmZzZXQ9IjAlIiBzdHlsZT0ic3RvcC1jb2xvcjojMzk4MUY2O3N0b3Atb3BhY2l0eToxIiAvPgo8c3RvcCBvZmZzZXQ9IjEwMCUiIHN0eWxlPSJzdG9wLWNvbG9yOiM4QjVDRjY7c3RvcC1vcGFjaXR5OjEiIC8+CjwvbGluZWFyR3JhZGllbnQ+CjwvZGVmcz4KPHJlY3Qgd2lkdGg9IjQwMCIgaGVpZ2h0PSIzMDAiIGZpbGw9InVybCgjZykiLz4KPHN2ZyB4PSIxNzAiIHk9IjEyMCIgd2lkdGg9IjYwIiBoZWlnaHQ9IjYwIiB2aWV3Qm94PSIwIDAgMjQgMjQiIGZpbGw9Im5vbmUiPgo8cGF0aCBkPSJNMTIgMkwyIDdWMTdMMTIgMjJMMjIgMTdWN0wxMiAyWiIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiLz4KPC9zdmc+Cjx0ZXh0IHg9IjIwMCIgeT0iMjAwIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTYiIGZpbGw9IndoaXRlIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj5BZnRlcjwvdGV4dD4KPHN2Zz4=';
                     }}
@@ -112,7 +112,7 @@ const BeforeAfterGallery = () => {
                       alt="Before transformation" 
                       fill
                       className="object-cover"
-                      sizes="256px"
+                      sizes="(max-width: 640px) 192px, (max-width: 768px) 240px, 256px"
                       onError={(e) => {
                         e.currentTarget.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAwIiBoZWlnaHQ9IjMwMCIgdmlld0JveD0iMCAwIDQwMCAzMDAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSI0MDAiIGhlaWdodD0iMzAwIiBmaWxsPSIjMzc0MTUxIi8+Cjx0ZXh0IHg9IjIwMCIgeT0iMTUwIiBmb250LWZhbWlseT0iQXJpYWwiIGZvbnQtc2l6ZT0iMTYiIGZpbGw9IiM5Q0E0QUYiIHRleHQtYW5jaG9yPSJtaWRkbGUiPkJlZm9yZTwvdGV4dD4KPHN2Zz4=';
                       }}

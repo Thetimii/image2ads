@@ -2,22 +2,22 @@ import Link from 'next/link';
 
 export default function About() {
   return (
-    <div className="min-h-screen py-16 px-6">
+    <div className="min-h-screen py-12 sm:py-16 px-4 sm:px-6">
       <div className="max-w-4xl mx-auto">
-        <Link href="/" className="text-white hover:text-[#00C9FF] mb-8 inline-block font-medium drop-shadow-md transition-colors duration-300">
+        <Link href="/" className="text-white hover:text-[#00C9FF] mb-6 sm:mb-8 inline-block font-medium drop-shadow-md transition-colors duration-300">
           ← Back to Home
         </Link>
         
-        <h1 className="text-4xl md:text-5xl font-bold mb-8 text-white drop-shadow-lg">
+        <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold mb-6 sm:mb-8 text-white drop-shadow-lg">
           About Image 2 Ads
         </h1>
         
-        <div className="bg-white/20 backdrop-blur-lg rounded-3xl p-8 border-2 border-white/30 shadow-xl">
-          <p className="text-xl text-white/95 mb-6 font-medium drop-shadow-sm">
+        <div className="bg-white/20 backdrop-blur-lg rounded-3xl p-6 sm:p-8 border-2 border-white/30 shadow-xl">
+          <p className="text-lg sm:text-xl text-white/95 mb-6 font-medium drop-shadow-sm">
             Image 2 Ads is an AI-powered platform that transforms ordinary product photos into stunning, high-converting advertisements in seconds.
           </p>
           
-          <h2 className="text-2xl font-semibold text-white mb-4 drop-shadow-md">Our Mission</h2>
+          <h2 className="text-xl sm:text-2xl font-semibold text-white mb-4 drop-shadow-md">Our Mission</h2>
           <p className="text-white/90 mb-6 leading-relaxed">
             We believe every business deserves professional-quality advertising, regardless of budget or design expertise. Our AI technology democratizes access to high-quality ad creation, helping businesses of all sizes compete in the digital marketplace.
           </p>
