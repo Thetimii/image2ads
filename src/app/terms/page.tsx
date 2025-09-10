@@ -22,7 +22,7 @@ export default function Terms() {
           
           <h2 className="text-2xl font-semibold text-white mb-4 drop-shadow-md">Service Description</h2>
           <p className="text-white/90 mb-6 leading-relaxed">
-            Image 2 Ads is an AI-powered platform that generates advertisements from product images. Our service is provided "as is" and we reserve the right to modify or discontinue the service at any time.
+            Image 2 Ads is an AI-powered platform that generates advertisements from product images. Our service is provided &quot;as is&quot; and we reserve the right to modify or discontinue the service at any time.
           </p>
           
           <h2 className="text-2xl font-semibold text-white mb-4 drop-shadow-md">User Responsibilities</h2>
