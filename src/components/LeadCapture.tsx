@@ -52,7 +52,7 @@ const LeadCapture = () => {
     }
   };
   return (
-    <section id="signup-section" className="py-16 sm:py-24 px-4 sm:px-6 relative overflow-hidden">
+    <section id="signup-section" className="py-24 px-6 relative overflow-hidden">
       <div className="relative z-10 max-w-4xl mx-auto text-center">
         <motion.div
           initial={{ opacity: 0, y: 30 }}
@@ -60,10 +60,10 @@ const LeadCapture = () => {
           viewport={{ once: true }}
           transition={{ duration: 0.8 }}
         >
-          <h2 className="text-3xl sm:text-5xl md:text-6xl font-bold mb-4 sm:mb-6 text-white drop-shadow-lg">
+          <h2 className="text-5xl md:text-6xl font-bold mb-6 bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 bg-clip-text text-transparent">
             Join the Waitlist
           </h2>
-          <p className="text-lg sm:text-xl md:text-2xl text-white/90 mb-8 sm:mb-12 max-w-3xl mx-auto leading-relaxed font-medium drop-shadow-md px-4">
+          <p className="text-xl md:text-2xl text-gray-700 mb-12 max-w-3xl mx-auto leading-relaxed">
             Be among the first to access Image 2 Ads when we launch. Sign up now for early access and updates.
           </p>
         </motion.div>
@@ -73,22 +73,22 @@ const LeadCapture = () => {
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
           transition={{ duration: 0.8, delay: 0.2 }}
-          className="bg-white/20 backdrop-blur-lg rounded-3xl p-4 sm:p-6 md:p-8 lg:p-12 border-2 border-white/30 shadow-2xl max-w-2xl mx-auto"
+          className="gradient-card rounded-3xl p-8 md:p-12 border border-white/30 shadow-2xl max-w-2xl mx-auto bg-white/20 backdrop-blur-sm"
         >
-          <div className="mb-4 sm:mb-6 md:mb-8">
-            <h3 className="text-lg sm:text-xl md:text-2xl font-bold text-white mb-2 drop-shadow-md">Get Early Access</h3>
-            <p className="text-white/90 drop-shadow-sm font-medium text-sm sm:text-base">Be notified when we launch • No commitment required</p>
+          <div className="mb-8">
+            <h3 className="text-2xl font-bold text-gray-800 mb-2">Get Early Access</h3>
+            <p className="text-gray-600">Be notified when we launch • No commitment required</p>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-3 sm:space-y-4 md:space-y-6">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+          <form onSubmit={handleSubmit} className="space-y-6">
+            <div className="grid md:grid-cols-2 gap-4">
               <input 
                 type="text" 
                 name="name"
                 placeholder="Your Name" 
                 value={formData.name}
                 onChange={handleInputChange}
-                className="w-full p-3 sm:p-4 rounded-xl bg-white/10 backdrop-blur-md border border-white/20 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white placeholder-gray-400 transition-all duration-300 text-sm sm:text-base min-h-[44px] touch-manipulation"
+                className="w-full p-4 rounded-xl bg-white/30 backdrop-blur-md border border-gray-300/50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-800 placeholder-gray-500 transition-all duration-300"
                 required
                 disabled={isSubmitting}
               />
@@ -98,7 +98,7 @@ const LeadCapture = () => {
                 placeholder="Email Address" 
                 value={formData.email}
                 onChange={handleInputChange}
-                className="w-full p-3 sm:p-4 rounded-xl bg-white/10 backdrop-blur-md border border-white/20 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white placeholder-gray-400 transition-all duration-300 text-sm sm:text-base min-h-[44px] touch-manipulation"
+                className="w-full p-4 rounded-xl bg-white/30 backdrop-blur-md border border-gray-300/50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-800 placeholder-gray-500 transition-all duration-300"
                 required
                 disabled={isSubmitting}
               />
@@ -110,7 +110,7 @@ const LeadCapture = () => {
               placeholder="What industry are you in? (optional)" 
               value={formData.industry}
               onChange={handleInputChange}
-              className="w-full p-3 sm:p-4 rounded-xl bg-white/10 backdrop-blur-md border border-white/20 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-white placeholder-gray-400 transition-all duration-300 text-sm sm:text-base min-h-[44px] touch-manipulation"
+              className="w-full p-4 rounded-xl bg-white/30 backdrop-blur-md border border-gray-300/50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-800 placeholder-gray-500 transition-all duration-300"
               disabled={isSubmitting}
             />
             
@@ -131,7 +131,7 @@ const LeadCapture = () => {
               whileHover={{ scale: isSubmitting ? 1 : 1.02 }}
               whileTap={{ scale: isSubmitting ? 1 : 0.98 }}
               disabled={isSubmitting}
-              className={`w-full p-4 text-base sm:text-lg font-bold rounded-xl transition-all duration-300 min-h-[52px] touch-manipulation ${
+              className={`w-full p-4 text-lg font-bold rounded-xl transition-all duration-300 ${
                 isSubmitting 
                   ? 'bg-gray-600 cursor-not-allowed' 
                   : 'bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 hover:from-blue-600 hover:via-purple-600 hover:to-pink-600 shadow-2xl hover:shadow-purple-500/25'
@@ -141,7 +141,7 @@ const LeadCapture = () => {
             </motion.button>
           </form>
 
-          <div className="mt-6 sm:mt-8 flex flex-col sm:flex-row items-center justify-center space-y-2 sm:space-y-0 sm:space-x-6 text-xs sm:text-sm text-gray-400">
+          <div className="mt-8 flex items-center justify-center space-x-6 text-sm text-gray-600">
             <div className="flex items-center">
               <span className="text-green-400 mr-2">✓</span>
               No spam, ever
@@ -164,7 +164,7 @@ const LeadCapture = () => {
           transition={{ duration: 0.8, delay: 0.4 }}
           className="mt-12 text-center"
         >
-          <p className="text-gray-400 text-sm">
+          <p className="text-gray-500 text-sm">
             We&apos;re currently in development. Join the waitlist to be notified when we launch.
           </p>
         </motion.div>
