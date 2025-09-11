@@ -5,7 +5,7 @@ import Image from "next/image";
 
 export default function Hero() {
   const scrollToSignup = () => {
-    const signupSection = document.getElementById("signup");
+    const signupSection = document.getElementById("signup-section");
     if (signupSection) {
       signupSection.scrollIntoView({ behavior: "smooth" });
     }
