@@ -5,8 +5,13 @@ import Image from 'next/image';
 const Header = () => {
   const [isVisible, setIsVisible] = useState(true);
   const [lastScrollY, setLastScrollY] = useState(0);
+  const [isSafari, setIsSafari] = useState(false);
 
   useEffect(() => {
+    // Detect Safari
+    const userAgent = navigator.userAgent.toLowerCase();
+    setIsSafari(userAgent.includes('safari') && !userAgent.includes('chrome'));
+
     const controlHeader = () => {
       if (typeof window !== 'undefined') {
         if (window.scrollY > lastScrollY && window.scrollY > 100) {
@@ -40,14 +45,35 @@ const Header = () => {
       isVisible ? 'transform translate-y-0' : 'transform -translate-y-full'
     }`}>
       <div className="flex items-center">
-        <Image
-          src="/logo.svg"
-          alt="Image 2 Ads Logo"
-          width={500}
-          height={300}
-          priority
-          className="h-16 w-auto"
-        />
+        {isSafari ? (
+          // Safari-specific PNG fallback
+          <div className="relative h-12 w-auto">
+            <Image
+              src="/logo.png"
+              alt="Image 2 Ads Logo"
+              width={120}
+              height={48}
+              priority
+              className="h-12 w-auto hover:scale-105 transition-transform duration-200"
+              style={{
+                imageRendering: 'auto'
+              } as React.CSSProperties}
+            />
+          </div>
+        ) : (
+          // Standard SVG for other browsers
+          <div className="relative h-12 w-auto">
+            <Image
+              src="/logo.svg"
+              alt="Image 2 Ads Logo"
+              width={120}
+              height={48}
+              priority
+              className="h-12 w-auto hover:scale-105 transition-transform duration-200"
+              unoptimized
+            />
+          </div>
+        )}
       </div>
       <button 
         onClick={scrollToSignup}

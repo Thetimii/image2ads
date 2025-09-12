@@ -27,6 +27,11 @@ export default function Hero() {
             repeat: Infinity,
             ease: "easeInOut",
           }}
+          style={{
+            willChange: 'transform',
+            backfaceVisibility: 'hidden',
+            WebkitBackfaceVisibility: 'hidden'
+          } as React.CSSProperties}
         />
         <motion.div
           className="absolute bottom-20 right-10 w-96 h-96 bg-gradient-to-br from-purple-400/20 to-pink-600/20 rounded-full blur-xl"
@@ -40,6 +45,11 @@ export default function Hero() {
             repeat: Infinity,
             ease: "easeInOut",
           }}
+          style={{
+            willChange: 'transform',
+            backfaceVisibility: 'hidden',
+            WebkitBackfaceVisibility: 'hidden'
+          } as React.CSSProperties}
         />
       </div>
 
