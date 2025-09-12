@@ -1,8 +1,16 @@
 "use client";
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import Image from 'next/image';
 
 const Footer = () => {
+  const [isSafari, setIsSafari] = useState(false);
+
+  useEffect(() => {
+    const userAgent = navigator.userAgent.toLowerCase();
+    const isSafariBrowser = userAgent.includes('safari') && !userAgent.includes('chrome') && !userAgent.includes('firefox');
+    setIsSafari(isSafariBrowser);
+  }, []);
+
   const scrollToSignup = () => {
     const signupElement = document.getElementById('signup-section');
     if (signupElement) {
@@ -16,11 +24,11 @@ const Footer = () => {
         <div className="flex flex-col md:flex-row justify-between items-center mb-12">
           <div className="mb-8 md:mb-0">
             <Image
-              src="/logo.svg"
+              src={isSafari ? "/logo.png" : "/logo.svg"}
               alt="Image 2 Ads Logo"
               width={160}
               height={48}
-              className="h-10 w-auto"
+              className="h-12 w-auto"
             />
             <p className="text-gray-700 mt-2 max-w-md">
               Transform your product photos into high-converting ads with AI-powered design.

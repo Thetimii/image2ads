@@ -47,14 +47,14 @@ const Header = () => {
       <div className="flex items-center">
         {isSafari ? (
           // Safari-specific PNG fallback
-          <div className="relative h-12 w-auto">
+          <div className="relative h-14 w-auto">
             <Image
               src="/logo.png"
               alt="Image 2 Ads Logo"
-              width={120}
-              height={48}
+              width={140}
+              height={56}
               priority
-              className="h-12 w-auto hover:scale-105 transition-transform duration-200"
+              className="h-20 w-auto hover:scale-105 transition-transform duration-200"
               style={{
                 imageRendering: 'auto'
               } as React.CSSProperties}
