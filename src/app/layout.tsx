@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { Poppins } from "next/font/google";
+import Script from "next/script";
+import CookieBanner from "@/components/CookieBanner";
 import "./globals.css";
 
 const poppins = Poppins({
@@ -23,7 +25,48 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={`${poppins.variable} antialiased`}>{children}</body>
+      <head>
+        {/* Meta Pixel Code */}
+        <Script
+          id="meta-pixel"
+          strategy="afterInteractive"
+          dangerouslySetInnerHTML={{
+            __html: `
+              !function(f,b,e,v,n,t,s)
+              {if(f.fbq)return;n=f.fbq=function(){n.callMethod?
+              n.callMethod.apply(n,arguments):n.queue.push(arguments)};
+              if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
+              n.queue=[];t=b.createElement(e);t.async=!0;
+              t.src=v;s=b.getElementsByTagName(e)[0];
+              s.parentNode.insertBefore(t,s)}(window, document,'script',
+              'https://connect.facebook.net/en_US/fbevents.js');
+              fbq('init', '1317994616486123');
+              
+              // Check for cookie consent before tracking
+              const cookieConsent = localStorage.getItem('cookieConsent');
+              if (cookieConsent === 'accepted') {
+                fbq('track', 'PageView');
+              } else if (cookieConsent === 'declined') {
+                fbq('consent', 'revoke');
+              }
+              // If no consent yet, wait for user decision
+            `,
+          }}
+        />
+        <noscript>
+          <img 
+            height="1" 
+            width="1" 
+            style={{display: 'none'}}
+            src="https://www.facebook.com/tr?id=1317994616486123&ev=PageView&noscript=1"
+            alt=""
+          />
+        </noscript>
+      </head>
+      <body className={`${poppins.variable} antialiased`}>
+        {children}
+        <CookieBanner />
+      </body>
     </html>
   );
 }
