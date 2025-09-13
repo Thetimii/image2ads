@@ -2,20 +2,23 @@ export const STRIPE_PLANS = {
   starter: {
     name: "Starter",
     credits: 200,
-    price: 9.99,
+    price: 29.99,
     priceId: process.env.STRIPE_STARTER_PRICE_ID,
+    allowCoupons: true,
   },
   pro: {
-    name: "Pro",
+    name: "Pro", 
     credits: 600,
-    price: 24.99,
+    price: 59.99,
     priceId: process.env.STRIPE_PRO_PRICE_ID,
+    allowCoupons: true,
   },
   business: {
     name: "Business",
     credits: 2000,
-    price: 79.99,
+    price: 129.99,
     priceId: process.env.STRIPE_BUSINESS_PRICE_ID,
+    allowCoupons: true,
   },
 } as const;
 
