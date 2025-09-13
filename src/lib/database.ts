@@ -165,15 +165,7 @@ export async function getUserJobs(userId: string): Promise<Job[]> {
 
   const { data, error } = await supabase
     .from("jobs")
-    .select(
-      `
-      *,
-      images (
-        original_name,
-        folder_id
-      )
-    `
-    )
+    .select("*")
     .eq("user_id", userId)
     .order("created_at", { ascending: false });
 

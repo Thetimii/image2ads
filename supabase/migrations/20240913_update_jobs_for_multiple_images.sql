@@ -9,6 +9,11 @@ UPDATE public.jobs
 SET image_ids = ARRAY[image_id] 
 WHERE image_ids = '{}' AND image_id IS NOT NULL;
 
+-- Update existing jobs with empty prompts to have a default prompt
+UPDATE public.jobs
+SET prompt = 'Transform this image into a professional advertisement with clean background and marketing appeal'
+WHERE prompt IS NULL OR trim(prompt) = '';
+
 -- Update the validation to ensure image_ids is not empty
 ALTER TABLE public.jobs 
 ADD CONSTRAINT jobs_image_ids_not_empty 
@@ -19,13 +24,10 @@ ALTER TABLE public.jobs
 ADD CONSTRAINT jobs_max_10_images 
 CHECK (array_length(image_ids, 1) <= 10);
 
--- Add constraint for prompt not empty
+-- Add constraint for prompt not empty (now safe to add after updating existing rows)
 ALTER TABLE public.jobs 
 ADD CONSTRAINT jobs_prompt_not_empty 
 CHECK (length(trim(prompt)) > 0);
-
--- Remove the old image_id column after migration (commented out for safety)
--- ALTER TABLE public.jobs DROP COLUMN image_id;
 
 -- Update the jobs table trigger for updated_at
 CREATE OR REPLACE FUNCTION update_updated_at_column()
@@ -36,5 +38,7 @@ BEGIN
 END;
 $$ language 'plpgsql';
 
+-- Drop existing trigger if it exists, then create new one
+DROP TRIGGER IF EXISTS update_jobs_updated_at ON public.jobs;
 CREATE TRIGGER update_jobs_updated_at BEFORE UPDATE ON public.jobs
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
