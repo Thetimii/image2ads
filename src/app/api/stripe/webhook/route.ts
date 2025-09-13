@@ -63,23 +63,52 @@ export async function POST(req: NextRequest) {
           }
 
           // Create or update customer profile
-          const { error: profileError } = await supabaseAdmin
+          const { data: existingProfile } = await supabaseAdmin
             .from("profiles")
-            .upsert(
-              {
-                stripe_customer_id: customerId,
+            .select("id")
+            .eq("stripe_customer_id", customerId)
+            .single();
+
+          if (existingProfile) {
+            // Update existing profile
+            const { error: profileError } = await supabaseAdmin
+              .from("profiles")
+              .update({
                 email: customer.email,
                 subscription_status: subscription.status,
                 subscription_id: subscription.id,
-              },
-              {
-                onConflict: "stripe_customer_id",
-                ignoreDuplicates: false,
-              }
-            );
+              })
+              .eq("stripe_customer_id", customerId);
 
-          if (profileError) {
-            console.error("Error upserting profile:", profileError);
+            if (profileError) {
+              console.error("Error updating profile:", profileError);
+            }
+          } else {
+            // Try to find profile by email and link it
+            const { data: profileByEmail } = await supabaseAdmin
+              .from("profiles")
+              .select("id")
+              .eq("email", customer.email)
+              .single();
+
+            if (profileByEmail) {
+              // Link existing profile to Stripe customer
+              const { error: linkError } = await supabaseAdmin
+                .from("profiles")
+                .update({
+                  stripe_customer_id: customerId,
+                  subscription_status: subscription.status,
+                  subscription_id: subscription.id,
+                })
+                .eq("id", profileByEmail.id);
+
+              if (linkError) {
+                console.error("Error linking profile to Stripe:", linkError);
+              }
+            } else {
+              console.log("No profile found for customer:", customer.email);
+              // Profile will be created when user signs up
+            }
           }
 
           // Add credits based on subscription plan
@@ -114,21 +143,32 @@ export async function POST(req: NextRequest) {
       case "customer.created": {
         const customer = event.data.object as Stripe.Customer;
 
-        const { error } = await supabaseAdmin.from("profiles").upsert(
-          {
-            stripe_customer_id: customer.id,
-            email: customer.email,
-            subscription_status: null,
-            subscription_id: null,
-          },
-          {
-            onConflict: "stripe_customer_id",
-            ignoreDuplicates: false,
-          }
-        );
+        // First, try to find existing profile by email
+        const { data: existingProfile } = await supabaseAdmin
+          .from("profiles")
+          .select("id, stripe_customer_id")
+          .eq("email", customer.email)
+          .single();
 
-        if (error) {
-          console.error("Error creating customer profile:", error);
+        if (existingProfile) {
+          // Update existing profile with Stripe customer ID
+          const { error } = await supabaseAdmin
+            .from("profiles")
+            .update({
+              stripe_customer_id: customer.id,
+            })
+            .eq("id", existingProfile.id);
+
+          if (error) {
+            console.error(
+              "Error updating existing profile with Stripe ID:",
+              error
+            );
+          }
+        } else {
+          console.log("No existing profile found for email:", customer.email);
+          // Customer exists in Stripe but no user account yet - this is normal
+          // The profile will be created when they sign up/sign in
         }
         break;
       }
@@ -136,6 +176,7 @@ export async function POST(req: NextRequest) {
       case "customer.updated": {
         const customer = event.data.object as Stripe.Customer;
 
+        // Update profile where stripe_customer_id matches
         const { error } = await supabaseAdmin
           .from("profiles")
           .update({
