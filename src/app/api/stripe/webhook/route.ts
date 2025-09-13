@@ -20,6 +20,46 @@ const supabaseAdmin = createClient(
   }
 );
 
+// Helper function to add credits to a customer by Stripe customer ID
+async function addCreditsToCustomer(stripeCustomerId: string, credits: number) {
+  // First find the profile by stripe_customer_id
+  const { data: profile, error: findError } = await supabaseAdmin
+    .from("profiles")
+    .select("id, credits")
+    .eq("stripe_customer_id", stripeCustomerId)
+    .single();
+
+  if (findError || !profile) {
+    console.error(
+      "Profile not found for customer:",
+      stripeCustomerId,
+      findError
+    );
+    return { error: "Profile not found" };
+  }
+
+  // Add credits to existing balance
+  const newCredits = (profile.credits || 0) + credits;
+
+  const { error: updateError } = await supabaseAdmin
+    .from("profiles")
+    .update({
+      credits: newCredits,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", profile.id);
+
+  if (updateError) {
+    console.error("Error adding credits:", updateError);
+    return { error: updateError };
+  }
+
+  console.log(
+    `Successfully added ${credits} credits to customer ${stripeCustomerId} (new total: ${newCredits})`
+  );
+  return { success: true };
+}
+
 export async function POST(req: NextRequest) {
   // ✔️ Stripe sends this; you must use it instead of your own auth
   const sig = req.headers.get("stripe-signature");
@@ -114,37 +154,13 @@ export async function POST(req: NextRequest) {
           // Add credits based on subscription plan
           const planItem = subscription.items.data[0];
           if (planItem?.price?.id === process.env.STRIPE_STARTER_PRICE_ID) {
-            const { error: creditsError } = await supabaseAdmin.rpc(
-              "add_credits",
-              {
-                customer_id: customerId,
-                credits_to_add: 150,
-              }
-            );
-            if (creditsError)
-              console.error("Error adding credits:", creditsError);
+            await addCreditsToCustomer(customerId, 150);
           } else if (planItem?.price?.id === process.env.STRIPE_PRO_PRICE_ID) {
-            const { error: creditsError } = await supabaseAdmin.rpc(
-              "add_credits",
-              {
-                customer_id: customerId,
-                credits_to_add: 400,
-              }
-            );
-            if (creditsError)
-              console.error("Error adding credits:", creditsError);
+            await addCreditsToCustomer(customerId, 400);
           } else if (
             planItem?.price?.id === process.env.STRIPE_BUSINESS_PRICE_ID
           ) {
-            const { error: creditsError } = await supabaseAdmin.rpc(
-              "add_credits",
-              {
-                customer_id: customerId,
-                credits_to_add: 700,
-              }
-            );
-            if (creditsError)
-              console.error("Error adding credits:", creditsError);
+            await addCreditsToCustomer(customerId, 700);
           }
         }
         break;
@@ -153,14 +169,28 @@ export async function POST(req: NextRequest) {
       case "customer.created": {
         const customer = event.data.object as Stripe.Customer;
 
-        // First, try to find existing profile by email
+        // First check if this Stripe customer ID already exists
+        const { data: existingStripeCustomer } = await supabaseAdmin
+          .from("profiles")
+          .select("id")
+          .eq("stripe_customer_id", customer.id)
+          .single();
+
+        if (existingStripeCustomer) {
+          console.log(
+            `Customer ${customer.id} already exists in database, skipping creation`
+          );
+          break;
+        }
+
+        // Then try to find existing profile by email to link
         const { data: existingProfile } = await supabaseAdmin
           .from("profiles")
           .select("id, stripe_customer_id")
           .eq("email", customer.email)
           .single();
 
-        if (existingProfile) {
+        if (existingProfile && !existingProfile.stripe_customer_id) {
           // Update existing profile with Stripe customer ID
           const { error } = await supabaseAdmin
             .from("profiles")
@@ -173,6 +203,10 @@ export async function POST(req: NextRequest) {
             console.error(
               "Error updating existing profile with Stripe ID:",
               error
+            );
+          } else {
+            console.log(
+              `Linked existing profile to Stripe customer ${customer.id}`
             );
           }
         } else {
@@ -233,16 +267,13 @@ export async function POST(req: NextRequest) {
           }
 
           if (creditsToAdd > 0) {
-            const { error: creditsError } = await supabaseAdmin.rpc(
-              "add_credits",
-              {
-                customer_id: subscription.customer as string,
-                credits_to_add: creditsToAdd,
-              }
+            const result = await addCreditsToCustomer(
+              subscription.customer as string,
+              creditsToAdd
             );
 
-            if (creditsError) {
-              console.error("Error adding subscription credits:", creditsError);
+            if (result.error) {
+              console.error("Error adding subscription credits:", result.error);
             } else {
               const eventType =
                 event.type === "customer.subscription.created"
@@ -298,13 +329,13 @@ export async function POST(req: NextRequest) {
           }
 
           if (creditsToAdd > 0) {
-            const { error } = await supabaseAdmin.rpc("add_credits", {
-              customer_id: subscription.customer as string,
-              credits_to_add: creditsToAdd,
-            });
+            const result = await addCreditsToCustomer(
+              subscription.customer as string,
+              creditsToAdd
+            );
 
-            if (error) {
-              console.error("Error adding recurring credits:", error);
+            if (result.error) {
+              console.error("Error adding recurring credits:", result.error);
             } else {
               console.log(
                 `Added ${creditsToAdd} credits for successful payment`
