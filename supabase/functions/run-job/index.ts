@@ -14,7 +14,24 @@ fal.config({
 
 serve(async (request) => {
   try {
-    const { jobId } = await request.json();
+    console.log('Edge function called with method:', request.method)
+    
+    if (request.method !== 'POST') {
+      return new Response('Method not allowed', { status: 405 })
+    }
+    
+    const body = await request.text()
+    console.log('Request body:', body)
+    
+    let parsedBody
+    try {
+      parsedBody = JSON.parse(body)
+    } catch (parseError) {
+      console.error('Failed to parse JSON:', parseError)
+      return new Response('Invalid JSON', { status: 400 })
+    }
+    
+    const { jobId } = parsedBody;
 
     if (!jobId) {
       return new Response("Job ID required", { status: 400 });
@@ -34,7 +51,8 @@ serve(async (request) => {
       return new Response("Job not found", { status: 404 });
     }
 
-    console.log(`Processing job ${jobId} with ${job.image_ids.length} images`);
+    console.log(`Processing job ${jobId} with ${job.image_ids?.length || 0} images`)
+    console.log('Job data:', JSON.stringify(job, null, 2));
 
     // Update job status to processing
     await supabase
