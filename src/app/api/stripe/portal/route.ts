@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { createPortalSession } from "@/lib/stripe";
-import { getUserProfile } from "@/lib/database";
+import { createPortalSession, createStripeCustomer } from "@/lib/stripe";
+import { getUserProfile, updateUserStripeCustomerId } from "@/lib/database";
 
 export async function POST(request: NextRequest) {
   try {
@@ -27,13 +27,45 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!profile.stripe_customer_id) {
-      return NextResponse.json(
-        {
-          error: "No billing account found. Please subscribe to a plan first.",
-        },
-        { status: 400 }
-      );
+    let stripeCustomerId = profile.stripe_customer_id;
+
+    // If user doesn't have a Stripe customer ID, create one
+    if (!stripeCustomerId) {
+      try {
+        console.log(`Creating Stripe customer for user ${user.id}`);
+        const stripeCustomer = await createStripeCustomer({
+          email: user.email!,
+          name: profile.full_name || undefined,
+        });
+
+        stripeCustomerId = stripeCustomer.id;
+
+        // Update the user profile with the new Stripe customer ID
+        const updateSuccess = await updateUserStripeCustomerId(
+          user.id,
+          stripeCustomerId
+        );
+
+        if (!updateSuccess) {
+          console.error(
+            "Failed to update user profile with Stripe customer ID"
+          );
+          return NextResponse.json(
+            { error: "Failed to create billing account" },
+            { status: 500 }
+          );
+        }
+
+        console.log(
+          `Successfully created Stripe customer ${stripeCustomerId} for user ${user.id}`
+        );
+      } catch (error) {
+        console.error("Error creating Stripe customer:", error);
+        return NextResponse.json(
+          { error: "Failed to create billing account" },
+          { status: 500 }
+        );
+      }
     }
 
     // Parse request body for return URL
@@ -43,7 +75,7 @@ export async function POST(request: NextRequest) {
 
     // Create Stripe portal session
     const session = await createPortalSession({
-      customerId: profile.stripe_customer_id,
+      customerId: stripeCustomerId!,
       returnUrl,
     });
 

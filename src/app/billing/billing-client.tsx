@@ -62,12 +62,8 @@ export default function BillingClient({ user, profile }: BillingClientProps) {
         window.location.href = url
       } else {
         const errorData = await response.json()
-        if (response.status === 400) {
-          alert('Please subscribe to a plan first to access billing management.')
-        } else {
-          console.error('Failed to create portal session:', errorData.error)
-          alert('Failed to access billing portal. Please try again.')
-        }
+        console.error('Failed to create portal session:', errorData.error)
+        alert('Failed to access billing portal. Please try again.')
       }
     } catch (error) {
       console.error('Error creating portal session:', error)
@@ -112,15 +108,13 @@ export default function BillingClient({ user, profile }: BillingClientProps) {
                   <div className="text-sm text-gray-500">Subscription Status</div>
                 </div>
                 <div className="text-center">
-                  {profile.stripe_customer_id && (
-                    <button
-                      onClick={handleManageBilling}
-                      disabled={isLoading === 'portal'}
-                      className="bg-gray-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-gray-700 disabled:opacity-50"
-                    >
-                      {isLoading === 'portal' ? 'Loading...' : 'Manage Billing'}
-                    </button>
-                  )}
+                  <button
+                    onClick={handleManageBilling}
+                    disabled={isLoading === 'portal'}
+                    className="bg-gray-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-gray-700 disabled:opacity-50"
+                  >
+                    {isLoading === 'portal' ? 'Loading...' : 'Manage Billing'}
+                  </button>
                 </div>
               </div>
             </div>

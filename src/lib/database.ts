@@ -23,6 +23,28 @@ export async function getUserProfile(userId: string): Promise<Profile | null> {
 }
 
 /**
+ * Update user profile with Stripe customer ID
+ */
+export async function updateUserStripeCustomerId(
+  userId: string,
+  stripeCustomerId: string
+): Promise<boolean> {
+  const supabase = await createClient();
+
+  const { error } = await supabase
+    .from("profiles")
+    .update({ stripe_customer_id: stripeCustomerId })
+    .eq("id", userId);
+
+  if (error) {
+    console.error("Error updating user Stripe customer ID:", error);
+    return false;
+  }
+
+  return true;
+}
+
+/**
  * Get user folders
  */
 export async function getUserFolders(userId: string): Promise<Folder[]> {
