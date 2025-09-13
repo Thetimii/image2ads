@@ -197,6 +197,7 @@ export async function createJob({
     .from("jobs")
     .insert({
       user_id: userId,
+      image_id: imageIds[0], // Use first image for backward compatibility
       image_ids: imageIds,
       prompt: prompt,
       credits_used: creditsUsed,
