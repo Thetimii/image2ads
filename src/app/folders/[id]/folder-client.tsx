@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import type { User } from '@supabase/supabase-js'
 import type { Profile, Folder, Image, Job } from '@/lib/validations'
@@ -24,7 +23,6 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
   const [model, setModel] = useState('gemini')
   const [showGenerateModal, setShowGenerateModal] = useState(false)
   const [enhancementStatus, setEnhancementStatus] = useState<Record<string, string>>({})
-  const router = useRouter()
   const supabase = createClient()
 
   // Subscribe to job status changes
@@ -350,7 +348,7 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
                     Clear All
                   </button>
                   <button
-                    onClick={() => setSelectedImages(images.map(img => img.id))}
+                    onClick={() => setSelectedImages(images.map((img: Image) => img.id))}
                     className="text-sm text-blue-600 hover:text-blue-800"
                     disabled={images.length > 10}
                   >
@@ -370,7 +368,7 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
 
           {/* Images grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-            {images.map((image) => (
+            {images.map((image: Image) => (
               <ImageCard 
                 key={image.id} 
                 image={image} 
@@ -396,7 +394,7 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
                       </div>
                       <div className="ml-3">
                         <p className="text-sm text-purple-700">
-                          <strong>✨ New:</strong> Click "Enhance" on completed jobs to upscale and improve image quality using AI!
+                          <strong>✨ New:</strong> Click &quot;Enhance&quot; on completed jobs to upscale and improve image quality using AI!
                         </p>
                       </div>
                     </div>
@@ -524,6 +522,7 @@ function ImageCard({
     >
       <div className="relative aspect-w-16 aspect-h-9">
         {imageUrl && (
+          // eslint-disable-next-line @next/next/no-img-element
           <img
             src={imageUrl}
             alt={image.original_name}
