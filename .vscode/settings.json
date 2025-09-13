@@ -1,0 +1,18 @@
+{
+  "deno.enable": false,
+  "deno.enablePaths": [
+    "./supabase/functions"
+  ],
+  "typescript.preferences.includePackageJsonAutoImports": "auto",
+  "typescript.suggest.autoImports": true,
+  "[typescript]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "files.associations": {
+    "supabase/functions/**/*.ts": "typescript"
+  },
+  "typescript.validate.enable": true,
+  "deno.lint": true,
+  "deno.unstable": false,
+  "deno.config": "./supabase/deno.json"
+}

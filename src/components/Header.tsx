@@ -75,12 +75,20 @@ const Header = () => {
           </div>
         )}
       </div>
-      <button 
-        onClick={scrollToSignup}
-        className="px-8 py-3 text-white font-semibold rounded-full bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 transition-all duration-300 hover:scale-105 shadow-lg hover:shadow-purple-500/25"
-      >
-        Get Early Access
-      </button>
+      <div className="flex items-center space-x-4">
+        <a 
+          href="/signin"
+          className="px-6 py-2 text-gray-700 font-medium rounded-full border border-gray-300 hover:border-blue-500 hover:text-blue-600 transition-all duration-300"
+        >
+          Sign In
+        </a>
+        <button 
+          onClick={scrollToSignup}
+          className="px-8 py-3 text-white font-semibold rounded-full bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 transition-all duration-300 hover:scale-105 shadow-lg hover:shadow-purple-500/25"
+        >
+          Get Early Access
+        </button>
+      </div>
     </header>
   );
 };
