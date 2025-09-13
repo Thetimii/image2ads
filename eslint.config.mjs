@@ -18,6 +18,7 @@ const eslintConfig = [
       "out/**",
       "build/**",
       "next-env.d.ts",
+      "supabase/types.d.ts", // Generated Supabase types
     ],
   },
 ];

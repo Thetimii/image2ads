@@ -40,8 +40,8 @@ export default function SignInPage() {
         if (error) throw error
         router.push('/dashboard')
       }
-    } catch (error: any) {
-      setMessage(error.message || 'An error occurred')
+    } catch (error: unknown) {
+      setMessage((error as Error).message || 'An error occurred')
     } finally {
       setIsLoading(false)
     }
