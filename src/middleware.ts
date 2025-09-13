@@ -43,6 +43,13 @@ export async function updateSession(request: NextRequest) {
 }
 
 export function middleware(request: NextRequest) {
+  const { pathname } = request.nextUrl;
+
+  // Exempt webhook from auth - Stripe webhooks don't send Authorization headers
+  if (pathname.startsWith("/api/stripe/webhook")) {
+    return NextResponse.next();
+  }
+
   return updateSession(request);
 }
 

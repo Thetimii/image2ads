@@ -2,19 +2,32 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import Stripe from "https://esm.sh/stripe@12.18.0?target=deno";
 
+declare const Deno: {
+  env: {
+    get(key: string): string | undefined;
+  };
+};
+
 const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") || "", {
   apiVersion: "2025-08-27.basil",
   httpClient: Stripe.createFetchHttpClient(),
 });
 
-const supabase = createClient(
+// Create admin client that bypasses RLS
+const supabaseAdmin = createClient(
   Deno.env.get("SUPABASE_URL") ?? "",
-  Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
+  Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+  {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
+  }
 );
 
 const cryptoProvider = Stripe.createSubtleCryptoProvider();
 
-serve(async (request) => {
+serve(async (request: Request) => {
   const signature = request.headers.get("Stripe-Signature");
   const body = await request.text();
 
@@ -68,10 +81,13 @@ serve(async (request) => {
           }
 
           // Add credits
-          const { error: creditsError } = await supabase.rpc("add_credits", {
-            user_uuid: session.metadata?.user_id,
-            credit_amount: credits,
-          });
+          const { error: creditsError } = await supabaseAdmin.rpc(
+            "add_credits",
+            {
+              user_uuid: session.metadata?.user_id,
+              credit_amount: credits,
+            }
+          );
 
           if (creditsError) {
             console.error("Error adding credits:", creditsError);
@@ -220,7 +236,7 @@ serve(async (request) => {
             .single();
 
           if (profile) {
-            const { error } = await supabase.rpc("add_credits", {
+            const { error } = await supabaseAdmin.rpc("add_credits", {
               user_uuid: profile.id,
               credit_amount: credits,
             });

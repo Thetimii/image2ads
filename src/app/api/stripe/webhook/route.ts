@@ -1,0 +1,265 @@
+import Stripe from "stripe";
+import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
+
+export const runtime = "nodejs"; // raw body + crypto
+
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
+  apiVersion: "2025-08-27.basil",
+});
+
+// Create admin Supabase client for webhook operations
+const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
+  }
+);
+
+export async function POST(req: NextRequest) {
+  // ✔️ Stripe sends this; you must use it instead of your own auth
+  const sig = req.headers.get("stripe-signature");
+  if (!sig)
+    return new NextResponse("Missing stripe-signature", { status: 400 });
+
+  // IMPORTANT: use raw text body for signature verification
+  const body = await req.text();
+
+  let event: Stripe.Event;
+  try {
+    event = stripe.webhooks.constructEvent(
+      body,
+      sig,
+      process.env.STRIPE_WEBHOOK_SECRET! // from CLI/Dashboard
+    );
+  } catch (err: any) {
+    console.error("Signature verify failed:", err.message);
+    return new NextResponse(`Webhook Error: ${err.message}`, { status: 400 });
+  }
+
+  try {
+    console.log(`Processing event: ${event.type}`);
+
+    switch (event.type) {
+      case "checkout.session.completed": {
+        const session = event.data.object as Stripe.Checkout.Session;
+
+        if (session.mode === "subscription") {
+          const subscription = await stripe.subscriptions.retrieve(
+            session.subscription as string
+          );
+
+          const customerId = subscription.customer as string;
+          const customer = await stripe.customers.retrieve(customerId);
+
+          if (customer.deleted) {
+            console.error("Customer was deleted");
+            break;
+          }
+
+          // Create or update customer profile
+          const { error: profileError } = await supabaseAdmin
+            .from("profiles")
+            .upsert(
+              {
+                stripe_customer_id: customerId,
+                email: customer.email,
+                subscription_status: subscription.status,
+                subscription_id: subscription.id,
+              },
+              {
+                onConflict: "stripe_customer_id",
+                ignoreDuplicates: false,
+              }
+            );
+
+          if (profileError) {
+            console.error("Error upserting profile:", profileError);
+          }
+
+          // Add credits based on subscription plan
+          const planItem = subscription.items.data[0];
+          if (planItem?.price?.id === process.env.STRIPE_PRO_PRICE_ID) {
+            const { error: creditsError } = await supabaseAdmin.rpc(
+              "add_credits",
+              {
+                customer_id: customerId,
+                credits_to_add: 200,
+              }
+            );
+            if (creditsError)
+              console.error("Error adding credits:", creditsError);
+          } else if (
+            planItem?.price?.id === process.env.STRIPE_BUSINESS_PRICE_ID
+          ) {
+            const { error: creditsError } = await supabaseAdmin.rpc(
+              "add_credits",
+              {
+                customer_id: customerId,
+                credits_to_add: 500,
+              }
+            );
+            if (creditsError)
+              console.error("Error adding credits:", creditsError);
+          }
+        }
+        break;
+      }
+
+      case "customer.created": {
+        const customer = event.data.object as Stripe.Customer;
+
+        const { error } = await supabaseAdmin.from("profiles").upsert(
+          {
+            stripe_customer_id: customer.id,
+            email: customer.email,
+            subscription_status: null,
+            subscription_id: null,
+          },
+          {
+            onConflict: "stripe_customer_id",
+            ignoreDuplicates: false,
+          }
+        );
+
+        if (error) {
+          console.error("Error creating customer profile:", error);
+        }
+        break;
+      }
+
+      case "customer.updated": {
+        const customer = event.data.object as Stripe.Customer;
+
+        const { error } = await supabaseAdmin
+          .from("profiles")
+          .update({
+            email: customer.email,
+          })
+          .eq("stripe_customer_id", customer.id);
+
+        if (error) {
+          console.error("Error updating customer:", error);
+        }
+        break;
+      }
+
+      case "customer.subscription.created":
+      case "customer.subscription.updated": {
+        const subscription = event.data.object as Stripe.Subscription;
+
+        const { error } = await supabaseAdmin
+          .from("profiles")
+          .update({
+            subscription_status: subscription.status,
+            subscription_id: subscription.id,
+          })
+          .eq("stripe_customer_id", subscription.customer);
+
+        if (error) {
+          console.error("Error updating subscription:", error);
+        }
+        break;
+      }
+
+      case "customer.subscription.deleted": {
+        const subscription = event.data.object as Stripe.Subscription;
+
+        const { error } = await supabaseAdmin
+          .from("profiles")
+          .update({
+            subscription_status: "canceled",
+            subscription_id: null,
+          })
+          .eq("stripe_customer_id", subscription.customer);
+
+        if (error) {
+          console.error("Error canceling subscription:", error);
+        }
+        break;
+      }
+
+      case "invoice.payment_succeeded": {
+        const invoice = event.data.object as any; // Use any to access subscription
+
+        if (invoice.subscription) {
+          const subscription = await stripe.subscriptions.retrieve(
+            invoice.subscription as string
+          );
+
+          // Add credits for successful payments
+          const planItem = subscription.items.data[0];
+          let creditsToAdd = 0;
+
+          if (planItem?.price?.id === process.env.STRIPE_STARTER_PRICE_ID) {
+            creditsToAdd = 50;
+          } else if (planItem?.price?.id === process.env.STRIPE_PRO_PRICE_ID) {
+            creditsToAdd = 200;
+          } else if (
+            planItem?.price?.id === process.env.STRIPE_BUSINESS_PRICE_ID
+          ) {
+            creditsToAdd = 500;
+          }
+
+          if (creditsToAdd > 0) {
+            const { error } = await supabaseAdmin.rpc("add_credits", {
+              customer_id: subscription.customer as string,
+              credits_to_add: creditsToAdd,
+            });
+
+            if (error) {
+              console.error("Error adding credits:", error);
+            }
+          }
+
+          // Update subscription status
+          const { error } = await supabaseAdmin
+            .from("profiles")
+            .update({
+              subscription_status: subscription.status,
+            })
+            .eq("stripe_customer_id", subscription.customer);
+
+          if (error) {
+            console.error("Error updating subscription status:", error);
+          }
+        }
+        break;
+      }
+
+      case "invoice.payment_failed": {
+        const invoice = event.data.object as any; // Use any to access subscription
+
+        if (invoice.subscription) {
+          const subscription = await stripe.subscriptions.retrieve(
+            invoice.subscription as string
+          );
+
+          const { error } = await supabaseAdmin
+            .from("profiles")
+            .update({
+              subscription_status: subscription.status,
+            })
+            .eq("stripe_customer_id", subscription.customer);
+
+          if (error) {
+            console.error("Error updating failed payment status:", error);
+          }
+        }
+        break;
+      }
+
+      default:
+        console.log(`Unhandled event type: ${event.type}`);
+    }
+
+    return new NextResponse("ok", { status: 200 });
+  } catch (err) {
+    console.error("Webhook handler error:", err);
+    return new NextResponse("Server error", { status: 500 });
+  }
+}
