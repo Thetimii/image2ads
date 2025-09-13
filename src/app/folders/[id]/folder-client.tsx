@@ -19,6 +19,9 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
   const [jobs, setJobs] = useState<Job[]>([])
   const [isUploading, setIsUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
+  const [selectedImages, setSelectedImages] = useState<string[]>([])
+  const [prompt, setPrompt] = useState('')
+  const [showGenerateModal, setShowGenerateModal] = useState(false)
   const router = useRouter()
   const supabase = createClient()
 
@@ -61,88 +64,113 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
   }
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
+    const files = e.target.files
+    if (!files || files.length === 0) return
 
-    // Validate file type
-    if (!file.type.startsWith('image/')) {
-      alert('Please upload an image file')
-      return
-    }
-
-    // Validate file size (10MB max)
-    if (file.size > 10 * 1024 * 1024) {
-      alert('File size must be less than 10MB')
-      return
+    // Validate files
+    for (const file of Array.from(files)) {
+      if (!file.type.startsWith('image/')) {
+        alert('Please upload only image files')
+        return
+      }
+      if (file.size > 10 * 1024 * 1024) {
+        alert('Each file must be less than 10MB')
+        return
+      }
     }
 
     setIsUploading(true)
     setUploadProgress(0)
 
     try {
-      // Get upload URL
-      const uploadResponse = await fetch('/api/upload-url', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          fileName: file.name,
-          fileType: file.type,
-          fileSize: file.size,
-          folderId: folder.id,
-        }),
-      })
+      const uploadedImages = []
+      const totalFiles = files.length
 
-      if (!uploadResponse.ok) {
-        throw new Error('Failed to get upload URL')
-      }
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i]
+        setUploadProgress((i / totalFiles) * 100)
 
-      const { uploadUrl, filePath, fileName } = await uploadResponse.json()
-
-      // Upload file to Supabase storage
-      const uploadResult = await fetch(uploadUrl, {
-        method: 'PUT',
-        body: file,
-        headers: {
-          'Content-Type': file.type,
-        },
-      })
-
-      if (!uploadResult.ok) {
-        throw new Error('Failed to upload file')
-      }
-
-      // Create image record in database
-      const { data: imageData, error: imageError } = await supabase
-        .from('images')
-        .insert({
-          folder_id: folder.id,
-          user_id: user.id,
-          original_name: file.name,
-          file_path: filePath,
-          file_size: file.size,
-          mime_type: file.type,
+        // Get upload URL
+        const uploadResponse = await fetch('/api/upload-url', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            fileName: file.name,
+            fileType: file.type,
+            fileSize: file.size,
+            folderId: folder.id,
+          }),
         })
-        .select()
-        .single()
 
-      if (imageError) {
-        throw new Error('Failed to save image record')
+        if (!uploadResponse.ok) {
+          throw new Error(`Failed to get upload URL for ${file.name}`)
+        }
+
+        const { uploadUrl, filePath, fileName } = await uploadResponse.json()
+
+        // Upload file to Supabase storage
+        const uploadResult = await fetch(uploadUrl, {
+          method: 'PUT',
+          body: file,
+          headers: {
+            'Content-Type': file.type,
+          },
+        })
+
+        if (!uploadResult.ok) {
+          throw new Error(`Failed to upload ${file.name}`)
+        }
+
+        // Create image record in database
+        const { data: imageData, error: imageError } = await supabase
+          .from('images')
+          .insert({
+            folder_id: folder.id,
+            user_id: user.id,
+            original_name: file.name,
+            file_path: filePath,
+            file_size: file.size,
+            mime_type: file.type,
+          })
+          .select()
+          .single()
+
+        if (imageError) {
+          throw new Error(`Failed to save image record for ${file.name}`)
+        }
+
+        uploadedImages.push(imageData)
       }
 
-      setImages([imageData, ...images])
+      setImages([...uploadedImages, ...images])
       setUploadProgress(100)
     } catch (error) {
       console.error('Upload error:', error)
-      alert('Failed to upload file. Please try again.')
+      alert(`Failed to upload files: ${error}`)
     } finally {
       setIsUploading(false)
       setUploadProgress(0)
     }
   }
 
-  const generateAd = async (imageId: string) => {
+  const generateAd = async () => {
+    if (selectedImages.length === 0) {
+      alert('Please select at least one image to generate an ad.')
+      return
+    }
+
+    if (selectedImages.length > 10) {
+      alert('Maximum 10 images can be selected for generation.')
+      return
+    }
+
+    if (!prompt.trim()) {
+      alert('Please enter a prompt for the ad generation.')
+      return
+    }
+
     if (profile.credits < 1) {
       alert('Insufficient credits. Please upgrade your plan.')
       return
@@ -155,13 +183,17 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          image_id: imageId,
+          image_ids: selectedImages,
+          prompt: prompt.trim(),
           credits_used: 1,
         }),
       })
 
       if (response.ok) {
         alert('Generation started! Check your jobs for progress.')
+        setShowGenerateModal(false)
+        setSelectedImages([])
+        setPrompt('')
         fetchJobs()
       } else {
         const error = await response.json()
@@ -171,6 +203,14 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
       console.error('Generation error:', error)
       alert('Failed to start generation. Please try again.')
     }
+  }
+
+  const toggleImageSelection = (imageId: string) => {
+    setSelectedImages(prev => 
+      prev.includes(imageId) 
+        ? prev.filter(id => id !== imageId)
+        : [...prev, imageId]
+    )
   }
 
   const getImageUrl = async (image: Image) => {
@@ -220,7 +260,7 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
                 <div className="mt-4">
                   <label htmlFor="file-upload" className="cursor-pointer">
                     <span className="mt-2 block text-sm font-medium text-gray-900">
-                      {isUploading ? `Uploading... ${uploadProgress}%` : 'Upload an image'}
+                      {isUploading ? `Uploading... ${uploadProgress}%` : 'Upload images (multiple supported)'}
                     </span>
                     <input
                       id="file-upload"
@@ -228,15 +268,54 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
                       type="file"
                       className="sr-only"
                       accept="image/*"
+                      multiple
                       onChange={handleFileUpload}
                       disabled={isUploading}
                     />
                   </label>
-                  <p className="text-xs text-gray-500 mt-1">PNG, JPG, WEBP up to 10MB</p>
+                  <p className="text-xs text-gray-500 mt-1">PNG, JPG, WEBP up to 10MB each</p>
                 </div>
               </div>
             </div>
           </div>
+
+          {/* Selection controls */}
+          {images.length > 0 && (
+            <div className="mb-6 bg-white rounded-lg shadow p-4">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center space-x-4">
+                  <h3 className="text-lg font-medium text-gray-900">
+                    Select Images for Ad Generation
+                  </h3>
+                  <span className="text-sm text-gray-500">
+                    {selectedImages.length} selected (max 10)
+                  </span>
+                </div>
+                <div className="flex space-x-2">
+                  <button
+                    onClick={() => setSelectedImages([])}
+                    className="text-sm text-gray-600 hover:text-gray-800"
+                  >
+                    Clear All
+                  </button>
+                  <button
+                    onClick={() => setSelectedImages(images.map(img => img.id))}
+                    className="text-sm text-blue-600 hover:text-blue-800"
+                    disabled={images.length > 10}
+                  >
+                    Select All
+                  </button>
+                  <button
+                    onClick={() => setShowGenerateModal(true)}
+                    disabled={selectedImages.length === 0}
+                    className="bg-blue-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
+                  >
+                    Generate Ad (1 credit)
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Images grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
@@ -244,7 +323,8 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
               <ImageCard 
                 key={image.id} 
                 image={image} 
-                onGenerate={() => generateAd(image.id)}
+                isSelected={selectedImages.includes(image.id)}
+                onToggleSelect={() => toggleImageSelection(image.id)}
                 getImageUrl={getImageUrl}
               />
             ))}
@@ -279,17 +359,63 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
           )}
         </div>
       </div>
+
+      {/* Generate Modal */}
+      {showGenerateModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4">
+            <h3 className="text-lg font-medium text-gray-900 mb-4">
+              Generate Advertisement
+            </h3>
+            <div className="mb-4">
+              <p className="text-sm text-gray-600 mb-2">
+                Selected images: {selectedImages.length}
+              </p>
+              <label htmlFor="prompt" className="block text-sm font-medium text-gray-700 mb-2">
+                Prompt
+              </label>
+              <textarea
+                id="prompt"
+                value={prompt}
+                onChange={(e) => setPrompt(e.target.value)}
+                placeholder="Describe how you want to transform these images into an advertisement..."
+                className="w-full h-32 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Example: &quot;Transform these product images into a professional advertisement with clean background and marketing appeal&quot;
+              </p>
+            </div>
+            <div className="flex justify-end space-x-3">
+              <button
+                onClick={() => setShowGenerateModal(false)}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={generateAd}
+                disabled={!prompt.trim()}
+                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
+              >
+                Generate (1 credit)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
 
 function ImageCard({ 
   image, 
-  onGenerate, 
+  isSelected,
+  onToggleSelect, 
   getImageUrl 
 }: { 
   image: Image
-  onGenerate: () => void
+  isSelected: boolean
+  onToggleSelect: () => void
   getImageUrl: (image: Image) => Promise<string | undefined>
 }) {
   const [imageUrl, setImageUrl] = useState<string>()
@@ -299,8 +425,13 @@ function ImageCard({
   }, [image, getImageUrl])
 
   return (
-    <div className="bg-white rounded-lg shadow border border-gray-200">
-      <div className="aspect-w-16 aspect-h-9">
+    <div 
+      className={`bg-white rounded-lg shadow border-2 cursor-pointer transition-all ${
+        isSelected ? 'border-blue-500 ring-2 ring-blue-200' : 'border-gray-200 hover:border-gray-300'
+      }`}
+      onClick={onToggleSelect}
+    >
+      <div className="relative aspect-w-16 aspect-h-9">
         {imageUrl && (
           <img
             src={imageUrl}
@@ -308,6 +439,19 @@ function ImageCard({
             className="w-full h-48 object-cover rounded-t-lg"
           />
         )}
+        <div className="absolute top-2 right-2">
+          <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${
+            isSelected 
+              ? 'bg-blue-600 border-blue-600' 
+              : 'bg-white border-gray-300'
+          }`}>
+            {isSelected && (
+              <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+              </svg>
+            )}
+          </div>
+        </div>
       </div>
       <div className="p-4">
         <h3 className="text-sm font-medium text-gray-900 truncate">
@@ -316,12 +460,6 @@ function ImageCard({
         <p className="text-xs text-gray-500 mt-1">
           {new Date(image.created_at).toLocaleDateString()}
         </p>
-        <button
-          onClick={onGenerate}
-          className="mt-3 w-full bg-blue-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-        >
-          Generate Ad (1 credit)
-        </button>
       </div>
     </div>
   )
