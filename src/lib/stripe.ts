@@ -1,32 +1,12 @@
 import Stripe from "stripe";
+import { STRIPE_PLANS, type StripePlan } from "./stripe-plans";
 
 export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: "2025-08-27.basil",
   typescript: true,
 });
 
-export const STRIPE_PLANS = {
-  starter: {
-    name: "Starter",
-    credits: 200,
-    price: 9.99,
-    priceId: process.env.STRIPE_STARTER_PRICE_ID,
-  },
-  pro: {
-    name: "Pro",
-    credits: 600,
-    price: 24.99,
-    priceId: process.env.STRIPE_PRO_PRICE_ID,
-  },
-  business: {
-    name: "Business",
-    credits: 2000,
-    price: 79.99,
-    priceId: process.env.STRIPE_BUSINESS_PRICE_ID,
-  },
-} as const;
-
-export type StripePlan = keyof typeof STRIPE_PLANS;
+export { STRIPE_PLANS, type StripePlan };
 
 export async function createStripeCustomer({
   email,

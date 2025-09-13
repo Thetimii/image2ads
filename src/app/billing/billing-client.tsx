@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import type { User } from '@supabase/supabase-js'
 import type { Profile } from '@/lib/validations'
-import { STRIPE_PLANS, type StripePlan } from '@/lib/stripe'
+import { STRIPE_PLANS, type StripePlan } from '@/lib/stripe-plans'
 
 interface BillingClientProps {
   user: User
