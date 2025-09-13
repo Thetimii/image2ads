@@ -184,11 +184,13 @@ export async function createJob({
   userId,
   imageIds,
   prompt,
+  model = "gemini",
   creditsUsed = 1,
 }: {
   userId: string;
   imageIds: string[];
   prompt: string;
+  model?: string;
   creditsUsed?: number;
 }): Promise<Job | null> {
   const supabase = await createClient();
@@ -200,6 +202,7 @@ export async function createJob({
       image_id: imageIds[0], // Use first image for backward compatibility
       image_ids: imageIds,
       prompt: prompt,
+      model: model,
       credits_used: creditsUsed,
       status: "pending",
     })

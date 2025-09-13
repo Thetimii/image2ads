@@ -21,6 +21,7 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
   const [uploadProgress, setUploadProgress] = useState(0)
   const [selectedImages, setSelectedImages] = useState<string[]>([])
   const [prompt, setPrompt] = useState('')
+  const [model, setModel] = useState('gemini')
   const [showGenerateModal, setShowGenerateModal] = useState(false)
   const router = useRouter()
   const supabase = createClient()
@@ -185,6 +186,7 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
         body: JSON.stringify({
           image_ids: selectedImages,
           prompt: prompt.trim(),
+          model: model,
           credits_used: 1,
         }),
       })
@@ -371,6 +373,20 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
               <p className="text-sm text-gray-600 mb-2">
                 Selected images: {selectedImages.length}
               </p>
+              
+              <label htmlFor="model" className="block text-sm font-medium text-gray-700 mb-2">
+                AI Model
+              </label>
+              <select
+                id="model"
+                value={model}
+                onChange={(e) => setModel(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent mb-4"
+              >
+                <option value="gemini">Gemini (Fast, Multiple variations)</option>
+                <option value="seedream">SeedDream v4 (High Quality 1024x1024, Fashion focused)</option>
+              </select>
+              
               <label htmlFor="prompt" className="block text-sm font-medium text-gray-700 mb-2">
                 Prompt
               </label>
@@ -378,11 +394,18 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
                 id="prompt"
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}
-                placeholder="Describe how you want to transform these images into an advertisement..."
+                placeholder={
+                  model === 'seedream' 
+                    ? "Describe clothing, accessories, or styling changes (e.g., 'Dress the model in elegant evening wear')"
+                    : "Describe how you want to transform these images into an advertisement..."
+                }
                 className="w-full h-32 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
               <p className="text-xs text-gray-500 mt-1">
-                Example: &quot;Transform these product images into a professional advertisement with clean background and marketing appeal&quot;
+                {model === 'seedream' 
+                  ? "SeedDream v4 specializes in fashion and clothing editing with high-quality 1024x1024 output"
+                  : "Gemini provides fast general-purpose image editing with multiple variations"
+                }
               </p>
             </div>
             <div className="flex justify-end space-x-3">

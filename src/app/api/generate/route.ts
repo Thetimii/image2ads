@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { image_ids, prompt, credits_used } = validation.data;
+    const { image_ids, prompt, model, credits_used } = validation.data;
 
     // Check if user has enough credits
     const profile = await getUserProfile(user.id);
@@ -72,6 +72,7 @@ export async function POST(request: NextRequest) {
       userId: user.id,
       imageIds: image_ids,
       prompt: prompt,
+      model: model,
       creditsUsed: credits_used,
     });
 

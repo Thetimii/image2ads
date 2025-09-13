@@ -1,31 +1,189 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import * as fal from "https://esm.sh/@fal-ai/client@0.14.0";
 
 const supabase = createClient(
   Deno.env.get("SUPABASE_URL") ?? "",
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
 );
 
-// Configure FAL API
-fal.config({
-  credentials: Deno.env.get("FAL_API_KEY") ?? "",
-});
+// Polling function to check FAL.ai job status
+async function pollForResult(
+  requestId: string,
+  jobId: string,
+  userId: string,
+  falApiKey: string,
+  model: string = "gemini"
+) {
+  console.log(
+    `Starting to poll for result: ${requestId} using model: ${model}`
+  );
+
+  const maxAttempts = 60; // 5 minutes max
+  let attempts = 0;
+
+  // Determine the correct endpoint based on model
+  const baseEndpoint =
+    model === "seedream" ? "fal-ai/bytedance" : "fal-ai/gemini-25-flash-image";
+
+  while (attempts < maxAttempts) {
+    await new Promise((resolve) => setTimeout(resolve, 5000)); // Wait 5 seconds
+    attempts++;
+
+    try {
+      console.log(`Polling attempt ${attempts} for request ${requestId}`);
+
+      // Check status
+      const statusResponse = await fetch(
+        `https://queue.fal.run/${baseEndpoint}/requests/${requestId}/status`,
+        {
+          headers: {
+            Authorization: `Key ${falApiKey}`,
+          },
+        }
+      );
+
+      if (!statusResponse.ok) {
+        console.error("Status check failed:", statusResponse.status);
+        continue;
+      }
+
+      const statusResult = await statusResponse.json();
+      console.log("Status result:", statusResult);
+
+      if (statusResult.status === "COMPLETED") {
+        // Get the final result
+        const resultResponse = await fetch(
+          `https://queue.fal.run/${baseEndpoint}/requests/${requestId}`,
+          {
+            headers: {
+              Authorization: `Key ${falApiKey}`,
+            },
+          }
+        );
+
+        if (!resultResponse.ok) {
+          throw new Error("Failed to get final result");
+        }
+
+        const result = await resultResponse.json();
+        console.log("FAL.ai final result:", result);
+
+        // Process the result - handle multiple images
+        let generatedImageUrls = [];
+        if (result.images && result.images.length > 0) {
+          generatedImageUrls = result.images.map((img: any) => img.url);
+        } else if (
+          result.data &&
+          result.data.images &&
+          result.data.images.length > 0
+        ) {
+          generatedImageUrls = result.data.images.map((img: any) => img.url);
+        } else {
+          throw new Error("No images found in result");
+        }
+
+        console.log("Generated image URLs:", generatedImageUrls);
+
+        // Store all generated images and let user choose the best one
+        const storedImagePaths = [];
+        for (let i = 0; i < generatedImageUrls.length; i++) {
+          const imageResponse = await fetch(generatedImageUrls[i]);
+          if (!imageResponse.ok) {
+            throw new Error(`Failed to download generated image ${i + 1}`);
+          }
+
+          const imageBuffer = await imageResponse.arrayBuffer();
+          const fileName = `${userId}/${jobId}-result-${i + 1}.png`;
+
+          // Upload result to Supabase storage
+          const { error: uploadError } = await supabase.storage
+            .from("results")
+            .upload(fileName, imageBuffer, {
+              contentType: "image/png",
+              upsert: true,
+            });
+
+          if (uploadError) {
+            console.error("Upload error:", uploadError);
+            throw new Error(`Failed to save result image ${i + 1}`);
+          }
+
+          storedImagePaths.push(fileName);
+        }
+
+        // Update job with all result URLs (comma-separated for now)
+        await supabase
+          .from("jobs")
+          .update({
+            status: "completed",
+            result_url: storedImagePaths[0], // Primary result
+            // TODO: Add multiple_results field to store all variations
+          })
+          .eq("id", jobId);
+
+        console.log(`Job ${jobId} completed successfully`);
+        return;
+      } else if (statusResult.status === "FAILED") {
+        throw new Error(
+          `FAL.ai processing failed: ${statusResult.error || "Unknown error"}`
+        );
+      }
+
+      // Continue polling if still in progress
+      console.log(`Job still in progress, status: ${statusResult.status}`);
+    } catch (error) {
+      console.error("Error during polling:", error);
+      await supabase
+        .from("jobs")
+        .update({
+          status: "failed",
+          error_message: (error as Error).message,
+        })
+        .eq("id", jobId);
+      return;
+    }
+  }
+
+  // Timeout
+  console.error("Polling timed out");
+  await supabase
+    .from("jobs")
+    .update({
+      status: "failed",
+      error_message: "Processing timed out",
+    })
+    .eq("id", jobId);
+}
 
 serve(async (request) => {
+  let parsedBody: any = null;
+
   try {
+    console.log("=== EDGE FUNCTION START ===");
     console.log("Edge function called with method:", request.method);
+    console.log(
+      "SUPABASE_URL:",
+      Deno.env.get("SUPABASE_URL") ? "SET" : "MISSING"
+    );
+    console.log(
+      "SUPABASE_SERVICE_ROLE_KEY:",
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ? "SET" : "MISSING"
+    );
+    console.log("FAL_KEY:", Deno.env.get("FAL_KEY") ? "SET" : "MISSING");
 
     if (request.method !== "POST") {
+      console.log("Method not allowed, returning 405");
       return new Response("Method not allowed", { status: 405 });
     }
 
+    console.log("Reading request body...");
     const body = await request.text();
     console.log("Request body:", body);
 
-    let parsedBody;
+    console.log("Parsing JSON...");
     try {
       parsedBody = JSON.parse(body);
+      console.log("Parsed body:", JSON.stringify(parsedBody, null, 2));
     } catch (parseError) {
       console.error("Failed to parse JSON:", parseError);
       return new Response("Invalid JSON", { status: 400 });
@@ -34,17 +192,21 @@ serve(async (request) => {
     const { jobId } = parsedBody;
 
     if (!jobId) {
+      console.log("No jobId provided, returning 400");
       return new Response("Job ID required", { status: 400 });
     }
 
     console.log(`Processing job: ${jobId}`);
 
+    console.log("Fetching job from database...");
     // Get job details
     const { data: job, error: jobError } = await supabase
       .from("jobs")
       .select("*")
       .eq("id", jobId)
       .single();
+
+    console.log("Database response:", { job, jobError });
 
     if (jobError || !job) {
       console.error("Job not found:", jobError);
@@ -124,110 +286,129 @@ serve(async (request) => {
       imageUrls.push(signedUrl.signedUrl);
     }
 
-    console.log("Calling FAL.ai Gemini with", imageUrls.length, "images");
+    console.log("Calling FAL.ai with", imageUrls.length, "images");
     console.log("Image URLs:", imageUrls);
     console.log("Prompt:", job.prompt);
+    console.log("Model:", job.model || "gemini");
 
-    // Call FAL.ai Gemini API for image processing
-    const result = await fal.subscribe("fal-ai/gemini-25-flash-image/edit", {
-      input: {
+    // Use fal.subscribe but with timeout handling
+    console.log("Submitting request to FAL.ai...");
+
+    const falApiKey = Deno.env.get("FAL_KEY");
+    if (!falApiKey) {
+      throw new Error("FAL_KEY environment variable not set");
+    }
+
+    const model = job.model || "gemini";
+    let submitUrl: string;
+    let payload: any;
+
+    if (model === "seedream") {
+      // ByteDance SeedDream v4 configuration
+      submitUrl = "https://queue.fal.run/fal-ai/bytedance/seedream/v4/edit";
+      payload = {
         prompt: job.prompt,
         image_urls: imageUrls,
+        image_size: {
+          width: 1024,
+          height: 1024,
+        },
         num_images: 1,
-        output_format: "jpeg",
+        max_images: 2, // Generate 2 variations for better selection
+        enable_safety_checker: true,
+        sync_mode: false,
+      };
+    } else {
+      // Gemini configuration (default)
+      submitUrl = "https://queue.fal.run/fal-ai/gemini-25-flash-image/edit";
+      payload = {
+        prompt: job.prompt,
+        image_urls: imageUrls,
+        num_images: 2, // Generate 2 images for better selection
+        output_format: "png", // Use PNG for better quality
+        sync_mode: false, // Use URLs for better performance
+      };
+    }
+
+    // Submit to FAL.ai queue using direct HTTP
+    const submitResponse = await fetch(submitUrl, {
+      method: "POST",
+      headers: {
+        Authorization: `Key ${falApiKey}`,
+        "Content-Type": "application/json",
       },
-      logs: true,
-      onQueueUpdate: (update: any) => {
-        console.log("Queue update:", update);
-        if (update.status === "IN_PROGRESS") {
-          update.logs?.map((log: any) => log.message).forEach(console.log);
-        }
-      },
+      body: JSON.stringify(payload),
     });
 
-    console.log("FAL.ai result received:", result);
-
-    if (
-      !result.data ||
-      !result.data.images ||
-      result.data.images.length === 0
-    ) {
-      throw new Error("No images generated");
+    if (!submitResponse.ok) {
+      const errorText = await submitResponse.text();
+      console.error("FAL.ai submit failed:", submitResponse.status, errorText);
+      throw new Error(
+        `FAL.ai submit failed: ${submitResponse.status} ${errorText}`
+      );
     }
 
-    const generatedImageUrl = result.data.images[0].url;
-    console.log("Generated image URL:", generatedImageUrl);
+    const submitResult = await submitResponse.json();
+    console.log("FAL.ai submit result:", submitResult);
+    const requestId = submitResult.request_id;
 
-    // Download the generated image
-    const imageResponse = await fetch(generatedImageUrl);
-    if (!imageResponse.ok) {
-      throw new Error("Failed to download generated image");
+    if (!requestId) {
+      throw new Error("No request_id received from FAL.ai");
     }
 
-    const imageBuffer = await imageResponse.arrayBuffer();
-    const fileName = `${job.user_id}/${jobId}-result.jpg`;
+    // Start background polling (don't await to avoid timeout)
+    setTimeout(async () => {
+      await pollForResult(
+        requestId,
+        jobId,
+        job.user_id,
+        falApiKey,
+        job.model || "gemini"
+      );
+    }, 1000);
 
-    // Upload result to Supabase storage
-    const { error: uploadError } = await supabase.storage
-      .from("results")
-      .upload(fileName, imageBuffer, {
-        contentType: "image/jpeg",
-        upsert: true,
-      });
+    console.log(`Job ${jobId} submitted to FAL.ai, processing in background`);
 
-    if (uploadError) {
-      console.error("Upload error:", uploadError);
-      throw new Error("Failed to save result image");
-    }
-
-    // Update job with result
-    const { error: updateError } = await supabase
-      .from("jobs")
-      .update({
-        status: "completed",
-        result_url: fileName,
-      })
-      .eq("id", jobId);
-
-    if (updateError) {
-      console.error("Job update error:", updateError);
-      throw new Error("Failed to update job status");
-    }
-
-    console.log(`Job ${jobId} completed successfully`);
-
+    // Return success immediately - processing continues asynchronously
     return new Response(
       JSON.stringify({
         success: true,
         jobId,
-        resultUrl: fileName,
+        message: "Job submitted to FAL.ai, processing in background",
       }),
       {
         headers: { "Content-Type": "application/json" },
       }
     );
   } catch (error) {
+    console.error("=== EDGE FUNCTION ERROR ===");
     console.error("Job processing error:", error);
+    console.error("Error type:", typeof error);
+    console.error("Error constructor:", error?.constructor?.name);
+    console.error("Error stack:", (error as Error)?.stack);
 
-    // Update job status to failed
-    if (request.json) {
+    // Update job status to failed if we have a jobId
+    if (parsedBody?.jobId) {
       try {
-        const { jobId } = await request.json();
+        console.log("Updating job status to failed for job:", parsedBody.jobId);
         await supabase
           .from("jobs")
           .update({
             status: "failed",
             error_message: (error as Error).message || "Unknown error",
           })
-          .eq("id", jobId);
+          .eq("id", parsedBody.jobId);
+        console.log("Job status updated to failed");
       } catch (e) {
         console.error("Failed to update job status:", e);
       }
     }
 
+    console.log("Returning 500 error response");
     return new Response(
       JSON.stringify({
         error: (error as Error).message || "Job processing failed",
+        details: "Check function logs for more information",
       }),
       {
         status: 500,

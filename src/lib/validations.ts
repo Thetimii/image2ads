@@ -45,6 +45,7 @@ export const jobSchema = z.object({
   user_id: z.string().uuid(),
   image_ids: z.array(z.string().uuid()),
   prompt: z.string(),
+  model: z.string().default("gemini"),
   status: z.enum(["pending", "processing", "completed", "failed"]),
   result_url: z.string().optional(),
   error_message: z.string().optional(),
@@ -59,6 +60,7 @@ export const createJobSchema = z.object({
     .min(1, "At least one image is required")
     .max(10, "Maximum 10 images allowed"),
   prompt: z.string().min(1, "Prompt is required").max(500, "Prompt too long"),
+  model: z.enum(["gemini", "seedream"]).default("gemini"),
   credits_used: z.number().int().min(1).default(1),
 });
 
