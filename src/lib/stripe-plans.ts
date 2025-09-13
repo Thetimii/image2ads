@@ -7,7 +7,7 @@ export const STRIPE_PLANS = {
     allowCoupons: true,
   },
   pro: {
-    name: "Pro", 
+    name: "Pro",
     credits: 600,
     price: 59.99,
     priceId: process.env.STRIPE_PRO_PRICE_ID,
