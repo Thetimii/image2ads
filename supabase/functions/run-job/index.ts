@@ -14,23 +14,23 @@ fal.config({
 
 serve(async (request) => {
   try {
-    console.log('Edge function called with method:', request.method)
-    
-    if (request.method !== 'POST') {
-      return new Response('Method not allowed', { status: 405 })
+    console.log("Edge function called with method:", request.method);
+
+    if (request.method !== "POST") {
+      return new Response("Method not allowed", { status: 405 });
     }
-    
-    const body = await request.text()
-    console.log('Request body:', body)
-    
-    let parsedBody
+
+    const body = await request.text();
+    console.log("Request body:", body);
+
+    let parsedBody;
     try {
-      parsedBody = JSON.parse(body)
+      parsedBody = JSON.parse(body);
     } catch (parseError) {
-      console.error('Failed to parse JSON:', parseError)
-      return new Response('Invalid JSON', { status: 400 })
+      console.error("Failed to parse JSON:", parseError);
+      return new Response("Invalid JSON", { status: 400 });
     }
-    
+
     const { jobId } = parsedBody;
 
     if (!jobId) {
@@ -51,8 +51,10 @@ serve(async (request) => {
       return new Response("Job not found", { status: 404 });
     }
 
-    console.log(`Processing job ${jobId} with ${job.image_ids?.length || 0} images`)
-    console.log('Job data:', JSON.stringify(job, null, 2));
+    console.log(
+      `Processing job ${jobId} with ${job.image_ids?.length || 0} images`
+    );
+    console.log("Job data:", JSON.stringify(job, null, 2));
 
     // Update job status to processing
     await supabase
@@ -122,23 +124,28 @@ serve(async (request) => {
       imageUrls.push(signedUrl.signedUrl);
     }
 
-    console.log("Calling FAL.ai SeDream v4 with", imageUrls.length, "images");
+    console.log("Calling FAL.ai Gemini with", imageUrls.length, "images");
+    console.log("Image URLs:", imageUrls);
+    console.log("Prompt:", job.prompt);
 
-    // Call FAL.ai SeDream v4 API for image processing
-    const result = await fal.subscribe("fal-ai/bytedance/seedream/v4/edit", {
+    // Call FAL.ai Gemini API for image processing
+    const result = await fal.subscribe("fal-ai/gemini-25-flash-image/edit", {
       input: {
         prompt: job.prompt,
         image_urls: imageUrls,
-        image_size: "square_hd",
         num_images: 1,
-        max_images: 1,
-        enable_safety_checker: true,
+        output_format: "jpeg",
       },
       logs: true,
-      onQueueUpdate: (update) => {
+      onQueueUpdate: (update: any) => {
         console.log("Queue update:", update);
+        if (update.status === "IN_PROGRESS") {
+          update.logs?.map((log: any) => log.message).forEach(console.log);
+        }
       },
     });
+
+    console.log("FAL.ai result received:", result);
 
     if (
       !result.data ||
@@ -210,7 +217,7 @@ serve(async (request) => {
           .from("jobs")
           .update({
             status: "failed",
-            error_message: error.message || "Unknown error",
+            error_message: (error as Error).message || "Unknown error",
           })
           .eq("id", jobId);
       } catch (e) {
@@ -220,7 +227,7 @@ serve(async (request) => {
 
     return new Response(
       JSON.stringify({
-        error: error.message || "Job processing failed",
+        error: (error as Error).message || "Job processing failed",
       }),
       {
         status: 500,
