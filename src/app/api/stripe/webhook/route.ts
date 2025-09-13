@@ -194,6 +194,7 @@ export async function POST(req: NextRequest) {
       case "customer.subscription.updated": {
         const subscription = event.data.object as Stripe.Subscription;
 
+        // Update subscription status
         const { error } = await supabaseAdmin
           .from("profiles")
           .update({
@@ -204,6 +205,33 @@ export async function POST(req: NextRequest) {
 
         if (error) {
           console.error("Error updating subscription:", error);
+        }
+
+        // Add credits for active subscriptions (only on creation)
+        if (event.type === "customer.subscription.created" && subscription.status === "active") {
+          const planItem = subscription.items.data[0];
+          let creditsToAdd = 0;
+
+          if (planItem?.price?.id === process.env.STRIPE_STARTER_PRICE_ID) {
+            creditsToAdd = 50;
+          } else if (planItem?.price?.id === process.env.STRIPE_PRO_PRICE_ID) {
+            creditsToAdd = 200;
+          } else if (planItem?.price?.id === process.env.STRIPE_BUSINESS_PRICE_ID) {
+            creditsToAdd = 500;
+          }
+
+          if (creditsToAdd > 0) {
+            const { error: creditsError } = await supabaseAdmin.rpc("add_credits", {
+              customer_id: subscription.customer as string,
+              credits_to_add: creditsToAdd,
+            });
+
+            if (creditsError) {
+              console.error("Error adding subscription credits:", creditsError);
+            } else {
+              console.log(`Added ${creditsToAdd} credits for new subscription`);
+            }
+          }
         }
         break;
       }
@@ -257,7 +285,9 @@ export async function POST(req: NextRequest) {
             });
 
             if (error) {
-              console.error("Error adding credits:", error);
+              console.error("Error adding recurring credits:", error);
+            } else {
+              console.log(`Added ${creditsToAdd} credits for successful payment`);
             }
           }
 
