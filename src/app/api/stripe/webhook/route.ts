@@ -113,12 +113,22 @@ export async function POST(req: NextRequest) {
 
           // Add credits based on subscription plan
           const planItem = subscription.items.data[0];
-          if (planItem?.price?.id === process.env.STRIPE_PRO_PRICE_ID) {
+          if (planItem?.price?.id === process.env.STRIPE_STARTER_PRICE_ID) {
             const { error: creditsError } = await supabaseAdmin.rpc(
               "add_credits",
               {
                 customer_id: customerId,
-                credits_to_add: 200,
+                credits_to_add: 150,
+              }
+            );
+            if (creditsError)
+              console.error("Error adding credits:", creditsError);
+          } else if (planItem?.price?.id === process.env.STRIPE_PRO_PRICE_ID) {
+            const { error: creditsError } = await supabaseAdmin.rpc(
+              "add_credits",
+              {
+                customer_id: customerId,
+                credits_to_add: 400,
               }
             );
             if (creditsError)
@@ -130,7 +140,7 @@ export async function POST(req: NextRequest) {
               "add_credits",
               {
                 customer_id: customerId,
-                credits_to_add: 500,
+                credits_to_add: 700,
               }
             );
             if (creditsError)
@@ -207,29 +217,38 @@ export async function POST(req: NextRequest) {
           console.error("Error updating subscription:", error);
         }
 
-        // Add credits for active subscriptions (only on creation)
-        if (event.type === "customer.subscription.created" && subscription.status === "active") {
+        // Add credits for active subscriptions (creation or plan changes)
+        if (subscription.status === "active") {
           const planItem = subscription.items.data[0];
           let creditsToAdd = 0;
 
           if (planItem?.price?.id === process.env.STRIPE_STARTER_PRICE_ID) {
-            creditsToAdd = 50;
+            creditsToAdd = 150;
           } else if (planItem?.price?.id === process.env.STRIPE_PRO_PRICE_ID) {
-            creditsToAdd = 200;
-          } else if (planItem?.price?.id === process.env.STRIPE_BUSINESS_PRICE_ID) {
-            creditsToAdd = 500;
+            creditsToAdd = 400;
+          } else if (
+            planItem?.price?.id === process.env.STRIPE_BUSINESS_PRICE_ID
+          ) {
+            creditsToAdd = 700;
           }
 
           if (creditsToAdd > 0) {
-            const { error: creditsError } = await supabaseAdmin.rpc("add_credits", {
-              customer_id: subscription.customer as string,
-              credits_to_add: creditsToAdd,
-            });
+            const { error: creditsError } = await supabaseAdmin.rpc(
+              "add_credits",
+              {
+                customer_id: subscription.customer as string,
+                credits_to_add: creditsToAdd,
+              }
+            );
 
             if (creditsError) {
               console.error("Error adding subscription credits:", creditsError);
             } else {
-              console.log(`Added ${creditsToAdd} credits for new subscription`);
+              const eventType =
+                event.type === "customer.subscription.created"
+                  ? "new subscription"
+                  : "plan change";
+              console.log(`Added ${creditsToAdd} credits for ${eventType}`);
             }
           }
         }
@@ -269,13 +288,13 @@ export async function POST(req: NextRequest) {
           let creditsToAdd = 0;
 
           if (planItem?.price?.id === process.env.STRIPE_STARTER_PRICE_ID) {
-            creditsToAdd = 50;
+            creditsToAdd = 150;
           } else if (planItem?.price?.id === process.env.STRIPE_PRO_PRICE_ID) {
-            creditsToAdd = 200;
+            creditsToAdd = 400;
           } else if (
             planItem?.price?.id === process.env.STRIPE_BUSINESS_PRICE_ID
           ) {
-            creditsToAdd = 500;
+            creditsToAdd = 700;
           }
 
           if (creditsToAdd > 0) {
@@ -287,7 +306,9 @@ export async function POST(req: NextRequest) {
             if (error) {
               console.error("Error adding recurring credits:", error);
             } else {
-              console.log(`Added ${creditsToAdd} credits for successful payment`);
+              console.log(
+                `Added ${creditsToAdd} credits for successful payment`
+              );
             }
           }
 
