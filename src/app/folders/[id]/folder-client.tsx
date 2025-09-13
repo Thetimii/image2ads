@@ -23,6 +23,7 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
   const [prompt, setPrompt] = useState('')
   const [model, setModel] = useState('gemini')
   const [showGenerateModal, setShowGenerateModal] = useState(false)
+  const [enhancementStatus, setEnhancementStatus] = useState<Record<string, string>>({})
   const router = useRouter()
   const supabase = createClient()
 
@@ -222,6 +223,54 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
     return data?.signedUrl
   }
 
+  const handleEnhanceImage = async (jobId: string, imageUrl: string) => {
+    try {
+      setEnhancementStatus(prev => ({ ...prev, [jobId]: 'enhancing' }))
+
+      const response = await fetch('/api/enhance', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          imageUrl: imageUrl,
+          resultId: jobId,
+        }),
+      })
+
+      const result = await response.json()
+
+      if (response.ok) {
+        setEnhancementStatus(prev => ({ ...prev, [jobId]: 'completed' }))
+        
+        // Open enhanced image in new tab
+        window.open(result.enhancedImageUrl, '_blank')
+        
+        // Show success message
+        alert('🎉 Image enhanced successfully! The high-quality version has opened in a new tab. The enhanced image has better resolution, sharpness, and details.')
+      } else {
+        throw new Error(result.error || 'Failed to enhance image')
+      }
+    } catch (error) {
+      console.error('Enhancement error:', error)
+      setEnhancementStatus(prev => ({ ...prev, [jobId]: 'failed' }))
+      
+      let errorMessage = 'Unknown error occurred'
+      if (error instanceof Error) {
+        errorMessage = error.message
+      }
+      
+      // Provide helpful error messages
+      if (errorMessage.includes('VYRO API key')) {
+        errorMessage = 'Image enhancement service is not configured. Please contact support.'
+      } else if (errorMessage.includes('Failed to fetch')) {
+        errorMessage = 'Network error. Please check your connection and try again.'
+      }
+      
+      alert(`❌ Enhancement failed: ${errorMessage}`)
+    }
+  }
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
@@ -338,9 +387,28 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
               <h2 className="text-lg font-medium text-gray-900 mb-4">Recent Jobs</h2>
               <div className="bg-white shadow rounded-lg">
                 <div className="px-4 py-5 sm:p-6">
+                  <div className="mb-4 p-3 bg-purple-50 rounded-lg">
+                    <div className="flex items-center">
+                      <div className="flex-shrink-0">
+                        <svg className="h-5 w-5 text-purple-600" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z" clipRule="evenodd" />
+                        </svg>
+                      </div>
+                      <div className="ml-3">
+                        <p className="text-sm text-purple-700">
+                          <strong>✨ New:</strong> Click "Enhance" on completed jobs to upscale and improve image quality using AI!
+                        </p>
+                      </div>
+                    </div>
+                  </div>
                   <div className="space-y-4">
                     {jobs.slice(0, 10).map((job) => (
-                      <JobCard key={job.id} job={job} />
+                      <JobCard 
+                        key={job.id} 
+                        job={job} 
+                        onEnhance={handleEnhanceImage}
+                        enhancementStatus={enhancementStatus}
+                      />
                     ))}
                   </div>
                 </div>
@@ -488,7 +556,14 @@ function ImageCard({
   )
 }
 
-function JobCard({ job }: { job: Job & { result_signed_url?: string } }) {
+function JobCard({ job, onEnhance, enhancementStatus }: { 
+  job: Job & { result_signed_url?: string }, 
+  onEnhance?: (jobId: string, imageUrl: string) => void,
+  enhancementStatus?: Record<string, string>
+}) {
+  const [isEnhancing, setIsEnhancing] = useState(false)
+  const currentEnhancementStatus = enhancementStatus?.[job.id]
+  
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'completed':
@@ -500,6 +575,28 @@ function JobCard({ job }: { job: Job & { result_signed_url?: string } }) {
       default:
         return 'text-gray-600 bg-gray-100'
     }
+  }
+
+  const handleEnhance = async () => {
+    if (!job.result_signed_url || !onEnhance) return
+    
+    setIsEnhancing(true)
+    try {
+      await onEnhance(job.id, job.result_signed_url)
+    } finally {
+      setIsEnhancing(false)
+    }
+  }
+
+  const getEnhanceButtonText = () => {
+    if (isEnhancing || currentEnhancementStatus === 'enhancing') return 'Enhancing...'
+    if (currentEnhancementStatus === 'completed') return '✅ Enhanced'
+    if (currentEnhancementStatus === 'failed') return '❌ Retry Enhance'
+    return '✨ Enhance'
+  }
+
+  const isEnhanceDisabled = () => {
+    return isEnhancing || currentEnhancementStatus === 'enhancing'
   }
 
   return (
@@ -521,14 +618,36 @@ function JobCard({ job }: { job: Job & { result_signed_url?: string } }) {
         )}
       </div>
       {job.status === 'completed' && job.result_signed_url && (
-        <a
-          href={job.result_signed_url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-blue-600 hover:text-blue-800 text-sm font-medium"
-        >
-          View Result
-        </a>
+        <div className="flex items-center space-x-3">
+          <a
+            href={job.result_signed_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+          >
+            View Result
+          </a>
+          {onEnhance && (
+            <button
+              onClick={handleEnhance}
+              disabled={isEnhanceDisabled()}
+              className={`px-3 py-1 text-xs font-medium text-white rounded transition-colors ${
+                currentEnhancementStatus === 'completed' 
+                  ? 'bg-green-600 hover:bg-green-700' 
+                  : currentEnhancementStatus === 'failed'
+                  ? 'bg-red-600 hover:bg-red-700'
+                  : 'bg-purple-600 hover:bg-purple-700'
+              } disabled:bg-gray-400 disabled:cursor-not-allowed`}
+              title={
+                currentEnhancementStatus === 'completed' 
+                  ? 'Image was enhanced successfully' 
+                  : 'Enhance image quality and resolution using AI'
+              }
+            >
+              {getEnhanceButtonText()}
+            </button>
+          )}
+        </div>
       )}
     </div>
   )
