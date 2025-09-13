@@ -36,9 +36,10 @@ export async function POST(req: NextRequest) {
       sig,
       process.env.STRIPE_WEBHOOK_SECRET! // from CLI/Dashboard
     );
-  } catch (err: any) {
-    console.error("Signature verify failed:", err.message);
-    return new NextResponse(`Webhook Error: ${err.message}`, { status: 400 });
+  } catch (err: unknown) {
+    const errorMessage = err instanceof Error ? err.message : "Unknown error";
+    console.error("Signature verify failed:", errorMessage);
+    return new NextResponse(`Webhook Error: ${errorMessage}`, { status: 400 });
   }
 
   try {
@@ -184,11 +185,14 @@ export async function POST(req: NextRequest) {
       }
 
       case "invoice.payment_succeeded": {
-        const invoice = event.data.object as any; // Use any to access subscription
+        const invoice = event.data.object;
 
-        if (invoice.subscription) {
+        // Type assertion for subscription property
+        const invoiceWithSub = invoice as { subscription?: string };
+
+        if (invoiceWithSub.subscription) {
           const subscription = await stripe.subscriptions.retrieve(
-            invoice.subscription as string
+            invoiceWithSub.subscription
           );
 
           // Add credits for successful payments
@@ -232,11 +236,14 @@ export async function POST(req: NextRequest) {
       }
 
       case "invoice.payment_failed": {
-        const invoice = event.data.object as any; // Use any to access subscription
+        const invoice = event.data.object;
 
-        if (invoice.subscription) {
+        // Type assertion for subscription property
+        const invoiceWithSub = invoice as { subscription?: string };
+
+        if (invoiceWithSub.subscription) {
           const subscription = await stripe.subscriptions.retrieve(
-            invoice.subscription as string
+            invoiceWithSub.subscription
           );
 
           const { error } = await supabaseAdmin
