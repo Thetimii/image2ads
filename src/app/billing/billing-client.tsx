@@ -61,10 +61,17 @@ export default function BillingClient({ user, profile }: BillingClientProps) {
         const { url } = await response.json()
         window.location.href = url
       } else {
-        console.error('Failed to create portal session')
+        const errorData = await response.json()
+        if (response.status === 400) {
+          alert('Please subscribe to a plan first to access billing management.')
+        } else {
+          console.error('Failed to create portal session:', errorData.error)
+          alert('Failed to access billing portal. Please try again.')
+        }
       }
     } catch (error) {
       console.error('Error creating portal session:', error)
+      alert('Failed to access billing portal. Please try again.')
     } finally {
       setIsLoading(null)
     }

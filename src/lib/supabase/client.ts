@@ -5,9 +5,15 @@ export function createClient() {
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
   console.log("Supabase client initialization debug:", {
-    NEXT_PUBLIC_SUPABASE_URL: supabaseUrl ? `${supabaseUrl.substring(0, 20)}...` : "MISSING",
-    NEXT_PUBLIC_SUPABASE_ANON_KEY: supabaseAnonKey ? `${supabaseAnonKey.substring(0, 20)}...` : "MISSING",
-    env_keys: Object.keys(process.env).filter(key => key.startsWith('NEXT_PUBLIC_')),
+    NEXT_PUBLIC_SUPABASE_URL: supabaseUrl
+      ? `${supabaseUrl.substring(0, 20)}...`
+      : "MISSING",
+    NEXT_PUBLIC_SUPABASE_ANON_KEY: supabaseAnonKey
+      ? `${supabaseAnonKey.substring(0, 20)}...`
+      : "MISSING",
+    env_keys: Object.keys(process.env).filter((key) =>
+      key.startsWith("NEXT_PUBLIC_")
+    ),
     typeof_process_env: typeof process.env,
   });
 
