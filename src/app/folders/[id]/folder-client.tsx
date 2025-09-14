@@ -30,8 +30,9 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
   const [isDeleting, setIsDeleting] = useState(false)
   const [enhancementStatus, setEnhancementStatus] = useState<Record<string, string>>({})
   const [enhancedImages, setEnhancedImages] = useState<Record<string, string>>({})
-  const [renamingImage, setRenamingImage] = useState<string | null>(null)
-  const [newImageName, setNewImageName] = useState('')
+  const [renamingJob, setRenamingJob] = useState<string | null>(null)
+  const [newJobName, setNewJobName] = useState('')
+  const [jobNames, setJobNames] = useState<Record<string, string>>({})
   const supabase = createClient()
   const router = useRouter()
 
@@ -41,6 +42,15 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
       if (response.ok) {
         const { jobs } = await response.json()
         setJobs(jobs)
+        
+        // Initialize jobNames from custom_name field in database
+        const initialJobNames: Record<string, string> = {}
+        jobs.forEach((job: Job) => {
+          if (job.custom_name) {
+            initialJobNames[job.id] = job.custom_name
+          }
+        })
+        setJobNames(initialJobNames)
       }
     } catch (error) {
       console.error('Error fetching jobs:', error)
@@ -260,7 +270,7 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
           image_ids: selectedImages,
           prompt: prompt.trim(),
           model: model,
-          output_amount: outputAmount,
+          output_amount: 1,
           aspect_ratio: aspectRatio,
         }),
       })
@@ -271,7 +281,6 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
         setShowGenerateModal(false)
         setSelectedImages([])
         setPrompt('')
-        setOutputAmount(1)
         setAspectRatio('square')
         alert('Ad generation started! You will see the results here when complete.')
       } else {
@@ -284,36 +293,44 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
     }
   }
 
-  const handleRenameImage = async (imageId: string, newName: string) => {
+  const handleJobRename = async (jobId: string, newName: string) => {
     if (!newName.trim()) return
 
     try {
-      const { data, error } = await supabase
-        .from('images')
-        .update({ original_name: newName.trim() })
-        .eq('id', imageId)
-        .eq('user_id', user.id)
-        .select()
-        .single()
+      const response = await fetch(`/api/jobs/${jobId}/rename`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          customName: newName.trim(),
+        }),
+      })
 
-      if (error) {
-        console.error('Error renaming image:', error)
-        alert('Failed to rename image')
-        return
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
       }
 
-      // Update local state
-      setImages(images.map(img => 
-        img.id === imageId 
-          ? { ...img, original_name: newName.trim() }
-          : img
-      ))
-
-      setRenamingImage(null)
-      setNewImageName('')
+      const result = await response.json()
+      
+      if (result.success) {
+        // Store the custom name in local state for immediate UI update
+        setJobNames(prev => ({ 
+          ...prev, 
+          [jobId]: newName.trim() 
+        }))
+        
+        // Reset renaming state
+        setRenamingJob(null)
+        setNewJobName('')
+        
+        console.log(`Job ${jobId} renamed to: ${newName.trim()}`)
+      } else {
+        throw new Error(result.error || 'Failed to rename job')
+      }
     } catch (error) {
-      console.error('Error renaming image:', error)
-      alert('Failed to rename image')
+      console.error('Error renaming job:', error)
+      alert(`Failed to rename ad: ${error instanceof Error ? error.message : 'Unknown error'}`)
     }
   }
 
@@ -487,12 +504,7 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
                       setImageToDelete(image.id)
                       setShowDeleteModal(true)
                     }}
-                    onRename={(newName) => handleRenameImage(image.id, newName)}
                     getImageUrl={getImageUrl}
-                    renamingImage={renamingImage}
-                    setRenamingImage={setRenamingImage}
-                    newImageName={newImageName}
-                    setNewImageName={setNewImageName}
                   />
                 ))}
               </div>
@@ -520,6 +532,12 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
                       onEnhance={handleEnhance}
                       enhancementStatus={enhancementStatus}
                       enhancedImages={enhancedImages}
+                      onRename={handleJobRename}
+                      renamingJob={renamingJob}
+                      setRenamingJob={setRenamingJob}
+                      newJobName={newJobName}
+                      setNewJobName={setNewJobName}
+                      jobNames={jobNames}
                     />
                   ))}
               </div>
@@ -638,40 +656,6 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
                   />
                 </div>
 
-                {/* Number of Images Selection */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Number of Images
-                  </label>
-                  <div className="flex space-x-4">
-                    <button
-                      type="button"
-                      onClick={() => setOutputAmount(1)}
-                      className={`px-4 py-2 rounded-md border ${
-                        outputAmount === 1
-                          ? 'bg-indigo-600 text-white border-indigo-600'
-                          : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-                      }`}
-                    >
-                      1 Image (1 credit)
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setOutputAmount(2)}
-                      className={`px-4 py-2 rounded-md border ${
-                        outputAmount === 2
-                          ? 'bg-indigo-600 text-white border-indigo-600'
-                          : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-                      }`}
-                    >
-                      2 Images (2 credits)
-                    </button>
-                  </div>
-                  <p className="text-xs text-gray-500 mt-2">
-                    You will be charged 1 credit per image generated.
-                  </p>
-                </div>
-
                 {/* Aspect Ratio Selection */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-3">
@@ -734,9 +718,9 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
                 <div className="text-sm text-gray-600">
                   {selectedImages.length > 0 ? (
                     <div>
-                      <span>Ready to generate {outputAmount} ad{outputAmount !== 1 ? 's' : ''} from {selectedImages.length} image{selectedImages.length !== 1 ? 's' : ''}</span>
+                      <span>Ready to generate 1 ad from {selectedImages.length} image{selectedImages.length !== 1 ? 's' : ''}</span>
                       <div className="text-xs text-gray-500 mt-1">
-                        Cost: {outputAmount} credit{outputAmount !== 1 ? 's' : ''}
+                        Cost: 1 credit
                       </div>
                     </div>
                   ) : (
@@ -755,7 +739,7 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
                     disabled={!prompt.trim() || selectedImages.length === 0}
                     className="px-6 py-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg hover:from-blue-700 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-lg shadow-blue-500/20"
                   >
-                    Generate {outputAmount} Ad{outputAmount !== 1 ? 's' : ''}
+                    Generate Ad
                   </button>
                 </div>
               </div>
@@ -862,23 +846,13 @@ function ImageCard({
   isSelected, 
   onToggleSelect, 
   onDelete, 
-  onRename,
-  getImageUrl,
-  renamingImage,
-  setRenamingImage,
-  newImageName,
-  setNewImageName
+  getImageUrl
 }: { 
   image: Image
   isSelected: boolean
   onToggleSelect: () => void
   onDelete: () => void
-  onRename: (newName: string) => void
   getImageUrl: (image: Image) => Promise<string>
-  renamingImage: string | null
-  setRenamingImage: (id: string | null) => void
-  newImageName: string
-  setNewImageName: (name: string) => void
 }) {
   const [imageUrl, setImageUrl] = useState<string>('')
   const [isLoading, setIsLoading] = useState(true)
@@ -957,19 +931,6 @@ function ImageCard({
           <button
             onClick={(e) => {
               e.stopPropagation()
-              setRenamingImage(image.id)
-              setNewImageName(image.original_name)
-            }}
-            className="p-1 bg-blue-600 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-200 hover:bg-blue-700"
-            title="Rename image"
-          >
-            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-            </svg>
-          </button>
-          <button
-            onClick={(e) => {
-              e.stopPropagation()
               onDelete()
             }}
             className="p-1 bg-red-600 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-200 hover:bg-red-700"
@@ -992,73 +953,47 @@ function ImageCard({
         </div>
       </div>
       <div className="p-3">
-        {renamingImage === image.id ? (
-          <div className="space-y-2">
-            <input
-              type="text"
-              value={newImageName}
-              onChange={(e) => setNewImageName(e.target.value)}
-              className="w-full text-sm font-medium text-gray-900 bg-transparent border border-blue-500 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-500"
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  onRename(newImageName)
-                } else if (e.key === 'Escape') {
-                  setRenamingImage(null)
-                  setNewImageName('')
-                }
-              }}
-              onBlur={() => {
-                if (newImageName.trim() && newImageName !== image.original_name) {
-                  onRename(newImageName)
-                } else {
-                  setRenamingImage(null)
-                  setNewImageName('')
-                }
-              }}
-              autoFocus
-            />
-            <div className="flex space-x-1">
-              <button
-                onClick={() => onRename(newImageName)}
-                className="px-2 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700"
-              >
-                Save
-              </button>
-              <button
-                onClick={() => {
-                  setRenamingImage(null)
-                  setNewImageName('')
-                }}
-                className="px-2 py-1 bg-gray-300 text-gray-700 text-xs rounded hover:bg-gray-400"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        ) : (
-          <>
-            <h3 className="text-sm font-medium text-gray-900 truncate">
-              {image.original_name}
-            </h3>
-            <p className="text-xs text-gray-500 mt-1">
-              {new Date(image.created_at).toLocaleDateString()}
-            </p>
-          </>
-        )}
+        <h3 className="text-sm font-medium text-gray-900 truncate">
+          {image.original_name}
+        </h3>
+        <p className="text-xs text-gray-500 mt-1">
+          {new Date(image.created_at).toLocaleDateString()}
+        </p>
       </div>
     </div>
   )
 }
 
 // Job Card Component
-function JobCard({ job, onEnhance, enhancementStatus, enhancedImages }: { 
+function JobCard({ 
+  job, 
+  onEnhance, 
+  enhancementStatus, 
+  enhancedImages,
+  onRename,
+  renamingJob,
+  setRenamingJob,
+  newJobName,
+  setNewJobName,
+  jobNames
+}: { 
   job: Job & { result_signed_url?: string }, 
   onEnhance?: (jobId: string, imageUrl: string) => void,
   enhancementStatus?: Record<string, string>,
-  enhancedImages?: Record<string, string>
+  enhancedImages?: Record<string, string>,
+  onRename?: (jobId: string, newName: string) => void,
+  renamingJob?: string | null,
+  setRenamingJob?: (id: string | null) => void,
+  newJobName?: string,
+  setNewJobName?: (name: string) => void,
+  jobNames?: Record<string, string>
 }) {
   const [isEnhancing, setIsEnhancing] = useState(false)
   const currentEnhancementStatus = enhancementStatus?.[job.id]
+  
+  // Get the display name for this job
+  const displayName = jobNames?.[job.id] || `Ad #${job.id.slice(0, 8)}`
+  const isCurrentlyRenaming = renamingJob === job.id
   
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -1125,6 +1060,21 @@ function JobCard({ job, onEnhance, enhancementStatus, enhancedImages }: {
               <button
                 onClick={(e) => {
                   e.stopPropagation()
+                  if (setRenamingJob && setNewJobName) {
+                    setRenamingJob(job.id)
+                    setNewJobName(displayName)
+                  }
+                }}
+                className="p-2 bg-blue-600 text-white rounded-lg shadow-lg hover:bg-blue-700 transition-colors duration-200"
+                title="Rename"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                </svg>
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
                   handleDownload()
                 }}
                 className="p-2 bg-green-600 text-white rounded-lg shadow-lg hover:bg-green-700 transition-colors duration-200"
@@ -1134,30 +1084,21 @@ function JobCard({ job, onEnhance, enhancementStatus, enhancedImages }: {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                 </svg>
               </button>
-              {onEnhance && (
+              {onEnhance && currentEnhancementStatus !== 'completed' && (
                 <button
                   onClick={(e) => {
                     e.stopPropagation()
-                    if (currentEnhancementStatus === 'completed' && enhancedImages?.[job.id]) {
-                      // Show enhanced image in new tab
-                      window.open(enhancedImages[job.id], '_blank')
-                    } else {
-                      handleEnhance()
-                    }
+                    handleEnhance()
                   }}
                   disabled={isEnhanceDisabled()}
                   className={`p-2 text-white rounded-lg shadow-lg transition-colors duration-200 ${
-                    currentEnhancementStatus === 'completed' 
-                      ? 'bg-green-600 hover:bg-green-700' 
-                      : currentEnhancementStatus === 'failed'
+                    currentEnhancementStatus === 'failed'
                       ? 'bg-red-600 hover:bg-red-700'
                       : 'bg-purple-600 hover:bg-purple-700'
                   } disabled:opacity-50 disabled:cursor-not-allowed`}
                   title={
-                    currentEnhancementStatus === 'completed' 
-                      ? 'Enhanced' 
-                      : currentEnhancementStatus === 'failed'
-                      ? 'Enhancement failed'
+                    currentEnhancementStatus === 'failed'
+                      ? 'Enhancement failed - Try again'
                       : currentEnhancementStatus === 'enhancing'
                       ? 'Enhancing...'
                       : 'Enhance quality'
@@ -1165,10 +1106,6 @@ function JobCard({ job, onEnhance, enhancementStatus, enhancedImages }: {
                 >
                   {currentEnhancementStatus === 'enhancing' ? (
                     <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                  ) : currentEnhancementStatus === 'completed' ? (
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                    </svg>
                   ) : currentEnhancementStatus === 'failed' ? (
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -1217,16 +1154,68 @@ function JobCard({ job, onEnhance, enhancementStatus, enhancedImages }: {
       </div>
       
       <div className="p-3">
-        <h3 className="text-sm font-medium text-gray-900 truncate">
-          Ad #{job.id.slice(0, 8)}
-        </h3>
-        <p className="text-xs text-gray-500 mt-1">
-          {new Date(job.created_at).toLocaleDateString()}
-        </p>
-        {job.error_message && (
-          <p className="text-xs text-red-500 mt-1 truncate" title={job.error_message}>
-            {job.error_message}
-          </p>
+        {isCurrentlyRenaming ? (
+          <div className="space-y-2">
+            <input
+              type="text"
+              value={newJobName || displayName}
+              onChange={(e) => setNewJobName?.(e.target.value)}
+              className="w-full text-sm font-medium text-gray-900 bg-transparent border border-blue-500 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  if (onRename && newJobName?.trim()) {
+                    onRename(job.id, newJobName)
+                  }
+                } else if (e.key === 'Escape') {
+                  setRenamingJob?.(null)
+                  setNewJobName?.('')
+                }
+              }}
+              onBlur={() => {
+                if (newJobName?.trim() && onRename) {
+                  onRename(job.id, newJobName)
+                } else {
+                  setRenamingJob?.(null)
+                }
+              }}
+              autoFocus
+            />
+            <div className="flex space-x-1">
+              <button
+                onClick={() => {
+                  if (onRename && newJobName?.trim()) {
+                    onRename(job.id, newJobName)
+                  }
+                }}
+                className="px-2 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700"
+              >
+                Save
+              </button>
+              <button
+                onClick={() => {
+                  setRenamingJob?.(null)
+                  setNewJobName?.('')
+                }}
+                className="px-2 py-1 bg-gray-300 text-gray-700 text-xs rounded hover:bg-gray-400"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <h3 className="text-sm font-medium text-gray-900 truncate">
+              {displayName}
+            </h3>
+            <p className="text-xs text-gray-500 mt-1">
+              {new Date(job.created_at).toLocaleDateString()}
+            </p>
+            {job.error_message && (
+              <p className="text-xs text-red-500 mt-1 truncate" title={job.error_message}>
+                {job.error_message}
+              </p>
+            )}
+          </>
         )}
       </div>
     </div>
