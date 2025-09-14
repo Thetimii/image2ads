@@ -6,6 +6,7 @@ import Link from 'next/link'
 import type { User } from '@supabase/supabase-js'
 import type { Profile } from '@/lib/validations'
 import { STRIPE_PLANS, type StripePlan } from '@/lib/stripe-plans'
+import DashboardLayout from '@/components/DashboardLayout'
 
 interface BillingClientProps {
   user: User
@@ -74,132 +75,225 @@ export default function BillingClient({ user, profile }: BillingClientProps) {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="bg-white shadow">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center py-6">
-            <div className="flex items-center space-x-4">
-              <Link href="/dashboard" className="text-blue-600 hover:text-blue-800">
-                ← Back to Dashboard
-              </Link>
-              <h1 className="text-2xl font-bold text-gray-900">Billing & Usage</h1>
-            </div>
-          </div>
+    <DashboardLayout user={user} profile={profile}>
+      <div className="p-6 lg:p-8">
+        {/* Header */}
+        <div className="mb-8">
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">Usage & Billing</h1>
+          <p className="text-gray-600">
+            Manage your subscription, view usage, and access billing information.
+          </p>
         </div>
-      </div>
 
-      {/* Main content */}
-      <div className="max-w-4xl mx-auto py-6 sm:px-6 lg:px-8">
-        <div className="px-4 py-6 sm:px-0">
-          {/* Current status */}
-          <div className="bg-white rounded-lg shadow mb-8">
-            <div className="px-6 py-8">
-              <h2 className="text-lg font-medium text-gray-900 mb-4">Current Status</h2>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="text-center">
-                  <div className="text-3xl font-bold text-blue-600">{profile.credits}</div>
-                  <div className="text-sm text-gray-500">Credits Remaining</div>
-                </div>
-                <div className="text-center">
-                  <div className="text-lg font-medium text-gray-900">
-                    {profile.subscription_status === 'active' ? 'Active' : 'Free Plan'}
-                  </div>
-                  <div className="text-sm text-gray-500">Subscription Status</div>
-                </div>
-                <div className="text-center">
-                  <button
-                    onClick={handleManageBilling}
-                    disabled={isLoading === 'portal'}
-                    className="bg-gray-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-gray-700 disabled:opacity-50"
-                  >
-                    {isLoading === 'portal' ? 'Loading...' : 'Manage Billing'}
-                  </button>
-                </div>
+        {/* Current status */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+          <div className="bg-white rounded-2xl p-6 border border-gray-200">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">Available Credits</p>
+                <p className="text-2xl font-bold text-gray-900">{profile.credits}</p>
+              </div>
+              <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
+                <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
+                </svg>
               </div>
             </div>
           </div>
 
-          {/* Pricing plans */}
-          <div className="bg-white rounded-lg shadow">
-            <div className="px-6 py-8">
-              <h2 className="text-lg font-medium text-gray-900 mb-6">Choose Your Plan</h2>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {Object.entries(STRIPE_PLANS).map(([key, plan]) => (
-                  <div
-                    key={key}
-                    className={`border rounded-lg p-6 ${
-                      key === 'pro' ? 'border-blue-500 ring-2 ring-blue-500 ring-opacity-20' : 'border-gray-200'
+                          <div>
+                  <p className="text-sm font-medium text-gray-600">Current Plan</p>
+                  <p className="text-2xl font-bold text-gray-900">
+                    {profile.subscription_status ? 'Pro' : 'Free'}
+                  </p>
+                </div>
+
+          <div className="bg-white rounded-2xl p-6 border border-gray-200">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">Credits Used</p>
+                <p className="text-2xl font-bold text-gray-900">-</p>
+              </div>
+              <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
+                <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                </svg>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-2xl p-6 border border-gray-200">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">Next Billing</p>
+                <p className="text-lg font-bold text-gray-900">
+                  {profile.subscription_status === 'active' ? 'Oct 15' : 'N/A'}
+                </p>
+              </div>
+              <div className="w-12 h-12 bg-orange-100 rounded-xl flex items-center justify-center">
+                <svg className="w-6 h-6 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Quick Actions */}
+        <div className="bg-white rounded-2xl border border-gray-200 mb-8 overflow-hidden">
+          <div className="p-6 border-b border-gray-200">
+            <h2 className="text-lg font-semibold text-gray-900">Quick Actions</h2>
+          </div>
+          <div className="p-6">
+            <div className="flex flex-wrap gap-4">
+              <button
+                onClick={handleManageBilling}
+                disabled={isLoading === 'portal'}
+                className="flex items-center space-x-2 bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-xl transition-colors duration-200 disabled:opacity-50"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                <span>{isLoading === 'portal' ? 'Loading...' : 'Manage Billing'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Pricing plans */}
+        <div className="bg-white rounded-2xl border border-gray-200 mb-8 overflow-hidden">
+          <div className="p-6 border-b border-gray-200">
+            <h2 className="text-lg font-semibold text-gray-900 mb-1">Subscription Plans</h2>
+            <p className="text-sm text-gray-600">Choose the plan that best fits your needs.</p>
+          </div>
+          
+          <div className="p-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {Object.entries(STRIPE_PLANS).map(([key, plan]) => (
+                <div
+                  key={key}
+                  className={`relative rounded-2xl p-6 border-2 transition-all duration-200 ${
+                    key === 'pro' 
+                      ? 'border-blue-500 bg-gradient-to-br from-blue-50 to-purple-50 shadow-lg shadow-blue-100/50' 
+                      : 'border-gray-200 hover:border-gray-300'
+                  }`}
+                >
+                  {key === 'pro' && (
+                    <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
+                      <span className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-4 py-1 rounded-full text-xs font-medium">
+                        Most Popular
+                      </span>
+                    </div>
+                  )}
+                  
+                  <div className="text-center mb-6">
+                    <h3 className="text-xl font-semibold text-gray-900 mb-2">{plan.name}</h3>
+                    <div className="mb-2">
+                      <span className="text-4xl font-bold text-gray-900">${plan.price}</span>
+                      <span className="text-gray-500 ml-1">/month</span>
+                    </div>
+                  </div>
+
+                  <ul className="space-y-3 mb-6">
+                    <li className="flex items-center">
+                      <div className="w-5 h-5 bg-green-100 rounded-full flex items-center justify-center mr-3">
+                        <svg className="w-3 h-3 text-green-600" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                        </svg>
+                      </div>
+                      <span className="text-sm text-gray-700">{plan.credits} credits per month</span>
+                    </li>
+                    <li className="flex items-center">
+                      <div className="w-5 h-5 bg-green-100 rounded-full flex items-center justify-center mr-3">
+                        <svg className="w-3 h-3 text-green-600" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                        </svg>
+                      </div>
+                      <span className="text-sm text-gray-700">High-quality AI generation</span>
+                    </li>
+                    <li className="flex items-center">
+                      <div className="w-5 h-5 bg-green-100 rounded-full flex items-center justify-center mr-3">
+                        <svg className="w-3 h-3 text-green-600" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                        </svg>
+                      </div>
+                      <span className="text-sm text-gray-700">Priority processing</span>
+                    </li>
+                  </ul>
+
+                  <button
+                    onClick={() => handleSubscribe(key as StripePlan)}
+                    disabled={isLoading === key}
+                    className={`w-full py-3 px-4 rounded-xl font-medium transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 ${
+                      key === 'pro'
+                        ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white hover:from-blue-700 hover:to-purple-700 focus:ring-blue-500 shadow-lg shadow-blue-500/20'
+                        : 'bg-gray-600 text-white hover:bg-gray-700 focus:ring-gray-500'
                     }`}
                   >
-                    {key === 'pro' && (
-                      <div className="text-center">
-                        <span className="bg-blue-500 text-white px-3 py-1 rounded-full text-xs font-medium">
-                          Most Popular
-                        </span>
+                    {isLoading === key ? (
+                      <div className="flex items-center justify-center space-x-2">
+                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                        <span>Loading...</span>
                       </div>
+                    ) : (
+                      `Subscribe to ${plan.name}`
                     )}
-                    
-                    <div className="text-center mt-4">
-                      <h3 className="text-lg font-medium text-gray-900">{plan.name}</h3>
-                      <div className="mt-4">
-                        <span className="text-4xl font-bold text-gray-900">${plan.price}</span>
-                        <span className="text-gray-500">/month</span>
-                      </div>
-                    </div>
-
-                    <ul className="mt-6 space-y-3">
-                      <li className="flex items-center">
-                        <svg className="h-5 w-5 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                        </svg>
-                        <span className="text-sm text-gray-600">{plan.credits} credits per month</span>
-                      </li>
-                      <li className="flex items-center">
-                        <svg className="h-5 w-5 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                        </svg>
-                        <span className="text-sm text-gray-600">High-quality AI generation</span>
-                      </li>
-                      <li className="flex items-center">
-                        <svg className="h-5 w-5 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                        </svg>
-                        <span className="text-sm text-gray-600">Priority processing</span>
-                      </li>
-                    </ul>
-
-                    <button
-                      onClick={() => handleSubscribe(key as StripePlan)}
-                      disabled={isLoading === key}
-                      className={`mt-6 w-full py-2 px-4 rounded-md text-sm font-medium focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 ${
-                        key === 'pro'
-                          ? 'bg-blue-600 text-white hover:bg-blue-700 focus:ring-blue-500'
-                          : 'bg-gray-600 text-white hover:bg-gray-700 focus:ring-gray-500'
-                      }`}
-                    >
-                      {isLoading === key ? 'Loading...' : `Subscribe to ${plan.name}`}
-                    </button>
-                  </div>
-                ))}
-              </div>
+                  </button>
+                </div>
+              ))}
             </div>
           </div>
+        </div>
 
-          {/* Usage history section */}
-          <div className="mt-8 bg-white rounded-lg shadow">
-            <div className="px-6 py-8">
-              <h2 className="text-lg font-medium text-gray-900 mb-4">Usage Information</h2>
-              <div className="text-sm text-gray-600">
-                <p className="mb-2">• Each AI generation costs 1 credit</p>
-                <p className="mb-2">• Credits are renewed monthly with your subscription</p>
-                <p className="mb-2">• Unused credits do not roll over to the next month</p>
-                <p>• You can upgrade or downgrade your plan at any time</p>
+        {/* Usage information */}
+        <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
+          <div className="p-6 border-b border-gray-200">
+            <h2 className="text-lg font-semibold text-gray-900 mb-1">Usage Information</h2>
+            <p className="text-sm text-gray-600">Important details about credits and billing.</p>
+          </div>
+          
+          <div className="p-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <h3 className="font-medium text-gray-900 mb-3">Credit System</h3>
+                <ul className="space-y-2 text-sm text-gray-600">
+                  <li className="flex items-start">
+                    <span className="text-blue-500 mr-2">•</span>
+                    Each AI generation costs 1 credit
+                  </li>
+                  <li className="flex items-start">
+                    <span className="text-blue-500 mr-2">•</span>
+                    Credits are renewed monthly with your subscription
+                  </li>
+                  <li className="flex items-start">
+                    <span className="text-blue-500 mr-2">•</span>
+                    Unused credits do not roll over to the next month
+                  </li>
+                </ul>
+              </div>
+              
+              <div>
+                <h3 className="font-medium text-gray-900 mb-3">Subscription Management</h3>
+                <ul className="space-y-2 text-sm text-gray-600">
+                  <li className="flex items-start">
+                    <span className="text-blue-500 mr-2">•</span>
+                    You can upgrade or downgrade your plan at any time
+                  </li>
+                  <li className="flex items-start">
+                    <span className="text-blue-500 mr-2">•</span>
+                    Changes take effect at the next billing cycle
+                  </li>
+                  <li className="flex items-start">
+                    <span className="text-blue-500 mr-2">•</span>
+                    Cancel anytime with no hidden fees
+                  </li>
+                </ul>
               </div>
             </div>
           </div>
         </div>
       </div>
-    </div>
+    </DashboardLayout>
   )
 }

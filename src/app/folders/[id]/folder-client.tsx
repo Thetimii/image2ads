@@ -2,9 +2,10 @@
 
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import type { User } from '@supabase/supabase-js'
 import type { Profile, Folder, Image, Job } from '@/lib/validations'
+import DashboardLayout from '@/components/DashboardLayout'
 
 interface FolderClientProps {
   user: User
@@ -20,10 +21,15 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
   const [uploadProgress, setUploadProgress] = useState(0)
   const [selectedImages, setSelectedImages] = useState<string[]>([])
   const [prompt, setPrompt] = useState('')
-  const [model, setModel] = useState('gemini')
+  const [outputAmount, setOutputAmount] = useState(1)
   const [showGenerateModal, setShowGenerateModal] = useState(false)
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [showDeleteFolderModal, setShowDeleteFolderModal] = useState(false)
+  const [imageToDelete, setImageToDelete] = useState<string | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
   const [enhancementStatus, setEnhancementStatus] = useState<Record<string, string>>({})
   const supabase = createClient()
+  const router = useRouter()
 
   // Subscribe to job status changes
   useEffect(() => {
@@ -53,13 +59,71 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
 
   const fetchJobs = async () => {
     try {
-      const response = await fetch('/api/jobs')
+      const response = await fetch(`/api/jobs?folder_id=${folder.id}`)
       if (response.ok) {
         const { jobs } = await response.json()
         setJobs(jobs)
       }
     } catch (error) {
       console.error('Error fetching jobs:', error)
+    }
+  }
+
+  const getImageUrl = async (image: Image): Promise<string> => {
+    try {
+      const { data } = await supabase.storage
+        .from('images')
+        .createSignedUrl(image.file_path, 3600)
+      
+      return data?.signedUrl || ''
+    } catch (error) {
+      console.error('Error getting image URL:', error)
+      return ''
+    }
+  }
+
+  const handleDeleteImage = async () => {
+    if (!imageToDelete) return
+
+    setIsDeleting(true)
+    try {
+      const response = await fetch(`/api/images/${imageToDelete}`, {
+        method: 'DELETE',
+      })
+
+      if (response.ok) {
+        setImages(images.filter(img => img.id !== imageToDelete))
+        setSelectedImages(selectedImages.filter(id => id !== imageToDelete))
+        setShowDeleteModal(false)
+        setImageToDelete(null)
+      } else {
+        alert('Failed to delete image')
+      }
+    } catch (error) {
+      console.error('Error deleting image:', error)
+      alert('Failed to delete image')
+    } finally {
+      setIsDeleting(false)
+    }
+  }
+
+  const handleDeleteFolder = async () => {
+    setIsDeleting(true)
+    try {
+      const response = await fetch(`/api/folders/${folder.id}`, {
+        method: 'DELETE',
+      })
+
+      if (response.ok) {
+        router.push('/dashboard')
+      } else {
+        alert('Failed to delete folder')
+      }
+    } catch (error) {
+      console.error('Error deleting folder:', error)
+      alert('Failed to delete folder')
+    } finally {
+      setIsDeleting(false)
     }
   }
 
@@ -105,13 +169,13 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
         })
 
         if (!uploadResponse.ok) {
-          throw new Error(`Failed to get upload URL for ${file.name}`)
+          throw new Error('Failed to get upload URL')
         }
 
-        const { uploadUrl, filePath, fileName } = await uploadResponse.json()
+        const { uploadUrl, image: imageRecord } = await uploadResponse.json()
 
-        // Upload file to Supabase storage
-        const uploadResult = await fetch(uploadUrl, {
+        // Upload file to Supabase Storage
+        const uploadFileResponse = await fetch(uploadUrl, {
           method: 'PUT',
           body: file,
           headers: {
@@ -119,60 +183,31 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
           },
         })
 
-        if (!uploadResult.ok) {
-          throw new Error(`Failed to upload ${file.name}`)
+        if (!uploadFileResponse.ok) {
+          throw new Error('Failed to upload file')
         }
 
-        // Create image record in database
-        const { data: imageData, error: imageError } = await supabase
-          .from('images')
-          .insert({
-            folder_id: folder.id,
-            user_id: user.id,
-            original_name: file.name,
-            file_path: filePath,
-            file_size: file.size,
-            mime_type: file.type,
-          })
-          .select()
-          .single()
-
-        if (imageError) {
-          throw new Error(`Failed to save image record for ${file.name}`)
-        }
-
-        uploadedImages.push(imageData)
+        uploadedImages.push(imageRecord)
       }
 
       setImages([...uploadedImages, ...images])
       setUploadProgress(100)
     } catch (error) {
-      console.error('Upload error:', error)
-      alert(`Failed to upload files: ${error}`)
+      console.error('Error uploading files:', error)
+      alert('Failed to upload files')
     } finally {
       setIsUploading(false)
       setUploadProgress(0)
     }
   }
 
-  const generateAd = async () => {
-    if (selectedImages.length === 0) {
-      alert('Please select at least one image to generate an ad.')
-      return
-    }
-
-    if (selectedImages.length > 10) {
-      alert('Maximum 10 images can be selected for generation.')
-      return
-    }
-
-    if (!prompt.trim()) {
-      alert('Please enter a prompt for the ad generation.')
-      return
-    }
-
-    if (profile.credits < 1) {
-      alert('Insufficient credits. Please upgrade your plan.')
+  const handleGenerateAd = async () => {
+    if (selectedImages.length === 0 || !prompt.trim()) {
+      if (selectedImages.length === 0) {
+        alert('Please select at least one image')
+      } else {
+        alert('Please enter a prompt')
+      }
       return
     }
 
@@ -185,131 +220,115 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
         body: JSON.stringify({
           image_ids: selectedImages,
           prompt: prompt.trim(),
-          model: model,
-          credits_used: 1,
+          model: 'openai', // Default to OpenAI
+          output_amount: outputAmount,
         }),
       })
 
       if (response.ok) {
-        alert('Generation started! Check your jobs for progress.')
+        const { job } = await response.json()
+        setJobs([job, ...jobs])
         setShowGenerateModal(false)
         setSelectedImages([])
         setPrompt('')
-        fetchJobs()
+        setOutputAmount(1)
+        alert('Ad generation started! You will see the results here when complete.')
       } else {
-        const error = await response.json()
-        alert(error.error || 'Failed to start generation')
+        const errorData = await response.json()
+        alert(`Failed to start generation: ${errorData.error}`)
       }
     } catch (error) {
-      console.error('Generation error:', error)
-      alert('Failed to start generation. Please try again.')
+      console.error('Error generating ad:', error)
+      alert('Failed to start generation')
     }
   }
 
-  const toggleImageSelection = (imageId: string) => {
-    setSelectedImages(prev => 
-      prev.includes(imageId) 
-        ? prev.filter(id => id !== imageId)
-        : [...prev, imageId]
-    )
-  }
-
-  const getImageUrl = async (image: Image) => {
-    const { data } = await supabase.storage
-      .from('uploads')
-      .createSignedUrl(image.file_path, 300)
-    return data?.signedUrl
-  }
-
-  const handleEnhanceImage = async (jobId: string, imageUrl: string) => {
+  const handleEnhance = async (jobId: string, imageUrl: string) => {
+    setEnhancementStatus(prev => ({ ...prev, [jobId]: 'enhancing' }))
+    
     try {
-      setEnhancementStatus(prev => ({ ...prev, [jobId]: 'enhancing' }))
-
       const response = await fetch('/api/enhance', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          imageUrl: imageUrl,
-          resultId: jobId,
+          imageUrl,
+          jobId,
         }),
       })
 
-      const result = await response.json()
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
 
-      if (response.ok) {
+      const result = await response.json()
+      
+      if (result.success && result.enhancedImageUrl) {
         setEnhancementStatus(prev => ({ ...prev, [jobId]: 'completed' }))
         
-        // Open enhanced image in new tab
+        // Open the enhanced image in a new tab
         window.open(result.enhancedImageUrl, '_blank')
         
-        // Show success message
-        alert('🎉 Image enhanced successfully! The high-quality version has opened in a new tab. The enhanced image has better resolution, sharpness, and details.')
+        alert('🎉 Image enhanced successfully! The high-quality version has opened in a new tab.')
       } else {
         throw new Error(result.error || 'Failed to enhance image')
       }
     } catch (error) {
       console.error('Enhancement error:', error)
       setEnhancementStatus(prev => ({ ...prev, [jobId]: 'failed' }))
-      
-      let errorMessage = 'Unknown error occurred'
-      if (error instanceof Error) {
-        errorMessage = error.message
-      }
-      
-      // Provide helpful error messages
-      if (errorMessage.includes('VYRO API key')) {
-        errorMessage = 'Image enhancement service is not configured. Please contact support.'
-      } else if (errorMessage.includes('Failed to fetch')) {
-        errorMessage = 'Network error. Please check your connection and try again.'
-      }
-      
-      alert(`❌ Enhancement failed: ${errorMessage}`)
+      alert(`❌ Enhancement failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
     }
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="bg-white shadow">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center py-6">
-            <div className="flex items-center space-x-4">
-              <Link href="/dashboard" className="text-blue-600 hover:text-blue-800">
-                ← Back to Dashboard
-              </Link>
-              <h1 className="text-2xl font-bold text-gray-900">{folder.name}</h1>
+    <DashboardLayout user={user} profile={profile}>
+      <div className="p-6 lg:p-8">
+        {/* Header */}
+        <div className="mb-8">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900 mb-2">{folder.name}</h1>
+              <p className="text-gray-600">
+                Upload images and generate professional ads with AI.
+              </p>
             </div>
-            <div className="flex items-center space-x-4">
-              <div className="text-sm text-gray-600">
-                Credits: <span className="font-semibold text-blue-600">{profile.credits}</span>
-              </div>
-              <Link
-                href="/billing"
-                className="bg-blue-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-blue-700"
+            <div className="flex items-center space-x-3">
+              <button
+                onClick={() => setShowDeleteFolderModal(true)}
+                className="flex items-center space-x-2 text-red-600 hover:text-red-700 hover:bg-red-50 px-3 py-2 rounded-lg transition-colors duration-200"
               >
-                Billing
-              </Link>
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+                <span className="text-sm font-medium">Delete Folder</span>
+              </button>
             </div>
           </div>
         </div>
-      </div>
 
-      {/* Main content */}
-      <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-        <div className="px-4 py-6 sm:px-0">
-          {/* Upload section */}
-          <div className="mb-8">
-            <div className="border-2 border-dashed border-gray-300 rounded-lg p-6">
-              <div className="text-center">
-                <svg className="mx-auto h-12 w-12 text-gray-400" stroke="currentColor" fill="none" viewBox="0 0 48 48">
-                  <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-                <div className="mt-4">
-                  <label htmlFor="file-upload" className="cursor-pointer">
-                    <span className="mt-2 block text-sm font-medium text-gray-900">
-                      {isUploading ? `Uploading... ${uploadProgress}%` : 'Upload images (multiple supported)'}
+        {/* Upload section - only show when images exist */}
+        {images.length > 0 && (
+          <div className="bg-white rounded-2xl border border-gray-200 mb-8 overflow-hidden">
+            <div className="p-6 border-b border-gray-200">
+              <h2 className="text-lg font-semibold text-gray-900">Upload More Images</h2>
+              <p className="text-sm text-gray-600 mt-1">Add additional images to your folder</p>
+            </div>
+            
+            <div className="p-6">
+              <div className="border-2 border-dashed border-gray-300 rounded-xl p-8 hover:border-blue-400 transition-colors duration-200">
+                <div className="text-center">
+                  <div className="w-16 h-16 bg-blue-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                    <svg className="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                    </svg>
+                  </div>
+                  <label htmlFor="file-upload" className="cursor-pointer block">
+                    <span className="text-lg font-medium text-gray-900 block mb-2">
+                      {isUploading ? `Uploading... ${uploadProgress.toFixed(0)}%` : 'Upload More Images'}
+                    </span>
+                    <span className="text-sm text-gray-600">
+                      Click to browse or drag and drop multiple files
                     </span>
                     <input
                       id="file-upload"
@@ -322,240 +341,498 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
                       disabled={isUploading}
                     />
                   </label>
-                  <p className="text-xs text-gray-500 mt-1">PNG, JPG, WEBP up to 10MB each</p>
+                  <p className="text-xs text-gray-500 mt-3">PNG, JPG, WEBP up to 10MB each</p>
+                  
+                  {isUploading && (
+                    <div className="mt-4">
+                      <div className="w-full bg-gray-200 rounded-full h-2">
+                        <div 
+                          className="bg-blue-600 h-2 rounded-full transition-all duration-300" 
+                          style={{ width: `${uploadProgress}%` }}
+                        ></div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
           </div>
+        )}
 
-          {/* Selection controls */}
-          {images.length > 0 && (
-            <div className="mb-6 bg-white rounded-lg shadow p-4">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center space-x-4">
-                  <h3 className="text-lg font-medium text-gray-900">
-                    Select Images for Ad Generation
-                  </h3>
-                  <span className="text-sm text-gray-500">
-                    {selectedImages.length} selected (max 10)
-                  </span>
+        {/* Images section */}
+        {images.length > 0 && (
+          <div className="bg-white rounded-2xl border border-gray-200 mb-8 overflow-hidden">
+            <div className="p-6 border-b border-gray-200">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-lg font-semibold text-gray-900">Your Images</h2>
+                  <p className="text-sm text-gray-600 mt-1">
+                    Select images to generate ads • {selectedImages.length} of {Math.min(images.length, 10)} selected
+                  </p>
                 </div>
-                <div className="flex space-x-2">
+                <div className="flex items-center space-x-3">
                   <button
                     onClick={() => setSelectedImages([])}
-                    className="text-sm text-gray-600 hover:text-gray-800"
+                    className="text-sm text-gray-600 hover:text-gray-900 transition-colors"
+                    disabled={selectedImages.length === 0}
                   >
                     Clear All
                   </button>
                   <button
-                    onClick={() => setSelectedImages(images.map((img: Image) => img.id))}
-                    className="text-sm text-blue-600 hover:text-blue-800"
-                    disabled={images.length > 10}
+                    onClick={() => setSelectedImages(images.slice(0, 10).map(img => img.id))}
+                    className="text-sm text-blue-600 hover:text-blue-700 transition-colors"
+                    disabled={images.length === 0}
                   >
                     Select All
                   </button>
-                  <button
-                    onClick={() => setShowGenerateModal(true)}
-                    disabled={selectedImages.length === 0}
-                    className="bg-blue-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
-                  >
-                    Generate Ad (1 credit)
-                  </button>
+                  {selectedImages.length > 0 && (
+                    <button
+                      onClick={() => setShowGenerateModal(true)}
+                      className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:from-blue-700 hover:to-purple-700 transition-all duration-200 shadow-lg shadow-blue-500/20"
+                    >
+                      Generate Ad ({selectedImages.length})
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
-          )}
-
-          {/* Images grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-            {images.map((image: Image) => (
-              <ImageCard 
-                key={image.id} 
-                image={image} 
-                isSelected={selectedImages.includes(image.id)}
-                onToggleSelect={() => toggleImageSelection(image.id)}
-                getImageUrl={getImageUrl}
-              />
-            ))}
+            
+            <div className="p-6">
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+                {images.map((image) => (
+                  <ImageCard
+                    key={image.id}
+                    image={image}
+                    isSelected={selectedImages.includes(image.id)}
+                    onToggleSelect={() => {
+                      if (selectedImages.includes(image.id)) {
+                        setSelectedImages(selectedImages.filter(id => id !== image.id))
+                      } else if (selectedImages.length < 10) {
+                        setSelectedImages([...selectedImages, image.id])
+                      }
+                    }}
+                    onDelete={() => {
+                      setImageToDelete(image.id)
+                      setShowDeleteModal(true)
+                    }}
+                    getImageUrl={getImageUrl}
+                  />
+                ))}
+              </div>
+            </div>
           </div>
+        )}
 
-          {/* Jobs section */}
-          {jobs.length > 0 && (
-            <div>
-              <h2 className="text-lg font-medium text-gray-900 mb-4">Recent Jobs</h2>
-              <div className="bg-white shadow rounded-lg">
-                <div className="px-4 py-5 sm:p-6">
-                  <div className="mb-4 p-3 bg-purple-50 rounded-lg">
-                    <div className="flex items-center">
-                      <div className="flex-shrink-0">
-                        <svg className="h-5 w-5 text-purple-600" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z" clipRule="evenodd" />
-                        </svg>
-                      </div>
-                      <div className="ml-3">
-                        <p className="text-sm text-purple-700">
-                          <strong>✨ New:</strong> Click &quot;Enhance&quot; on completed jobs to upscale and improve image quality using AI!
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="space-y-4">
-                    {jobs.slice(0, 10).map((job) => (
-                      <JobCard 
-                        key={job.id} 
-                        job={job} 
-                        onEnhance={handleEnhanceImage}
-                        enhancementStatus={enhancementStatus}
-                      />
-                    ))}
-                  </div>
-                </div>
+        {/* Generated Ads section */}
+        {jobs.length > 0 && (
+          <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
+            <div className="p-6 border-b border-gray-200">
+              <h2 className="text-lg font-semibold text-gray-900">Generated Ads</h2>
+              <p className="text-sm text-gray-600 mt-1">View and manage your AI-generated advertisements</p>
+            </div>
+            
+            <div className="p-6 space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {jobs
+                  .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+                  .map((job) => (
+                    <JobCard 
+                      key={job.id} 
+                      job={job} 
+                      onEnhance={handleEnhance}
+                      enhancementStatus={enhancementStatus}
+                    />
+                  ))}
               </div>
             </div>
-          )}
+          </div>
+        )}
 
-          {images.length === 0 && (
-            <div className="text-center py-12">
-              <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-              </svg>
-              <h3 className="mt-2 text-sm font-medium text-gray-900">No images</h3>
-              <p className="mt-1 text-sm text-gray-500">
-                Upload your first image to get started.
+        {/* Empty state */}
+        {images.length === 0 && (
+          <div className="bg-white rounded-2xl border border-gray-200 p-12">
+            <div className="text-center">
+              <div className="w-16 h-16 bg-gray-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+              </div>
+              <h3 className="text-lg font-medium text-gray-900 mb-2">No images yet</h3>
+              <p className="text-gray-600 mb-6 max-w-sm mx-auto">
+                Upload your first images to start generating professional ads with AI.
               </p>
+              <label
+                htmlFor="file-upload-empty"
+                className="inline-flex items-center space-x-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white px-6 py-3 rounded-lg font-medium hover:from-blue-700 hover:to-purple-700 transition-all duration-200 cursor-pointer"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                </svg>
+                <span>Upload Images</span>
+                <input
+                  id="file-upload-empty"
+                  name="file-upload-empty"
+                  type="file"
+                  className="sr-only"
+                  accept="image/*"
+                  multiple
+                  onChange={handleFileUpload}
+                  disabled={isUploading}
+                />
+              </label>
             </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
       {/* Generate Modal */}
       {showGenerateModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4">
-            <h3 className="text-lg font-medium text-gray-900 mb-4">
-              Generate Advertisement
-            </h3>
-            <div className="mb-4">
-              <p className="text-sm text-gray-600 mb-2">
-                Selected images: {selectedImages.length}
-              </p>
-              
-              <label htmlFor="model" className="block text-sm font-medium text-gray-700 mb-2">
-                AI Model
-              </label>
-              <select
-                id="model"
-                value={model}
-                onChange={(e) => setModel(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent mb-4"
-              >
-                <option value="gemini">Gemini (Fast, Multiple variations)</option>
-                <option value="seedream">SeedDream v4 (Ultra High Quality 4K, Fashion focused)</option>
-                <optgroup label="OpenAI GPT Image 1 - Low Quality (0.5 credits)">
-                  <option value="openai-low-square">GPT Image 1 Low - Square (1024x1024)</option>
-                  <option value="openai-low-landscape">GPT Image 1 Low - Landscape (1536x1024)</option>
-                  <option value="openai-low-portrait">GPT Image 1 Low - Portrait (1024x1536)</option>
-                </optgroup>
-                <optgroup label="OpenAI GPT Image 1 - Medium Quality (1 credit)">
-                  <option value="openai-medium-square">GPT Image 1 Medium - Square (1024x1024)</option>
-                  <option value="openai-medium-landscape">GPT Image 1 Medium - Landscape (1536x1024)</option>
-                  <option value="openai-medium-portrait">GPT Image 1 Medium - Portrait (1024x1536)</option>
-                </optgroup>
-                <optgroup label="OpenAI GPT Image 1 - High Quality (7 credits)">
-                  <option value="openai-high-square">GPT Image 1 High - Square (1024x1024)</option>
-                  <option value="openai-high-landscape">GPT Image 1 High - Landscape (1536x1024)</option>
-                  <option value="openai-high-portrait">GPT Image 1 High - Portrait (1024x1536)</option>
-                </optgroup>
-              </select>
-              
-              <label htmlFor="prompt" className="block text-sm font-medium text-gray-700 mb-2">
-                Prompt
-              </label>
-              <textarea
-                id="prompt"
-                value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
-                placeholder={
-                  model === 'seedream' 
-                    ? "Describe clothing, accessories, or styling changes (e.g., 'Dress the model in elegant evening wear')"
-                    : "Describe how you want to transform these images into an advertisement..."
-                }
-                className="w-full h-32 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
-              <p className="text-xs text-gray-500 mt-1">
-                {model === 'seedream' 
-                  ? "SeedDream v4 specializes in fashion and clothing editing with ultra high-quality 4K output"
-                  : model?.startsWith('openai-')
-                  ? (() => {
-                      const parts = model.split('-');
-                      const quality = parts[1] || 'low';
-                      const aspect = parts[2] || 'square';
-                      const credits = quality === 'low' ? '0.5' : quality === 'medium' ? '1' : '7';
-                      const resolution = quality === 'low' || quality === 'medium' || quality === 'high' 
-                        ? (aspect === 'square' ? '1024x1024' : aspect === 'landscape' ? '1536x1024' : '1024x1536')
-                        : '1024x1024';
-                      return `OpenAI GPT Image 1 ${quality.charAt(0).toUpperCase() + quality.slice(1)} Quality ${aspect.charAt(0).toUpperCase() + aspect.slice(1)} (${resolution}) - ${credits} credits`;
-                    })()
-                  : "Gemini provides fast general-purpose image editing with multiple variations"
-                }
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+            {/* Header */}
+            <div className="px-6 py-4 border-b border-gray-200">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-xl font-semibold text-gray-900">Generate Ad</h3>
+                  <p className="text-sm text-gray-600 mt-1">
+                    Create professional ads from {selectedImages.length} selected image{selectedImages.length !== 1 ? 's' : ''}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setShowGenerateModal(false)}
+                  className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors duration-200"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            {/* Content */}
+            <div className="flex-1 overflow-y-auto">
+              <div className="p-6 space-y-6">
+                {/* Selected Images Preview */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-3">
+                    Selected Images ({selectedImages.length})
+                  </label>
+                  <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3">
+                    {selectedImages.map((imageId) => {
+                      const image = images.find(img => img.id === imageId)
+                      if (!image) return null
+                      
+                      return (
+                        <GenerateModalImageCard
+                          key={imageId}
+                          image={image}
+                          onRemove={() => {
+                            setSelectedImages(selectedImages.filter(id => id !== imageId))
+                          }}
+                          getImageUrl={getImageUrl}
+                        />
+                      )
+                    })}
+                  </div>
+                  {selectedImages.length === 0 && (
+                    <div className="text-center py-8 text-gray-500">
+                      <svg className="w-12 h-12 mx-auto mb-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      </svg>
+                      <p>No images selected</p>
+                      <p className="text-xs mt-1">Close this modal and select images to continue</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Settings Preview */}
+                <div className="bg-gray-50 rounded-xl p-4">
+                  <h4 className="text-sm font-medium text-gray-700 mb-3">Generation Settings</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                    <div className="flex items-center justify-between">
+                      <span className="text-gray-600">AI Model:</span>
+                      <span className="font-medium text-gray-900">OpenAI</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-gray-600">Images Count:</span>
+                      <span className="font-medium text-gray-900">{selectedImages.length}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-gray-600">Output Amount:</span>
+                      <span className="font-medium text-gray-900">{outputAmount} ad{outputAmount !== 1 ? 's' : ''}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-gray-600">Quality:</span>
+                      <span className="font-medium text-gray-900">High Resolution</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Prompt Input */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Prompt
+                  </label>
+                  <textarea
+                    value={prompt}
+                    onChange={(e) => setPrompt(e.target.value)}
+                    placeholder="Describe the ad you want to generate... (e.g., 'Create a modern social media ad for a luxury product with elegant typography and premium feel')"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 resize-none"
+                    rows={4}
+                  />
+                  <p className="text-xs text-gray-500 mt-2">
+                    Be specific about the style, colors, text, and target audience for better results.
+                  </p>
+                </div>
+                
+                {/* Output Amount Selection */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-3">
+                    Number of Ads to Generate
+                  </label>
+                  <div className="grid grid-cols-4 gap-3">
+                    {[1, 2, 3, 4].map((amount) => (
+                      <div
+                        key={amount}
+                        className={`p-4 text-center rounded-xl border-2 cursor-pointer transition-all duration-200 ${
+                          outputAmount === amount
+                            ? 'border-blue-500 bg-blue-50'
+                            : 'border-gray-200 hover:border-gray-300'
+                        }`}
+                        onClick={() => setOutputAmount(amount)}
+                      >
+                        <div className="flex items-center justify-center space-x-2 mb-2">
+                          <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
+                            outputAmount === amount
+                              ? 'border-blue-500 bg-blue-500'
+                              : 'border-gray-300'
+                          }`}>
+                            {outputAmount === amount && (
+                              <div className="w-2 h-2 bg-white rounded-full"></div>
+                            )}
+                          </div>
+                        </div>
+                        <h5 className={`font-medium ${outputAmount === amount ? 'text-blue-700' : 'text-gray-900'}`}>
+                          {amount}
+                        </h5>
+                        <p className={`text-xs ${outputAmount === amount ? 'text-blue-600' : 'text-gray-600'}`}>
+                          {amount === 1 ? 'Single Ad' : `${amount} Variations`}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="text-xs text-gray-500 mt-3">
+                    Generate multiple variations of your ad with different styles and approaches.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 py-4 border-t border-gray-200 bg-gray-50">
+              <div className="flex items-center justify-between">
+                <div className="text-sm text-gray-600">
+                  {selectedImages.length > 0 ? (
+                    <span>Ready to generate ads from {selectedImages.length} image{selectedImages.length !== 1 ? 's' : ''}</span>
+                  ) : (
+                    <span className="text-red-600">Please select at least one image</span>
+                  )}
+                </div>
+                <div className="flex space-x-3">
+                  <button
+                    onClick={() => setShowGenerateModal(false)}
+                    className="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors duration-200"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleGenerateAd}
+                    disabled={!prompt.trim() || selectedImages.length === 0}
+                    className="px-6 py-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg hover:from-blue-700 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-lg shadow-blue-500/20"
+                  >
+                    Generate Ad
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Image Modal */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl p-6 max-w-md w-full">
+            <div className="text-center mb-6">
+              <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <svg className="w-8 h-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">Delete Image</h3>
+              <p className="text-gray-600 text-sm">
+                Are you sure you want to delete this image? This action cannot be undone.
               </p>
             </div>
-            <div className="flex justify-end space-x-3">
+            
+            <div className="flex space-x-3">
               <button
-                onClick={() => setShowGenerateModal(false)}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
+                onClick={() => {
+                  setShowDeleteModal(false)
+                  setImageToDelete(null)
+                }}
+                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors duration-200"
+                disabled={isDeleting}
               >
                 Cancel
               </button>
               <button
-                onClick={generateAd}
-                disabled={!prompt.trim()}
-                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed"
+                onClick={handleDeleteImage}
+                disabled={isDeleting}
+                className="flex-1 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
               >
-                Generate (1 credit)
+                {isDeleting ? (
+                  <div className="flex items-center justify-center space-x-2">
+                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                    <span>Deleting...</span>
+                  </div>
+                ) : (
+                  'Delete Image'
+                )}
               </button>
             </div>
           </div>
         </div>
       )}
-    </div>
+
+      {/* Delete Folder Modal */}
+      {showDeleteFolderModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl p-6 max-w-md w-full">
+            <div className="text-center mb-6">
+              <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <svg className="w-8 h-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">Delete Folder</h3>
+              <p className="text-gray-600 text-sm">
+                Are you sure you want to delete "{folder.name}"? This will permanently remove the folder and all its images. This action cannot be undone.
+              </p>
+            </div>
+            
+            <div className="flex space-x-3">
+              <button
+                onClick={() => setShowDeleteFolderModal(false)}
+                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors duration-200"
+                disabled={isDeleting}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteFolder}
+                disabled={isDeleting}
+                className="flex-1 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+              >
+                {isDeleting ? (
+                  <div className="flex items-center justify-center space-x-2">
+                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                    <span>Deleting...</span>
+                  </div>
+                ) : (
+                  'Delete Folder'
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </DashboardLayout>
   )
 }
 
+// Image Card Component
 function ImageCard({ 
   image, 
-  isSelected,
+  isSelected, 
   onToggleSelect, 
+  onDelete, 
   getImageUrl 
 }: { 
   image: Image
   isSelected: boolean
   onToggleSelect: () => void
-  getImageUrl: (image: Image) => Promise<string | undefined>
+  onDelete: () => void
+  getImageUrl: (image: Image) => Promise<string>
 }) {
-  const [imageUrl, setImageUrl] = useState<string>()
+  const [imageUrl, setImageUrl] = useState<string>('')
+  const [isLoading, setIsLoading] = useState(true)
+  const [hasError, setHasError] = useState(false)
 
   useEffect(() => {
-    getImageUrl(image).then(setImageUrl)
+    setIsLoading(true)
+    setHasError(false)
+    getImageUrl(image)
+      .then((url) => {
+        setImageUrl(url)
+        setIsLoading(false)
+      })
+      .catch((error) => {
+        console.error('Failed to load image URL:', error)
+        setHasError(true)
+        setIsLoading(false)
+      })
   }, [image, getImageUrl])
 
   return (
-    <div 
-      className={`bg-white rounded-lg shadow border-2 cursor-pointer transition-all ${
-        isSelected ? 'border-blue-500 ring-2 ring-blue-200' : 'border-gray-200 hover:border-gray-300'
+    <div
+      className={`relative rounded-xl border-2 transition-all duration-200 cursor-pointer group ${
+        isSelected 
+          ? 'border-blue-500 ring-2 ring-blue-500/20 shadow-lg shadow-blue-100' 
+          : 'border-gray-200 hover:border-gray-300'
       }`}
       onClick={onToggleSelect}
     >
-      <div className="relative aspect-w-16 aspect-h-9">
-        {imageUrl && (
+      <div className="relative aspect-square bg-gray-100 rounded-t-xl overflow-hidden">
+        {isLoading && (
+          <div className="w-full h-full flex items-center justify-center">
+            <div className="w-8 h-8 border-2 border-gray-300 border-t-blue-600 rounded-full animate-spin"></div>
+          </div>
+        )}
+        
+        {!isLoading && hasError && (
+          <div className="w-full h-full flex items-center justify-center bg-gray-50">
+            <div className="text-center">
+              <svg className="w-8 h-8 text-gray-400 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+              <p className="text-xs text-gray-500">Failed to load</p>
+            </div>
+          </div>
+        )}
+        
+        {!isLoading && !hasError && imageUrl && (
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={imageUrl}
             alt={image.original_name}
-            className="w-full h-48 object-cover rounded-t-lg"
+            className="w-full h-full object-cover"
+            onError={() => setHasError(true)}
           />
         )}
-        <div className="absolute top-2 right-2">
+        
+        <div className="absolute top-2 right-2 flex space-x-1">
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              onDelete()
+            }}
+            className="p-1 bg-red-600 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-200 hover:bg-red-700"
+          >
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
+          </button>
           <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${
             isSelected 
               ? 'bg-blue-600 border-blue-600' 
@@ -569,7 +846,7 @@ function ImageCard({
           </div>
         </div>
       </div>
-      <div className="p-4">
+      <div className="p-3">
         <h3 className="text-sm font-medium text-gray-900 truncate">
           {image.original_name}
         </h3>
@@ -581,6 +858,7 @@ function ImageCard({
   )
 }
 
+// Job Card Component
 function JobCard({ job, onEnhance, enhancementStatus }: { 
   job: Job & { result_signed_url?: string }, 
   onEnhance?: (jobId: string, imageUrl: string) => void,
@@ -613,10 +891,30 @@ function JobCard({ job, onEnhance, enhancementStatus }: {
     }
   }
 
+  const handleDownload = async () => {
+    if (!job.result_signed_url) return
+    
+    try {
+      const response = await fetch(job.result_signed_url)
+      const blob = await response.blob()
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `generated-ad-${job.id.slice(0, 8)}.jpg`
+      document.body.appendChild(a)
+      a.click()
+      window.URL.revokeObjectURL(url)
+      document.body.removeChild(a)
+    } catch (error) {
+      console.error('Download failed:', error)
+      alert('Download failed. Please try again.')
+    }
+  }
+
   const getEnhanceButtonText = () => {
     if (isEnhancing || currentEnhancementStatus === 'enhancing') return 'Enhancing...'
     if (currentEnhancementStatus === 'completed') return '✅ Enhanced'
-    if (currentEnhancementStatus === 'failed') return '❌ Retry Enhance'
+    if (currentEnhancementStatus === 'failed') return '❌ Retry'
     return '✨ Enhance'
   }
 
@@ -625,55 +923,187 @@ function JobCard({ job, onEnhance, enhancementStatus }: {
   }
 
   return (
-    <div className="flex items-center justify-between p-4 border rounded-lg">
-      <div className="flex-1">
-        <div className="flex items-center space-x-3">
-          <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(job.status)}`}>
-            {job.status}
-          </span>
-          <span className="text-sm text-gray-900">
-            Job #{job.id.slice(0, 8)}
-          </span>
-          <span className="text-xs text-gray-500">
-            {new Date(job.created_at).toLocaleString()}
-          </span>
-        </div>
-        {job.error_message && (
-          <p className="text-sm text-red-600 mt-1">{job.error_message}</p>
+    <div className="relative rounded-xl border-2 border-gray-200 hover:border-gray-300 transition-all duration-200 cursor-pointer group bg-white">
+      <div className="relative aspect-square bg-gray-100 rounded-t-xl overflow-hidden">
+        {job.status === 'completed' && job.result_signed_url ? (
+          <>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={job.result_signed_url}
+              alt={`Generated ad ${job.id.slice(0, 8)}`}
+              className="w-full h-full object-cover"
+              onClick={() => window.open(job.result_signed_url, '_blank')}
+            />
+            {/* Action buttons overlay */}
+            <div className="absolute top-2 right-2 flex space-x-1">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  handleDownload()
+                }}
+                className="p-1.5 bg-green-600 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-200 hover:bg-green-700"
+                title="Download"
+              >
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-4-4m4 4l4-4m-6-10h8a2 2 0 012 2v8a2 2 0 01-2 2H6a2 2 0 01-2-2V8a2 2 0 012-2h2" />
+                </svg>
+              </button>
+              {onEnhance && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    handleEnhance()
+                  }}
+                  disabled={isEnhanceDisabled()}
+                  className={`p-1.5 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-200 ${
+                    currentEnhancementStatus === 'completed' 
+                      ? 'bg-green-600 hover:bg-green-700' 
+                      : currentEnhancementStatus === 'failed'
+                      ? 'bg-red-600 hover:bg-red-700'
+                      : 'bg-purple-600 hover:bg-purple-700'
+                  } disabled:opacity-50`}
+                  title="Enhance quality"
+                >
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
+                  </svg>
+                </button>
+              )}
+            </div>
+            {/* Status badge */}
+            <div className="absolute top-2 left-2">
+              <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(job.status)}`}>
+                {job.status}
+              </span>
+            </div>
+          </>
+        ) : job.status === 'processing' ? (
+          <div className="w-full h-full flex items-center justify-center bg-gray-50">
+            <div className="text-center">
+              <div className="w-8 h-8 border-2 border-yellow-300 border-t-yellow-600 rounded-full animate-spin mx-auto mb-2"></div>
+              <p className="text-xs text-gray-500">Generating...</p>
+            </div>
+          </div>
+        ) : job.status === 'failed' ? (
+          <div className="w-full h-full flex items-center justify-center bg-gray-50">
+            <div className="text-center">
+              <svg className="w-8 h-8 text-red-400 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <p className="text-xs text-red-500">Failed</p>
+            </div>
+          </div>
+        ) : (
+          <div className="w-full h-full flex items-center justify-center bg-gray-50">
+            <div className="text-center">
+              <svg className="w-8 h-8 text-gray-400 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <p className="text-xs text-gray-500">Queued</p>
+            </div>
+          </div>
         )}
       </div>
-      {job.status === 'completed' && job.result_signed_url && (
-        <div className="flex items-center space-x-3">
-          <a
-            href={job.result_signed_url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-blue-600 hover:text-blue-800 text-sm font-medium"
-          >
-            View Result
-          </a>
-          {onEnhance && (
-            <button
-              onClick={handleEnhance}
-              disabled={isEnhanceDisabled()}
-              className={`px-3 py-1 text-xs font-medium text-white rounded transition-colors ${
-                currentEnhancementStatus === 'completed' 
-                  ? 'bg-green-600 hover:bg-green-700' 
-                  : currentEnhancementStatus === 'failed'
-                  ? 'bg-red-600 hover:bg-red-700'
-                  : 'bg-purple-600 hover:bg-purple-700'
-              } disabled:bg-gray-400 disabled:cursor-not-allowed`}
-              title={
-                currentEnhancementStatus === 'completed' 
-                  ? 'Image was enhanced successfully' 
-                  : 'Enhance image quality and resolution using AI'
-              }
-            >
-              {getEnhanceButtonText()}
-            </button>
-          )}
+      
+      <div className="p-3">
+        <h3 className="text-sm font-medium text-gray-900 truncate">
+          Ad #{job.id.slice(0, 8)}
+        </h3>
+        <p className="text-xs text-gray-500 mt-1">
+          {new Date(job.created_at).toLocaleDateString()}
+        </p>
+        {job.error_message && (
+          <p className="text-xs text-red-500 mt-1 truncate" title={job.error_message}>
+            {job.error_message}
+          </p>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// Generate Modal Image Card Component
+function GenerateModalImageCard({ 
+  image, 
+  onRemove, 
+  getImageUrl 
+}: { 
+  image: Image
+  onRemove: () => void
+  getImageUrl: (image: Image) => Promise<string>
+}) {
+  const [imageUrl, setImageUrl] = useState<string>('')
+  const [isLoading, setIsLoading] = useState(true)
+  const [hasError, setHasError] = useState(false)
+
+  useEffect(() => {
+    setIsLoading(true)
+    setHasError(false)
+    getImageUrl(image)
+      .then((url) => {
+        setImageUrl(url)
+        setIsLoading(false)
+      })
+      .catch((error) => {
+        console.error('Failed to load image URL:', error)
+        setHasError(true)
+        setIsLoading(false)
+      })
+  }, [image, getImageUrl])
+
+  return (
+    <div className="relative rounded-lg border border-gray-200 overflow-hidden group bg-white">
+      <div className="relative aspect-square bg-gray-100">
+        {isLoading && (
+          <div className="w-full h-full flex items-center justify-center">
+            <div className="w-4 h-4 border-2 border-gray-300 border-t-blue-600 rounded-full animate-spin"></div>
+          </div>
+        )}
+        
+        {!isLoading && hasError && (
+          <div className="w-full h-full flex items-center justify-center bg-gray-50">
+            <svg className="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+          </div>
+        )}
+        
+        {!isLoading && !hasError && imageUrl && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={imageUrl}
+            alt={image.original_name}
+            className="w-full h-full object-cover"
+            onError={() => setHasError(true)}
+          />
+        )}
+        
+        {/* Remove button */}
+        <button
+          onClick={onRemove}
+          className="absolute -top-2 -right-2 w-6 h-6 bg-red-600 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-200 hover:bg-red-700 flex items-center justify-center shadow-lg"
+          title="Remove image"
+        >
+          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+        
+        {/* Selected indicator */}
+        <div className="absolute top-1 left-1">
+          <div className="w-5 h-5 bg-blue-600 rounded-full flex items-center justify-center">
+            <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+            </svg>
+          </div>
         </div>
-      )}
+      </div>
+      
+      <div className="p-2">
+        <p className="text-xs text-gray-600 truncate" title={image.original_name}>
+          {image.original_name}
+        </p>
+      </div>
     </div>
   )
 }
