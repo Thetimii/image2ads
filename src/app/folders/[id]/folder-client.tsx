@@ -450,7 +450,7 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent mb-4"
               >
                 <option value="gemini">Gemini (Fast, Multiple variations)</option>
-                <option value="seedream">SeedDream v4 (High Quality 1024x1024, Fashion focused)</option>
+                <option value="seedream">SeedDream v4 (Ultra High Quality 4K, Fashion focused)</option>
               </select>
               
               <label htmlFor="prompt" className="block text-sm font-medium text-gray-700 mb-2">
@@ -469,7 +469,7 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
               />
               <p className="text-xs text-gray-500 mt-1">
                 {model === 'seedream' 
-                  ? "SeedDream v4 specializes in fashion and clothing editing with high-quality 1024x1024 output"
+                  ? "SeedDream v4 specializes in fashion and clothing editing with ultra high-quality 4K output"
                   : "Gemini provides fast general-purpose image editing with multiple variations"
                 }
               </p>

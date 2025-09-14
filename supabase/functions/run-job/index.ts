@@ -310,8 +310,8 @@ serve(async (request) => {
         prompt: job.prompt,
         image_urls: imageUrls,
         image_size: {
-          width: 1024,
-          height: 1024,
+          width: 4096,
+          height: 4096,
         },
         num_images: 1,
         max_images: 2, // Generate 2 variations for better selection
