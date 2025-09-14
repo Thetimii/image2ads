@@ -131,7 +131,7 @@ export default function SettingsClient({ user, profile }: SettingsClientProps) {
           </p>
         </div>
 
-        <div className="max-w-2xl">
+        <div>
           {/* Profile Information */}
           <div className="bg-white rounded-2xl border border-gray-200 mb-6 overflow-hidden">
             <div className="p-6 border-b border-gray-200">
