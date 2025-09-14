@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import type { User } from '@supabase/supabase-js'
@@ -31,6 +31,18 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
   const supabase = createClient()
   const router = useRouter()
 
+  const fetchJobs = useCallback(async () => {
+    try {
+      const response = await fetch(`/api/jobs?folder_id=${folder.id}`)
+      if (response.ok) {
+        const { jobs } = await response.json()
+        setJobs(jobs)
+      }
+    } catch (error) {
+      console.error('Error fetching jobs:', error)
+    }
+  }, [folder.id])
+
   // Subscribe to job status changes
   useEffect(() => {
     const channel = supabase
@@ -55,19 +67,7 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [user.id, supabase])
-
-  const fetchJobs = async () => {
-    try {
-      const response = await fetch(`/api/jobs?folder_id=${folder.id}`)
-      if (response.ok) {
-        const { jobs } = await response.json()
-        setJobs(jobs)
-      }
-    } catch (error) {
-      console.error('Error fetching jobs:', error)
-    }
-  }
+  }, [user.id, supabase, fetchJobs])
 
   const getImageUrl = async (image: Image): Promise<string> => {
     try {
@@ -717,7 +717,7 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
               </div>
               <h3 className="text-lg font-semibold text-gray-900 mb-2">Delete Folder</h3>
               <p className="text-gray-600 text-sm">
-                Are you sure you want to delete "{folder.name}"? This will permanently remove the folder and all its images. This action cannot be undone.
+                Are you sure you want to delete &quot;{folder.name}&quot;? This will permanently remove the folder and all its images. This action cannot be undone.
               </p>
             </div>
             
@@ -909,13 +909,6 @@ function JobCard({ job, onEnhance, enhancementStatus }: {
       console.error('Download failed:', error)
       alert('Download failed. Please try again.')
     }
-  }
-
-  const getEnhanceButtonText = () => {
-    if (isEnhancing || currentEnhancementStatus === 'enhancing') return 'Enhancing...'
-    if (currentEnhancementStatus === 'completed') return '✅ Enhanced'
-    if (currentEnhancementStatus === 'failed') return '❌ Retry'
-    return '✨ Enhance'
   }
 
   const isEnhanceDisabled = () => {
