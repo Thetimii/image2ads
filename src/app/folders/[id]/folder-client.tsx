@@ -957,7 +957,7 @@ function ImageCard({
           {image.original_name}
         </h3>
         <p className="text-xs text-gray-500 mt-1">
-          {new Date(image.created_at).toLocaleDateString()}
+          {new Date(image.created_at).toLocaleDateString('en-US')}
         </p>
       </div>
     </div>
@@ -1208,7 +1208,7 @@ function JobCard({
               {displayName}
             </h3>
             <p className="text-xs text-gray-500 mt-1">
-              {new Date(job.created_at).toLocaleDateString()}
+              {new Date(job.created_at).toLocaleDateString('en-US')}
             </p>
             {job.error_message && (
               <p className="text-xs text-red-500 mt-1 truncate" title={job.error_message}>

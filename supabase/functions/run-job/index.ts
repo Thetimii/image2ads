@@ -93,7 +93,7 @@ async function pollForResult(
           }
 
           const imageBuffer = await imageResponse.arrayBuffer();
-          const fileName = `${userId}/${jobId}-result-${i + 1}.png`;
+          const fileName = `${userId}/${jobId}-result.png`;
 
           // Upload result to Supabase storage
           const { error: uploadError } = await supabase.storage
@@ -109,6 +109,7 @@ async function pollForResult(
           }
 
           storedImagePaths.push(fileName);
+          break; // Only save the first result
         }
 
         // Update job with all result URLs (comma-separated for now)
@@ -327,7 +328,7 @@ async function handleOpenAIGeneration(
     
     // Convert base64 to buffer
     const imageBuffer = Uint8Array.from(atob(b64Data), c => c.charCodeAt(0));
-    const fileName = `generated_${jobId}_${Date.now()}.png`;
+    const fileName = `${job.user_id}/${jobId}-result.png`;
 
     // Upload to Supabase storage
     const { data: uploadData, error: uploadError } = await supabase.storage

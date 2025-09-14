@@ -51,8 +51,12 @@ export async function PATCH(
 
     if (updateError) {
       console.error("Update error:", updateError);
+      console.error(
+        "Update error details:",
+        JSON.stringify(updateError, null, 2)
+      );
       return NextResponse.json(
-        { error: "Failed to update job name" },
+        { error: `Failed to update job name: ${updateError.message}` },
         { status: 500 }
       );
     }
