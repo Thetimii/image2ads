@@ -178,7 +178,7 @@ async function handleOpenAIGeneration(
     // Determine size and credit multiplier based on quality and aspect ratio
     let size: string;
     let creditMultiplier: number;
-    
+
     if (quality === "low") {
       size =
         aspect === "square"
@@ -204,7 +204,10 @@ async function handleOpenAIGeneration(
           ? "1536x1024"
           : "1024x1536";
       // High quality: 7 credits for all sizes
-      creditMultiplier = 7;    console.log(
+      creditMultiplier = 7;
+    }
+
+    console.log(
       `OpenAI GPT Image 1 settings: quality=${quality}, aspect=${aspect}, size=${size}, creditMultiplier=${creditMultiplier}`
     );
 
@@ -325,10 +328,10 @@ async function handleOpenAIGeneration(
     }
 
     const b64Data = result.data[0].b64_json;
-    
+
     // Convert base64 to buffer
-    const imageBuffer = Uint8Array.from(atob(b64Data), c => c.charCodeAt(0));
-    const fileName = `${job.user_id}/${jobId}-result.png`;
+    const imageBuffer = Uint8Array.from(atob(b64Data), (c) => c.charCodeAt(0));
+    const fileName = `generated_${jobId}_${Date.now()}.png`;
 
     // Upload to Supabase storage
     const { data: uploadData, error: uploadError } = await supabase.storage

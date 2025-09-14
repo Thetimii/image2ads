@@ -44,7 +44,7 @@ export async function POST(
       return NextResponse.json({ error: "Image not found" }, { status: 404 });
     }
 
-    const bucket = "images"; // your bucket name
+    const bucket = "uploads"; // your bucket name
     const oldKey = img.file_path; // e.g. userId/folderId/file.png
     const lastSlash = oldKey.lastIndexOf("/");
     const folderPrefix = lastSlash >= 0 ? oldKey.slice(0, lastSlash + 1) : "";
