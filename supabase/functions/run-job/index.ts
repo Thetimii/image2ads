@@ -155,6 +155,265 @@ async function pollForResult(
     .eq("id", jobId);
 }
 
+// Handle OpenAI GPT Image 1 generation
+async function handleOpenAIGeneration(
+  job: any,
+  jobId: string,
+  openaiApiKey: string,
+  model: string
+) {
+  console.log(
+    `Starting OpenAI GPT Image 1 generation for job ${jobId} with model ${model}`
+  );
+
+  try {
+    // Parse model to get quality and aspect ratio
+    // Format: openai-{quality}-{aspect}
+    // Example: openai-low-square, openai-medium-landscape, openai-high-portrait
+    const parts = model.split("-");
+    const quality = parts[1] || "low"; // low, medium, high
+    const aspect = parts[2] || "square"; // square, landscape, portrait
+
+    // Determine size and credit multiplier based on quality and aspect ratio
+    let size: string;
+    let creditMultiplier: number;
+
+    if (quality === "low") {
+      size =
+        aspect === "square"
+          ? "1024x1024"
+          : aspect === "landscape"
+          ? "1536x1024"
+          : "1024x1536";
+      creditMultiplier = 0.5;
+    } else if (quality === "medium") {
+      size =
+        aspect === "square"
+          ? "1024x1024"
+          : aspect === "landscape"
+          ? "1536x1024"
+          : "1024x1536";
+      creditMultiplier = 1;
+    } else {
+      // high
+      size =
+        aspect === "square"
+          ? "1024x1024"
+          : aspect === "landscape"
+          ? "1536x1024"
+          : "1024x1536";
+      creditMultiplier = 7;
+    }
+
+    console.log(
+      `OpenAI GPT Image 1 settings: quality=${quality}, aspect=${aspect}, size=${size}, creditMultiplier=${creditMultiplier}`
+    );
+
+    // Check and deduct credits before processing
+    const { data: profile, error: profileError } = await supabase
+      .from("profiles")
+      .select("credits")
+      .eq("id", job.user_id)
+      .single();
+
+    if (profileError || !profile) {
+      console.error("Failed to get user profile:", profileError);
+      await supabase
+        .from("jobs")
+        .update({
+          status: "failed",
+          error_message: "Failed to get user profile",
+        })
+        .eq("id", jobId);
+      return;
+    }
+
+    if (profile.credits < creditMultiplier) {
+      console.error(
+        `Insufficient credits: ${profile.credits} < ${creditMultiplier}`
+      );
+      await supabase
+        .from("jobs")
+        .update({
+          status: "failed",
+          error_message: `Insufficient credits. Required: ${creditMultiplier}, Available: ${profile.credits}`,
+        })
+        .eq("id", jobId);
+      return;
+    }
+
+    // Deduct credits
+    const { error: creditError } = await supabase
+      .from("profiles")
+      .update({ credits: profile.credits - creditMultiplier })
+      .eq("id", job.user_id);
+
+    if (creditError) {
+      console.error("Failed to deduct credits:", creditError);
+      await supabase
+        .from("jobs")
+        .update({
+          status: "failed",
+          error_message: "Failed to deduct credits",
+        })
+        .eq("id", jobId);
+      return;
+    }
+
+    console.log(
+      `Deducted ${creditMultiplier} credits from user ${job.user_id}`
+    );
+
+    // Update job status to processing
+    await supabase
+      .from("jobs")
+      .update({ status: "processing" })
+      .eq("id", jobId);
+
+    // Call OpenAI GPT Image 1 for image generation
+    const response = await fetch(
+      "https://api.openai.com/v1/images/generations",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${openaiApiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "gpt-image-1",
+          prompt: job.prompt,
+          n: 1,
+          size: size,
+          quality: quality === "high" ? "hd" : "standard",
+          response_format: "url",
+        }),
+      }
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(
+        "OpenAI GPT Image 1 API failed:",
+        response.status,
+        errorText
+      );
+
+      await supabase
+        .from("jobs")
+        .update({
+          status: "failed",
+          error_message: `OpenAI GPT Image 1 API failed: ${response.status} ${errorText}`,
+        })
+        .eq("id", jobId);
+      return;
+    }
+
+    const result = await response.json();
+    console.log("OpenAI GPT Image 1 result:", result);
+
+    if (!result.data || !result.data[0] || !result.data[0].url) {
+      console.error("No image URL in OpenAI GPT Image 1 response");
+
+      await supabase
+        .from("jobs")
+        .update({
+          status: "failed",
+          error_message: "No image URL in OpenAI GPT Image 1 response",
+        })
+        .eq("id", jobId);
+      return;
+    }
+
+    const imageUrl = result.data[0].url;
+
+    // Download and save the image
+    const imageResponse = await fetch(imageUrl);
+    if (!imageResponse.ok) {
+      console.error("Failed to download image from OpenAI GPT Image 1");
+
+      await supabase
+        .from("jobs")
+        .update({
+          status: "failed",
+          error_message: "Failed to download generated image",
+        })
+        .eq("id", jobId);
+      return;
+    }
+
+    const imageBuffer = await imageResponse.arrayBuffer();
+    const fileName = `generated_${jobId}_${Date.now()}.png`;
+
+    // Upload to Supabase storage
+    const { data: uploadData, error: uploadError } = await supabase.storage
+      .from("uploads")
+      .upload(fileName, imageBuffer, {
+        contentType: "image/png",
+      });
+
+    if (uploadError) {
+      console.error("Failed to upload image:", uploadError);
+
+      await supabase
+        .from("jobs")
+        .update({
+          status: "failed",
+          error_message: "Failed to save generated image",
+        })
+        .eq("id", jobId);
+      return;
+    }
+
+    // Save image record
+    const { data: imageRecord, error: imageError } = await supabase
+      .from("images")
+      .insert({
+        file_path: uploadData.path,
+        file_name: fileName,
+        user_id: job.user_id,
+        folder_id: job.folder_id,
+        file_size: imageBuffer.byteLength,
+        content_type: "image/png",
+      })
+      .select()
+      .single();
+
+    if (imageError) {
+      console.error("Failed to save image record:", imageError);
+
+      await supabase
+        .from("jobs")
+        .update({
+          status: "failed",
+          error_message: "Failed to save image record",
+        })
+        .eq("id", jobId);
+      return;
+    }
+
+    // Update job status to completed
+    await supabase
+      .from("jobs")
+      .update({
+        status: "completed",
+        result_image_id: imageRecord.id,
+      })
+      .eq("id", jobId);
+
+    console.log(`OpenAI job ${jobId} completed successfully`);
+  } catch (error) {
+    console.error("OpenAI generation error:", error);
+
+    await supabase
+      .from("jobs")
+      .update({
+        status: "failed",
+        error_message: (error as Error).message || "OpenAI generation failed",
+      })
+      .eq("id", jobId);
+  }
+}
+
 serve(async (request) => {
   let parsedBody: any = null;
 
@@ -295,6 +554,8 @@ serve(async (request) => {
     console.log("Submitting request to FAL.ai...");
 
     const falApiKey = Deno.env.get("FAL_KEY");
+    const openaiApiKey = Deno.env.get("OPENAI_API_KEY");
+
     if (!falApiKey) {
       throw new Error("FAL_KEY environment variable not set");
     }
@@ -302,6 +563,7 @@ serve(async (request) => {
     const model = job.model || "gemini";
     let submitUrl: string;
     let payload: any;
+    let useOpenAI = false;
 
     if (model === "seedream") {
       // ByteDance SeedDream v4 configuration
@@ -318,6 +580,26 @@ serve(async (request) => {
         enable_safety_checker: true,
         sync_mode: false,
       };
+    } else if (model.startsWith("openai-")) {
+      // OpenAI DALL-E 3 configuration with quality options
+      useOpenAI = true;
+      const quality = model.includes("low")
+        ? "standard"
+        : model.includes("medium")
+        ? "standard"
+        : "hd";
+      const size = model.includes("low")
+        ? "1024x1024"
+        : model.includes("medium")
+        ? "1024x1792"
+        : "1792x1024";
+
+      if (!openaiApiKey) {
+        throw new Error("OPENAI_API_KEY environment variable not set");
+      }
+
+      submitUrl = "https://api.openai.com/v1/images/edits";
+      // Note: OpenAI image editing requires different handling, we'll handle this in the submission section
     } else {
       // Gemini configuration (default)
       submitUrl = "https://queue.fal.run/fal-ai/gemini-25-flash-image/edit";
@@ -330,42 +612,52 @@ serve(async (request) => {
       };
     }
 
-    // Submit to FAL.ai queue using direct HTTP
-    const submitResponse = await fetch(submitUrl, {
-      method: "POST",
-      headers: {
-        Authorization: `Key ${falApiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(payload),
-    });
+    // Submit to appropriate API
+    if (useOpenAI) {
+      // Handle OpenAI DALL-E 3 image generation directly
+      await handleOpenAIGeneration(job, jobId, openaiApiKey, model);
+    } else {
+      // Submit to FAL.ai queue using direct HTTP
+      const submitResponse = await fetch(submitUrl, {
+        method: "POST",
+        headers: {
+          Authorization: `Key ${falApiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
 
-    if (!submitResponse.ok) {
-      const errorText = await submitResponse.text();
-      console.error("FAL.ai submit failed:", submitResponse.status, errorText);
-      throw new Error(
-        `FAL.ai submit failed: ${submitResponse.status} ${errorText}`
-      );
+      if (!submitResponse.ok) {
+        const errorText = await submitResponse.text();
+        console.error(
+          "FAL.ai submit failed:",
+          submitResponse.status,
+          errorText
+        );
+        throw new Error(
+          `FAL.ai submit failed: ${submitResponse.status} ${errorText}`
+        );
+      }
+
+      const submitResult = await submitResponse.json();
+      console.log("FAL.ai submit result:", submitResult);
+      const requestId = submitResult.request_id;
+
+      if (!requestId) {
+        throw new Error("No request_id received from FAL.ai");
+      }
+
+      // Start background polling (don't await to avoid timeout)
+      setTimeout(async () => {
+        await pollForResult(
+          requestId,
+          jobId,
+          job.user_id,
+          falApiKey,
+          job.model || "gemini"
+        );
+      }, 1000);
     }
-
-    const submitResult = await submitResponse.json();
-    console.log("FAL.ai submit result:", submitResult);
-    const requestId = submitResult.request_id;
-
-    if (!requestId) {
-      throw new Error("No request_id received from FAL.ai");
-    }
-
-    // Start background polling (don't await to avoid timeout)
-    setTimeout(async () => {
-      await pollForResult(
-        requestId,
-        jobId,
-        job.user_id,
-        falApiKey,
-        job.model || "gemini"
-      );
-    }, 1000);
 
     console.log(`Job ${jobId} submitted to FAL.ai, processing in background`);
 

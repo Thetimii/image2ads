@@ -451,6 +451,21 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
               >
                 <option value="gemini">Gemini (Fast, Multiple variations)</option>
                 <option value="seedream">SeedDream v4 (Ultra High Quality 4K, Fashion focused)</option>
+                <optgroup label="OpenAI GPT Image 1 - Low Quality (0.5 credits)">
+                  <option value="openai-low-square">GPT Image 1 Low - Square (1024x1024)</option>
+                  <option value="openai-low-landscape">GPT Image 1 Low - Landscape (1536x1024)</option>
+                  <option value="openai-low-portrait">GPT Image 1 Low - Portrait (1024x1536)</option>
+                </optgroup>
+                <optgroup label="OpenAI GPT Image 1 - Medium Quality (1 credit)">
+                  <option value="openai-medium-square">GPT Image 1 Medium - Square (1024x1024)</option>
+                  <option value="openai-medium-landscape">GPT Image 1 Medium - Landscape (1536x1024)</option>
+                  <option value="openai-medium-portrait">GPT Image 1 Medium - Portrait (1024x1536)</option>
+                </optgroup>
+                <optgroup label="OpenAI GPT Image 1 - High Quality (7 credits)">
+                  <option value="openai-high-square">GPT Image 1 High - Square (1024x1024)</option>
+                  <option value="openai-high-landscape">GPT Image 1 High - Landscape (1536x1024)</option>
+                  <option value="openai-high-portrait">GPT Image 1 High - Portrait (1024x1536)</option>
+                </optgroup>
               </select>
               
               <label htmlFor="prompt" className="block text-sm font-medium text-gray-700 mb-2">
@@ -470,6 +485,17 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
               <p className="text-xs text-gray-500 mt-1">
                 {model === 'seedream' 
                   ? "SeedDream v4 specializes in fashion and clothing editing with ultra high-quality 4K output"
+                  : model?.startsWith('openai-')
+                  ? (() => {
+                      const parts = model.split('-');
+                      const quality = parts[1] || 'low';
+                      const aspect = parts[2] || 'square';
+                      const credits = quality === 'low' ? '0.5' : quality === 'medium' ? '1' : '7';
+                      const resolution = quality === 'low' || quality === 'medium' || quality === 'high' 
+                        ? (aspect === 'square' ? '1024x1024' : aspect === 'landscape' ? '1536x1024' : '1024x1536')
+                        : '1024x1024';
+                      return `OpenAI GPT Image 1 ${quality.charAt(0).toUpperCase() + quality.slice(1)} Quality ${aspect.charAt(0).toUpperCase() + aspect.slice(1)} (${resolution}) - ${credits} credits`;
+                    })()
                   : "Gemini provides fast general-purpose image editing with multiple variations"
                 }
               </p>
