@@ -177,7 +177,7 @@ async function handleOpenAIGeneration(
     // Determine size and credit multiplier based on quality and aspect ratio
     let size: string;
     let creditMultiplier: number;
-
+    
     if (quality === "low") {
       size =
         aspect === "square"
@@ -202,10 +202,8 @@ async function handleOpenAIGeneration(
           : aspect === "landscape"
           ? "1536x1024"
           : "1024x1536";
-      creditMultiplier = 7;
-    }
-
-    console.log(
+      // High quality: 7 credits for all sizes
+      creditMultiplier = 7;    console.log(
       `OpenAI GPT Image 1 settings: quality=${quality}, aspect=${aspect}, size=${size}, creditMultiplier=${creditMultiplier}`
     );
 
@@ -282,10 +280,11 @@ async function handleOpenAIGeneration(
         body: JSON.stringify({
           model: "gpt-image-1",
           prompt: job.prompt,
-          n: 1,
+          quality: quality,
           size: size,
-          quality: quality === "high" ? "hd" : "standard",
-          response_format: "url",
+          output_format: "png",
+          background: "transparent",
+          response_format: "b64_json",
         }),
       }
     );
@@ -311,37 +310,23 @@ async function handleOpenAIGeneration(
     const result = await response.json();
     console.log("OpenAI GPT Image 1 result:", result);
 
-    if (!result.data || !result.data[0] || !result.data[0].url) {
-      console.error("No image URL in OpenAI GPT Image 1 response");
+    if (!result.data || !result.data[0] || !result.data[0].b64_json) {
+      console.error("No image data in OpenAI GPT Image 1 response");
 
       await supabase
         .from("jobs")
         .update({
           status: "failed",
-          error_message: "No image URL in OpenAI GPT Image 1 response",
+          error_message: "No image data in OpenAI GPT Image 1 response",
         })
         .eq("id", jobId);
       return;
     }
 
-    const imageUrl = result.data[0].url;
-
-    // Download and save the image
-    const imageResponse = await fetch(imageUrl);
-    if (!imageResponse.ok) {
-      console.error("Failed to download image from OpenAI GPT Image 1");
-
-      await supabase
-        .from("jobs")
-        .update({
-          status: "failed",
-          error_message: "Failed to download generated image",
-        })
-        .eq("id", jobId);
-      return;
-    }
-
-    const imageBuffer = await imageResponse.arrayBuffer();
+    const b64Data = result.data[0].b64_json;
+    
+    // Convert base64 to buffer
+    const imageBuffer = Uint8Array.from(atob(b64Data), c => c.charCodeAt(0));
     const fileName = `generated_${jobId}_${Date.now()}.png`;
 
     // Upload to Supabase storage
