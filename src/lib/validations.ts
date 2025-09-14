@@ -54,15 +54,49 @@ export const jobSchema = z.object({
   updated_at: z.string(),
 });
 
-export const createJobSchema = z.object({
-  image_ids: z
-    .array(z.string().uuid())
-    .min(1, "At least one image is required")
-    .max(10, "Maximum 10 images allowed"),
-  prompt: z.string().min(1, "Prompt is required").max(500, "Prompt too long"),
-  model: z.enum(["gemini", "seedream"]).default("gemini"),
-  credits_used: z.number().int().min(1).default(1),
-});
+export const createJobSchema = z
+  .object({
+    image_ids: z
+      .array(z.string().uuid())
+      .min(1, "At least one image is required")
+      .max(10, "Maximum 10 images allowed")
+      .optional(),
+    imageIds: z
+      .array(z.string().uuid())
+      .min(1, "At least one image is required")
+      .max(10, "Maximum 10 images allowed")
+      .optional(),
+    prompt: z
+      .string()
+      .min(1, "Prompt is required")
+      .max(2000, "Prompt too long"),
+    model: z
+      .enum([
+        "gemini",
+        "seedream",
+        "openai-low-square",
+        "openai-low-landscape",
+        "openai-low-portrait",
+        "openai-medium-square",
+        "openai-medium-landscape",
+        "openai-medium-portrait",
+        "openai-high-square",
+        "openai-high-landscape",
+        "openai-high-portrait",
+      ])
+      .default("gemini"),
+    quality: z.enum(["low", "medium", "high"]).default("medium"),
+    size: z.enum(["1024x1024", "1024x1536", "1536x1024"]).default("1024x1024"),
+    n: z.number().int().min(1).max(4).default(1),
+  })
+  .transform((v) => ({
+    image_ids: v.image_ids ?? v.imageIds!,
+    prompt: v.prompt,
+    model: v.model,
+    quality: v.quality,
+    size: v.size,
+    n: v.n,
+  }));
 
 // Upload URL request schema
 export const uploadUrlSchema = z.object({

@@ -3,13 +3,14 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { createJobSchema } from "@/lib/validations";
 import { createJob, getUserProfile } from "@/lib/database";
+import { billableCredits, parseOpenAIModel } from "@/lib/credits";
 
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient();
     const serviceSupabase = createServiceClient();
 
-    // Check authentication
+    // 1) Auth
     const {
       data: { user },
       error: authError,
@@ -19,20 +20,39 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Parse and validate request body
-    const body = await request.json();
-    const validation = createJobSchema.safeParse(body);
+    // 2) Body + Validation
+    const body = await request.json().catch(() => null);
+    if (!body) {
+      return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+    }
 
-    if (!validation.success) {
+    const parsed = createJobSchema.safeParse(body);
+    if (!parsed.success) {
+      console.error("Validation failed:", parsed.error.issues);
       return NextResponse.json(
-        { error: "Invalid request data", details: validation.error.issues },
+        { error: "Invalid request data", details: parsed.error.issues },
         { status: 400 }
       );
     }
 
-    const { image_ids, prompt, model, credits_used } = validation.data;
+    const { image_ids, prompt, model, quality, size, n } = parsed.data;
 
-    // Check if user has enough credits
+    // 3) Compute credits on the server (don't trust client)
+    let actualQuality = quality;
+    let actualSize = size;
+
+    // For OpenAI models, extract quality and size from model name
+    if (model.startsWith("openai-")) {
+      const modelData = parseOpenAIModel(model);
+      if (modelData) {
+        actualQuality = modelData.quality;
+        actualSize = modelData.size;
+      }
+    }
+
+    const credits_used = billableCredits(model, actualQuality, actualSize, n);
+
+    // 4) Profile & credit check
     const profile = await getUserProfile(user.id);
 
     if (!profile) {
@@ -53,7 +73,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Verify all images exist and belong to user
+    // 5) Verify images belong to user
     const { data: images, error: imagesError } = await supabase
       .from("images")
       .select("id, folder_id, user_id")
@@ -62,12 +82,12 @@ export async function POST(request: NextRequest) {
 
     if (imagesError || !images || images.length !== image_ids.length) {
       return NextResponse.json(
-        { error: "One or more images not found" },
+        { error: "One or more images not found or not owned by user" },
         { status: 404 }
       );
     }
 
-    // Create job
+    // 6) Create job
     const job = await createJob({
       userId: user.id,
       imageIds: image_ids,
@@ -83,22 +103,17 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Trigger the edge function to process the job
-    try {
-      const edgeFunctionUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/run-job`;
+    // 7) Fire the edge function (best-effort)
+    const edgeFunctionUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/run-job`;
 
-      await fetch(edgeFunctionUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
-        },
-        body: JSON.stringify({ jobId: job.id }),
-      });
-    } catch (edgeError) {
-      console.error("Failed to trigger edge function:", edgeError);
-      // Job is still created, but we'll note the processing error
-    }
+    fetch(edgeFunctionUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
+      },
+      body: JSON.stringify({ jobId: job.id }),
+    }).catch((e) => console.error("Failed to trigger edge function:", e));
 
     return NextResponse.json({ job }, { status: 201 });
   } catch (error) {
