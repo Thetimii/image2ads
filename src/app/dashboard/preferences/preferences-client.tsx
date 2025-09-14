@@ -45,7 +45,7 @@ export default function PreferencesClient({ user, profile }: PreferencesClientPr
           </p>
         </div>
 
-        <div className="max-w-4xl">
+        <div>
           {/* Notifications */}
           <div className="bg-white rounded-2xl border border-gray-200 mb-6 overflow-hidden">
             <div className="p-6 border-b border-gray-200">

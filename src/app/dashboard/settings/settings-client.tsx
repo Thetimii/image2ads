@@ -29,17 +29,49 @@ export default function SettingsClient({ user, profile }: SettingsClientProps) {
   const router = useRouter()
   const supabase = createClient()
 
+  // Simple function to determine plan display name
+  const getPlanDisplayName = () => {
+    if (profile.subscription_status === 'active' || profile.subscription_status === 'trialing') {
+      return 'Pro Plan' // We can make this more specific later when we have plan type in DB
+    }
+    return 'Free Plan'
+  }
+
+  const getSubscriptionStatus = () => {
+    if (profile.subscription_status === 'active' || profile.subscription_status === 'trialing') {
+      return 'Active'
+    } else if (profile.subscription_status === 'canceled' || profile.subscription_status === 'cancelled') {
+      return 'Cancelled'
+    }
+    return 'Free Plan'
+  }
+
   const handleUpdateProfile = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsUpdating(true)
     
     try {
-      // TODO: Implement profile update API call
-      setTimeout(() => {
-        setIsUpdating(false)
-      }, 1000)
+      // Update profile in Supabase
+      const { error } = await supabase
+        .from('profiles')
+        .update({ 
+          full_name: formData.fullName,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', user.id)
+
+      if (error) {
+        console.error('Error updating profile:', error)
+        alert('Failed to update profile. Please try again.')
+      } else {
+        alert('Profile updated successfully!')
+        // Refresh the page to show updated data
+        router.refresh()
+      }
     } catch (error) {
       console.error('Error updating profile:', error)
+      alert('An error occurred while updating your profile.')
+    } finally {
       setIsUpdating(false)
     }
   }
@@ -249,13 +281,26 @@ export default function SettingsClient({ user, profile }: SettingsClientProps) {
               </div>
               
               <div className="flex justify-between items-center py-3 border-b border-gray-100">
-                <span className="text-sm font-medium text-gray-600">Subscription</span>
-                <span className={`text-sm px-2 py-1 rounded-full ${
-                  profile.subscription_status 
+                <span className="text-sm font-medium text-gray-600">Subscription Status</span>
+                <span className={`text-sm px-3 py-1 rounded-full font-medium ${
+                  (profile.subscription_status === 'active' || profile.subscription_status === 'trialing')
                     ? 'bg-green-100 text-green-800' 
+                    : (profile.subscription_status === 'canceled' || profile.subscription_status === 'cancelled')
+                    ? 'bg-red-100 text-red-800'
                     : 'bg-gray-100 text-gray-800'
                 }`}>
-                  {profile.subscription_status ? 'Pro' : 'Free'}
+                  {getSubscriptionStatus()}
+                </span>
+              </div>
+              
+              <div className="flex justify-between items-center py-3 border-b border-gray-100">
+                <span className="text-sm font-medium text-gray-600">Plan Type</span>
+                <span className={`text-sm px-2 py-1 rounded-full ${
+                  (profile.subscription_status === 'active' || profile.subscription_status === 'trialing')
+                    ? 'bg-blue-100 text-blue-800' 
+                    : 'bg-gray-100 text-gray-800'
+                }`}>
+                  {getPlanDisplayName()}
                 </span>
               </div>
               

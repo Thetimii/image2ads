@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import type { User } from '@supabase/supabase-js'
@@ -22,12 +22,16 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
   const [selectedImages, setSelectedImages] = useState<string[]>([])
   const [prompt, setPrompt] = useState('')
   const [outputAmount, setOutputAmount] = useState(1)
+  const [aspectRatio, setAspectRatio] = useState('square')
   const [showGenerateModal, setShowGenerateModal] = useState(false)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [showDeleteFolderModal, setShowDeleteFolderModal] = useState(false)
   const [imageToDelete, setImageToDelete] = useState<string | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
   const [enhancementStatus, setEnhancementStatus] = useState<Record<string, string>>({})
+  const [enhancedImages, setEnhancedImages] = useState<Record<string, string>>({})
+  const [renamingImage, setRenamingImage] = useState<string | null>(null)
+  const [newImageName, setNewImageName] = useState('')
   const supabase = createClient()
   const router = useRouter()
 
@@ -69,18 +73,28 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
     }
   }, [user.id, supabase, fetchJobs])
 
-  const getImageUrl = async (image: Image): Promise<string> => {
+  const getImageUrl = useCallback(async (image: Image): Promise<string> => {
     try {
-      const { data } = await supabase.storage
-        .from('images')
+      // First try to get signed URL from uploads bucket
+      const { data, error } = await supabase.storage
+        .from('uploads')
         .createSignedUrl(image.file_path, 3600)
       
-      return data?.signedUrl || ''
+      if (data?.signedUrl) {
+        return data.signedUrl
+      }
+      
+      // Fallback to public URL if signed URL fails
+      const { data: publicUrl } = supabase.storage
+        .from('uploads')
+        .getPublicUrl(image.file_path)
+      
+      return publicUrl?.publicUrl || ''
     } catch (error) {
       console.error('Error getting image URL:', error)
       return ''
     }
-  }
+  }, [supabase])
 
   const handleDeleteImage = async () => {
     if (!imageToDelete) return
@@ -172,7 +186,7 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
           throw new Error('Failed to get upload URL')
         }
 
-        const { uploadUrl, image: imageRecord } = await uploadResponse.json()
+        const { uploadUrl, filePath, fileName } = await uploadResponse.json()
 
         // Upload file to Supabase Storage
         const uploadFileResponse = await fetch(uploadUrl, {
@@ -187,10 +201,30 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
           throw new Error('Failed to upload file')
         }
 
+        // Create image record in database
+        const { data: imageRecord, error: dbError } = await supabase
+          .from('images')
+          .insert({
+            user_id: user.id,
+            folder_id: folder.id,
+            file_path: filePath,
+            original_name: file.name,
+            file_size: file.size,
+            mime_type: file.type,
+          })
+          .select()
+          .single()
+
+        if (dbError || !imageRecord) {
+          console.error('Failed to create image record:', dbError)
+          throw new Error('Failed to save image record')
+        }
+
         uploadedImages.push(imageRecord)
       }
 
-      setImages([...uploadedImages, ...images])
+      // Add new images to the end of the existing images array
+      setImages([...images, ...uploadedImages])
       setUploadProgress(100)
     } catch (error) {
       console.error('Error uploading files:', error)
@@ -198,6 +232,8 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
     } finally {
       setIsUploading(false)
       setUploadProgress(0)
+      // Reset the file input
+      e.target.value = ''
     }
   }
 
@@ -212,6 +248,9 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
     }
 
     try {
+      // Construct the model string with openai-medium + aspect ratio
+      const model = `openai-medium-${aspectRatio}`
+      
       const response = await fetch('/api/generate', {
         method: 'POST',
         headers: {
@@ -220,8 +259,9 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
         body: JSON.stringify({
           image_ids: selectedImages,
           prompt: prompt.trim(),
-          model: 'openai', // Default to OpenAI
+          model: model,
           output_amount: outputAmount,
+          aspect_ratio: aspectRatio,
         }),
       })
 
@@ -232,6 +272,7 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
         setSelectedImages([])
         setPrompt('')
         setOutputAmount(1)
+        setAspectRatio('square')
         alert('Ad generation started! You will see the results here when complete.')
       } else {
         const errorData = await response.json()
@@ -240,6 +281,39 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
     } catch (error) {
       console.error('Error generating ad:', error)
       alert('Failed to start generation')
+    }
+  }
+
+  const handleRenameImage = async (imageId: string, newName: string) => {
+    if (!newName.trim()) return
+
+    try {
+      const { data, error } = await supabase
+        .from('images')
+        .update({ original_name: newName.trim() })
+        .eq('id', imageId)
+        .eq('user_id', user.id)
+        .select()
+        .single()
+
+      if (error) {
+        console.error('Error renaming image:', error)
+        alert('Failed to rename image')
+        return
+      }
+
+      // Update local state
+      setImages(images.map(img => 
+        img.id === imageId 
+          ? { ...img, original_name: newName.trim() }
+          : img
+      ))
+
+      setRenamingImage(null)
+      setNewImageName('')
+    } catch (error) {
+      console.error('Error renaming image:', error)
+      alert('Failed to rename image')
     }
   }
 
@@ -266,11 +340,9 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
       
       if (result.success && result.enhancedImageUrl) {
         setEnhancementStatus(prev => ({ ...prev, [jobId]: 'completed' }))
+        setEnhancedImages(prev => ({ ...prev, [jobId]: result.enhancedImageUrl }))
         
-        // Open the enhanced image in a new tab
-        window.open(result.enhancedImageUrl, '_blank')
-        
-        alert('🎉 Image enhanced successfully! The high-quality version has opened in a new tab.')
+        alert('🎉 Image enhanced successfully! Click the green checkmark to view the enhanced version.')
       } else {
         throw new Error(result.error || 'Failed to enhance image')
       }
@@ -316,14 +388,14 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
             </div>
             
             <div className="p-6">
-              <div className="border-2 border-dashed border-gray-300 rounded-xl p-8 hover:border-blue-400 transition-colors duration-200">
-                <div className="text-center">
-                  <div className="w-16 h-16 bg-blue-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
-                    <svg className="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                    </svg>
-                  </div>
-                  <label htmlFor="file-upload" className="cursor-pointer block">
+              <label htmlFor="file-upload" className="cursor-pointer block">
+                <div className="border-2 border-dashed border-gray-300 rounded-xl p-8 hover:border-blue-400 transition-colors duration-200">
+                  <div className="text-center">
+                    <div className="w-16 h-16 bg-blue-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                      <svg className="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                      </svg>
+                    </div>
                     <span className="text-lg font-medium text-gray-900 block mb-2">
                       {isUploading ? `Uploading... ${uploadProgress.toFixed(0)}%` : 'Upload More Images'}
                     </span>
@@ -340,21 +412,21 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
                       onChange={handleFileUpload}
                       disabled={isUploading}
                     />
-                  </label>
-                  <p className="text-xs text-gray-500 mt-3">PNG, JPG, WEBP up to 10MB each</p>
-                  
-                  {isUploading && (
-                    <div className="mt-4">
-                      <div className="w-full bg-gray-200 rounded-full h-2">
-                        <div 
-                          className="bg-blue-600 h-2 rounded-full transition-all duration-300" 
-                          style={{ width: `${uploadProgress}%` }}
-                        ></div>
+                    <p className="text-xs text-gray-500 mt-3">PNG, JPG, WEBP up to 10MB each</p>
+                    
+                    {isUploading && (
+                      <div className="mt-4">
+                        <div className="w-full bg-gray-200 rounded-full h-2">
+                          <div 
+                            className="bg-blue-600 h-2 rounded-full transition-all duration-300" 
+                            style={{ width: `${uploadProgress}%` }}
+                          ></div>
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </div>
-              </div>
+              </label>
             </div>
           </div>
         )}
@@ -399,7 +471,7 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
             
             <div className="p-6">
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-                {images.map((image) => (
+                {images.filter(image => image?.id).map((image) => (
                   <ImageCard
                     key={image.id}
                     image={image}
@@ -415,7 +487,12 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
                       setImageToDelete(image.id)
                       setShowDeleteModal(true)
                     }}
+                    onRename={(newName) => handleRenameImage(image.id, newName)}
                     getImageUrl={getImageUrl}
+                    renamingImage={renamingImage}
+                    setRenamingImage={setRenamingImage}
+                    newImageName={newImageName}
+                    setNewImageName={setNewImageName}
                   />
                 ))}
               </div>
@@ -434,6 +511,7 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
             <div className="p-6 space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {jobs
+                  .filter(job => job?.id)
                   .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
                   .map((job) => (
                     <JobCard 
@@ -441,6 +519,7 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
                       job={job} 
                       onEnhance={handleEnhance}
                       enhancementStatus={enhancementStatus}
+                      enhancedImages={enhancedImages}
                     />
                   ))}
               </div>
@@ -519,7 +598,7 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
                   </label>
                   <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3">
                     {selectedImages.map((imageId) => {
-                      const image = images.find(img => img.id === imageId)
+                      const image = images.find(img => img?.id === imageId)
                       if (!image) return null
                       
                       return (
@@ -545,85 +624,106 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
                   )}
                 </div>
 
-                {/* Settings Preview */}
-                <div className="bg-gray-50 rounded-xl p-4">
-                  <h4 className="text-sm font-medium text-gray-700 mb-3">Generation Settings</h4>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                    <div className="flex items-center justify-between">
-                      <span className="text-gray-600">AI Model:</span>
-                      <span className="font-medium text-gray-900">OpenAI</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-gray-600">Images Count:</span>
-                      <span className="font-medium text-gray-900">{selectedImages.length}</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-gray-600">Output Amount:</span>
-                      <span className="font-medium text-gray-900">{outputAmount} ad{outputAmount !== 1 ? 's' : ''}</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-gray-600">Quality:</span>
-                      <span className="font-medium text-gray-900">High Resolution</span>
-                    </div>
-                  </div>
-                </div>
-
                 {/* Prompt Input */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Prompt
+                    What ad would you like to create?
                   </label>
                   <textarea
                     value={prompt}
                     onChange={(e) => setPrompt(e.target.value)}
-                    placeholder="Describe the ad you want to generate... (e.g., 'Create a modern social media ad for a luxury product with elegant typography and premium feel')"
-                    className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 resize-none"
-                    rows={4}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                    rows={3}
+                    placeholder="Describe the ad you want to create..."
                   />
+                </div>
+
+                {/* Number of Images Selection */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Number of Images
+                  </label>
+                  <div className="flex space-x-4">
+                    <button
+                      type="button"
+                      onClick={() => setOutputAmount(1)}
+                      className={`px-4 py-2 rounded-md border ${
+                        outputAmount === 1
+                          ? 'bg-indigo-600 text-white border-indigo-600'
+                          : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                      }`}
+                    >
+                      1 Image (1 credit)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setOutputAmount(2)}
+                      className={`px-4 py-2 rounded-md border ${
+                        outputAmount === 2
+                          ? 'bg-indigo-600 text-white border-indigo-600'
+                          : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                      }`}
+                    >
+                      2 Images (2 credits)
+                    </button>
+                  </div>
                   <p className="text-xs text-gray-500 mt-2">
-                    Be specific about the style, colors, text, and target audience for better results.
+                    You will be charged 1 credit per image generated.
                   </p>
                 </div>
-                
-                {/* Output Amount Selection */}
+
+                {/* Aspect Ratio Selection */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-3">
-                    Number of Ads to Generate
+                    Aspect Ratio
                   </label>
-                  <div className="grid grid-cols-4 gap-3">
-                    {[1, 2, 3, 4].map((amount) => (
-                      <div
-                        key={amount}
-                        className={`p-4 text-center rounded-xl border-2 cursor-pointer transition-all duration-200 ${
-                          outputAmount === amount
-                            ? 'border-blue-500 bg-blue-50'
-                            : 'border-gray-200 hover:border-gray-300'
-                        }`}
-                        onClick={() => setOutputAmount(amount)}
-                      >
-                        <div className="flex items-center justify-center space-x-2 mb-2">
-                          <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${
-                            outputAmount === amount
-                              ? 'border-blue-500 bg-blue-500'
-                              : 'border-gray-300'
-                          }`}>
-                            {outputAmount === amount && (
-                              <div className="w-2 h-2 bg-white rounded-full"></div>
-                            )}
-                          </div>
-                        </div>
-                        <h5 className={`font-medium ${outputAmount === amount ? 'text-blue-700' : 'text-gray-900'}`}>
-                          {amount}
-                        </h5>
-                        <p className={`text-xs ${outputAmount === amount ? 'text-blue-600' : 'text-gray-600'}`}>
-                          {amount === 1 ? 'Single Ad' : `${amount} Variations`}
-                        </p>
-                      </div>
-                    ))}
+                  <div className="flex space-x-4">
+                    <button
+                      type="button"
+                      onClick={() => setAspectRatio('square')}
+                      className={`flex flex-col items-center p-4 rounded-lg border-2 transition-all duration-200 ${
+                        aspectRatio === 'square'
+                          ? 'border-blue-500 bg-blue-50 text-blue-700'
+                          : 'border-gray-300 hover:border-gray-400 text-gray-700'
+                      }`}
+                    >
+                      <div className={`w-8 h-8 rounded border-2 mb-2 ${
+                        aspectRatio === 'square' ? 'border-blue-500 bg-blue-100' : 'border-gray-400 bg-gray-100'
+                      }`}></div>
+                      <span className="text-sm font-medium">Square</span>
+                      <span className="text-xs text-gray-500">1:1</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setAspectRatio('portrait')}
+                      className={`flex flex-col items-center p-4 rounded-lg border-2 transition-all duration-200 ${
+                        aspectRatio === 'portrait'
+                          ? 'border-blue-500 bg-blue-50 text-blue-700'
+                          : 'border-gray-300 hover:border-gray-400 text-gray-700'
+                      }`}
+                    >
+                      <div className={`w-6 h-8 rounded border-2 mb-2 ${
+                        aspectRatio === 'portrait' ? 'border-blue-500 bg-blue-100' : 'border-gray-400 bg-gray-100'
+                      }`}></div>
+                      <span className="text-sm font-medium">Portrait</span>
+                      <span className="text-xs text-gray-500">3:4</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setAspectRatio('landscape')}
+                      className={`flex flex-col items-center p-4 rounded-lg border-2 transition-all duration-200 ${
+                        aspectRatio === 'landscape'
+                          ? 'border-blue-500 bg-blue-50 text-blue-700'
+                          : 'border-gray-300 hover:border-gray-400 text-gray-700'
+                      }`}
+                    >
+                      <div className={`w-8 h-6 rounded border-2 mb-2 ${
+                        aspectRatio === 'landscape' ? 'border-blue-500 bg-blue-100' : 'border-gray-400 bg-gray-100'
+                      }`}></div>
+                      <span className="text-sm font-medium">Landscape</span>
+                      <span className="text-xs text-gray-500">4:3</span>
+                    </button>
                   </div>
-                  <p className="text-xs text-gray-500 mt-3">
-                    Generate multiple variations of your ad with different styles and approaches.
-                  </p>
                 </div>
               </div>
             </div>
@@ -633,7 +733,12 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
               <div className="flex items-center justify-between">
                 <div className="text-sm text-gray-600">
                   {selectedImages.length > 0 ? (
-                    <span>Ready to generate ads from {selectedImages.length} image{selectedImages.length !== 1 ? 's' : ''}</span>
+                    <div>
+                      <span>Ready to generate {outputAmount} ad{outputAmount !== 1 ? 's' : ''} from {selectedImages.length} image{selectedImages.length !== 1 ? 's' : ''}</span>
+                      <div className="text-xs text-gray-500 mt-1">
+                        Cost: {outputAmount} credit{outputAmount !== 1 ? 's' : ''}
+                      </div>
+                    </div>
                   ) : (
                     <span className="text-red-600">Please select at least one image</span>
                   )}
@@ -650,7 +755,7 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
                     disabled={!prompt.trim() || selectedImages.length === 0}
                     className="px-6 py-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg hover:from-blue-700 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-lg shadow-blue-500/20"
                   >
-                    Generate Ad
+                    Generate {outputAmount} Ad{outputAmount !== 1 ? 's' : ''}
                   </button>
                 </div>
               </div>
@@ -757,32 +862,59 @@ function ImageCard({
   isSelected, 
   onToggleSelect, 
   onDelete, 
-  getImageUrl 
+  onRename,
+  getImageUrl,
+  renamingImage,
+  setRenamingImage,
+  newImageName,
+  setNewImageName
 }: { 
   image: Image
   isSelected: boolean
   onToggleSelect: () => void
   onDelete: () => void
+  onRename: (newName: string) => void
   getImageUrl: (image: Image) => Promise<string>
+  renamingImage: string | null
+  setRenamingImage: (id: string | null) => void
+  newImageName: string
+  setNewImageName: (name: string) => void
 }) {
   const [imageUrl, setImageUrl] = useState<string>('')
   const [isLoading, setIsLoading] = useState(true)
   const [hasError, setHasError] = useState(false)
 
+  // Memoize the image URL to prevent unnecessary fetches
+  const cachedImageUrl = useMemo(() => {
+    if (imageUrl) return imageUrl
+    return ''
+  }, [imageUrl])
+
   useEffect(() => {
+    let isMounted = true
+    
     setIsLoading(true)
     setHasError(false)
+    
     getImageUrl(image)
       .then((url) => {
-        setImageUrl(url)
-        setIsLoading(false)
+        if (isMounted) {
+          setImageUrl(url)
+          setIsLoading(false)
+        }
       })
       .catch((error) => {
-        console.error('Failed to load image URL:', error)
-        setHasError(true)
-        setIsLoading(false)
+        if (isMounted) {
+          console.error('Failed to load image URL:', error)
+          setHasError(true)
+          setIsLoading(false)
+        }
       })
-  }, [image, getImageUrl])
+
+    return () => {
+      isMounted = false
+    }
+  }, [image.file_path, getImageUrl]) // Only depend on file_path and the memoized function
 
   return (
     <div
@@ -825,6 +957,19 @@ function ImageCard({
           <button
             onClick={(e) => {
               e.stopPropagation()
+              setRenamingImage(image.id)
+              setNewImageName(image.original_name)
+            }}
+            className="p-1 bg-blue-600 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-200 hover:bg-blue-700"
+            title="Rename image"
+          >
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+            </svg>
+          </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
               onDelete()
             }}
             className="p-1 bg-red-600 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-200 hover:bg-red-700"
@@ -847,22 +992,70 @@ function ImageCard({
         </div>
       </div>
       <div className="p-3">
-        <h3 className="text-sm font-medium text-gray-900 truncate">
-          {image.original_name}
-        </h3>
-        <p className="text-xs text-gray-500 mt-1">
-          {new Date(image.created_at).toLocaleDateString()}
-        </p>
+        {renamingImage === image.id ? (
+          <div className="space-y-2">
+            <input
+              type="text"
+              value={newImageName}
+              onChange={(e) => setNewImageName(e.target.value)}
+              className="w-full text-sm font-medium text-gray-900 bg-transparent border border-blue-500 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  onRename(newImageName)
+                } else if (e.key === 'Escape') {
+                  setRenamingImage(null)
+                  setNewImageName('')
+                }
+              }}
+              onBlur={() => {
+                if (newImageName.trim() && newImageName !== image.original_name) {
+                  onRename(newImageName)
+                } else {
+                  setRenamingImage(null)
+                  setNewImageName('')
+                }
+              }}
+              autoFocus
+            />
+            <div className="flex space-x-1">
+              <button
+                onClick={() => onRename(newImageName)}
+                className="px-2 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700"
+              >
+                Save
+              </button>
+              <button
+                onClick={() => {
+                  setRenamingImage(null)
+                  setNewImageName('')
+                }}
+                className="px-2 py-1 bg-gray-300 text-gray-700 text-xs rounded hover:bg-gray-400"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <h3 className="text-sm font-medium text-gray-900 truncate">
+              {image.original_name}
+            </h3>
+            <p className="text-xs text-gray-500 mt-1">
+              {new Date(image.created_at).toLocaleDateString()}
+            </p>
+          </>
+        )}
       </div>
     </div>
   )
 }
 
 // Job Card Component
-function JobCard({ job, onEnhance, enhancementStatus }: { 
+function JobCard({ job, onEnhance, enhancementStatus, enhancedImages }: { 
   job: Job & { result_signed_url?: string }, 
   onEnhance?: (jobId: string, imageUrl: string) => void,
-  enhancementStatus?: Record<string, string>
+  enhancementStatus?: Record<string, string>,
+  enhancedImages?: Record<string, string>
 }) {
   const [isEnhancing, setIsEnhancing] = useState(false)
   const currentEnhancementStatus = enhancementStatus?.[job.id]
@@ -927,39 +1120,64 @@ function JobCard({ job, onEnhance, enhancementStatus }: {
               className="w-full h-full object-cover"
               onClick={() => window.open(job.result_signed_url, '_blank')}
             />
-            {/* Action buttons overlay */}
-            <div className="absolute top-2 right-2 flex space-x-1">
+            {/* Action buttons overlay - Always visible */}
+            <div className="absolute bottom-2 right-2 flex space-x-2">
               <button
                 onClick={(e) => {
                   e.stopPropagation()
                   handleDownload()
                 }}
-                className="p-1.5 bg-green-600 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-200 hover:bg-green-700"
+                className="p-2 bg-green-600 text-white rounded-lg shadow-lg hover:bg-green-700 transition-colors duration-200"
                 title="Download"
               >
-                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-4-4m4 4l4-4m-6-10h8a2 2 0 012 2v8a2 2 0 01-2 2H6a2 2 0 01-2-2V8a2 2 0 012-2h2" />
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                 </svg>
               </button>
               {onEnhance && (
                 <button
                   onClick={(e) => {
                     e.stopPropagation()
-                    handleEnhance()
+                    if (currentEnhancementStatus === 'completed' && enhancedImages?.[job.id]) {
+                      // Show enhanced image in new tab
+                      window.open(enhancedImages[job.id], '_blank')
+                    } else {
+                      handleEnhance()
+                    }
                   }}
                   disabled={isEnhanceDisabled()}
-                  className={`p-1.5 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-200 ${
+                  className={`p-2 text-white rounded-lg shadow-lg transition-colors duration-200 ${
                     currentEnhancementStatus === 'completed' 
                       ? 'bg-green-600 hover:bg-green-700' 
                       : currentEnhancementStatus === 'failed'
                       ? 'bg-red-600 hover:bg-red-700'
                       : 'bg-purple-600 hover:bg-purple-700'
-                  } disabled:opacity-50`}
-                  title="Enhance quality"
+                  } disabled:opacity-50 disabled:cursor-not-allowed`}
+                  title={
+                    currentEnhancementStatus === 'completed' 
+                      ? 'Enhanced' 
+                      : currentEnhancementStatus === 'failed'
+                      ? 'Enhancement failed'
+                      : currentEnhancementStatus === 'enhancing'
+                      ? 'Enhancing...'
+                      : 'Enhance quality'
+                  }
                 >
-                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
-                  </svg>
+                  {currentEnhancementStatus === 'enhancing' ? (
+                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                  ) : currentEnhancementStatus === 'completed' ? (
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                  ) : currentEnhancementStatus === 'failed' ? (
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  ) : (
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
+                    </svg>
+                  )}
                 </button>
               )}
             </div>
@@ -1030,19 +1248,30 @@ function GenerateModalImageCard({
   const [hasError, setHasError] = useState(false)
 
   useEffect(() => {
+    let isMounted = true
+    
     setIsLoading(true)
     setHasError(false)
+    
     getImageUrl(image)
       .then((url) => {
-        setImageUrl(url)
-        setIsLoading(false)
+        if (isMounted) {
+          setImageUrl(url)
+          setIsLoading(false)
+        }
       })
       .catch((error) => {
-        console.error('Failed to load image URL:', error)
-        setHasError(true)
-        setIsLoading(false)
+        if (isMounted) {
+          console.error('Failed to load image URL:', error)
+          setHasError(true)
+          setIsLoading(false)
+        }
       })
-  }, [image, getImageUrl])
+
+    return () => {
+      isMounted = false
+    }
+  }, [image.file_path, getImageUrl]) // Only depend on file_path and the memoized function
 
   return (
     <div className="relative rounded-lg border border-gray-200 overflow-hidden group bg-white">

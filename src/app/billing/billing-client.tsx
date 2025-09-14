@@ -17,6 +17,23 @@ export default function BillingClient({ user, profile }: BillingClientProps) {
   const [isLoading, setIsLoading] = useState<string | null>(null)
   const router = useRouter()
 
+  // Simple function to determine plan display name
+  const getPlanDisplayName = () => {
+    if (profile.subscription_status === 'active' || profile.subscription_status === 'trialing') {
+      return 'Pro Plan' // We can make this more specific later when we have plan type in DB
+    }
+    return 'Free Plan'
+  }
+
+  const getSubscriptionStatus = () => {
+    if (profile.subscription_status === 'active' || profile.subscription_status === 'trialing') {
+      return 'Active'
+    } else if (profile.subscription_status === 'canceled' || profile.subscription_status === 'cancelled') {
+      return 'Cancelled'
+    }
+    return 'Free Plan'
+  }
+
   const handleSubscribe = async (plan: StripePlan) => {
     setIsLoading(plan)
     try {
@@ -101,22 +118,51 @@ export default function BillingClient({ user, profile }: BillingClientProps) {
             </div>
           </div>
 
-                          <div>
-                  <p className="text-sm font-medium text-gray-600">Current Plan</p>
-                  <p className="text-2xl font-bold text-gray-900">
-                    {profile.subscription_status ? 'Pro' : 'Free'}
-                  </p>
-                </div>
+          <div className="bg-white rounded-2xl p-6 border border-gray-200">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">Current Plan</p>
+                <p className="text-2xl font-bold text-gray-900">
+                  {getPlanDisplayName()}
+                </p>
+              </div>
+              <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
+                (profile.subscription_status === 'active' || profile.subscription_status === 'trialing') ? 'bg-purple-100' : 'bg-gray-100'
+              }`}>
+                <svg className={`w-6 h-6 ${
+                  (profile.subscription_status === 'active' || profile.subscription_status === 'trialing') ? 'text-purple-600' : 'text-gray-600'
+                }`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
+                </svg>
+              </div>
+            </div>
+          </div>
 
           <div className="bg-white rounded-2xl p-6 border border-gray-200">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600">Credits Used</p>
-                <p className="text-2xl font-bold text-gray-900">-</p>
+                <p className="text-sm font-medium text-gray-600">Subscription Status</p>
+                <p className="text-2xl font-bold text-gray-900">
+                  {getSubscriptionStatus()}
+                </p>
               </div>
-              <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
-                <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+              <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
+                (profile.subscription_status === 'active' || profile.subscription_status === 'trialing') ? 'bg-green-100' : 
+                (profile.subscription_status === 'canceled' || profile.subscription_status === 'cancelled') ? 'bg-red-100' : 
+                'bg-gray-100'
+              }`}>
+                <svg className={`w-6 h-6 ${
+                  (profile.subscription_status === 'active' || profile.subscription_status === 'trialing') ? 'text-green-600' : 
+                  (profile.subscription_status === 'canceled' || profile.subscription_status === 'cancelled') ? 'text-red-600' : 
+                  'text-gray-600'
+                }`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  {(profile.subscription_status === 'active' || profile.subscription_status === 'trialing') ? (
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  ) : (profile.subscription_status === 'canceled' || profile.subscription_status === 'cancelled') ? (
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  ) : (
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                  )}
                 </svg>
               </div>
             </div>
@@ -127,7 +173,17 @@ export default function BillingClient({ user, profile }: BillingClientProps) {
               <div>
                 <p className="text-sm font-medium text-gray-600">Next Billing</p>
                 <p className="text-lg font-bold text-gray-900">
-                  {profile.subscription_status === 'active' ? 'Oct 15' : 'N/A'}
+                  {(profile.subscription_status === 'active' || profile.subscription_status === 'trialing') && profile.updated_at ? 
+                    (() => {
+                      const nextBilling = new Date(profile.updated_at);
+                      nextBilling.setDate(nextBilling.getDate() + 30);
+                      return nextBilling.toLocaleDateString('en-US', { 
+                        month: 'short', 
+                        day: 'numeric',
+                        year: 'numeric'
+                      });
+                    })()
+                    : 'N/A'}
                 </p>
               </div>
               <div className="w-12 h-12 bg-orange-100 rounded-xl flex items-center justify-center">
@@ -182,7 +238,7 @@ export default function BillingClient({ user, profile }: BillingClientProps) {
                   {key === 'pro' && (
                     <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
                       <span className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-4 py-1 rounded-full text-xs font-medium">
-                        Most Popular
+                        Best Value
                       </span>
                     </div>
                   )}
@@ -258,10 +314,7 @@ export default function BillingClient({ user, profile }: BillingClientProps) {
               <div>
                 <h3 className="font-medium text-gray-900 mb-3">Credit System</h3>
                 <ul className="space-y-2 text-sm text-gray-600">
-                  <li className="flex items-start">
-                    <span className="text-blue-500 mr-2">•</span>
-                    Each AI generation costs 1 credit
-                  </li>
+                  
                   <li className="flex items-start">
                     <span className="text-blue-500 mr-2">•</span>
                     Credits are renewed monthly with your subscription

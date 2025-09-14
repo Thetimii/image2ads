@@ -97,17 +97,17 @@ export default function DashboardLayout({ user, profile, children }: DashboardLa
 
       {/* Sidebar */}
       <div className={`
-        fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-gray-200 transform transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:flex-shrink-0
+        fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-gray-200 transform transition-transform duration-300 ease-in-out lg:translate-x-0
         ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
       `}>
         <div className="flex flex-col h-screen w-64">
-          {/* Logo */}
-          <div className="flex items-center justify-between h-16 px-6 border-b border-gray-200">
+          {/* Header */}
+          <div className="flex items-center justify-between h-16 px-6 border-b border-gray-200 flex-shrink-0">
             <Link href="/" className="flex items-center space-x-2">
               <div className="w-8 h-8 bg-gradient-to-r from-blue-600 to-purple-600 rounded-lg flex items-center justify-center">
                 <span className="text-white font-bold text-sm">IA</span>
               </div>
-              <span className="text-xl font-semibold text-gray-900">Image2Ad</span>
+              <span className="text-xl font-bold text-gray-900">Image2Ad</span>
             </Link>
             <button
               onClick={() => setSidebarOpen(false)}
@@ -120,16 +120,16 @@ export default function DashboardLayout({ user, profile, children }: DashboardLa
           </div>
 
           {/* User info */}
-          <div className="px-6 py-4 border-b border-gray-200">
+          <div className="px-6 py-4 border-b border-gray-200 flex-shrink-0">
             <div className="flex items-center space-x-3">
               <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full flex items-center justify-center">
-                <span className="text-white font-medium text-sm">
-                  {user.email?.charAt(0).toUpperCase()}
+                <span className="text-white font-semibold text-sm">
+                  {profile.full_name ? profile.full_name.charAt(0).toUpperCase() : user.email?.charAt(0).toUpperCase()}
                 </span>
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-gray-900 truncate">
-                  {user.email}
+                  {profile.full_name || 'User'}
                 </p>
                 <div className="flex items-center space-x-1">
                   <div className="w-2 h-2 bg-green-400 rounded-full"></div>
@@ -139,7 +139,7 @@ export default function DashboardLayout({ user, profile, children }: DashboardLa
             </div>
           </div>
 
-          {/* Navigation */}
+          {/* Main navigation - Fixed height, no scrolling */}
           <nav className="flex-1 px-4 py-4 space-y-1">
             {navigation.map((item) => (
               <Link
@@ -164,8 +164,8 @@ export default function DashboardLayout({ user, profile, children }: DashboardLa
             ))}
           </nav>
 
-          {/* Bottom navigation */}
-          <div className="px-4 py-4 border-t border-gray-200 space-y-1">
+          {/* Bottom navigation - Always fixed at bottom */}
+          <div className="px-4 py-4 border-t border-gray-200 space-y-1 flex-shrink-0 mt-auto">
             {bottomNavigation.map((item) => (
               <Link
                 key={item.name}
@@ -205,7 +205,7 @@ export default function DashboardLayout({ user, profile, children }: DashboardLa
       </div>
 
       {/* Main content */}
-      <div className="flex-1 flex flex-col min-h-screen overflow-hidden">
+      <div className="flex-1 flex flex-col min-h-screen overflow-hidden lg:ml-64">
         {/* Mobile header */}
         <div className="lg:hidden bg-white border-b border-gray-200 px-4 py-3">
           <div className="flex items-center justify-between">
