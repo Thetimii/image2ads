@@ -57,7 +57,7 @@ export default function GenerateJobForm({ userImages, onGenerateAction }: Genera
         <p className="text-blue-800 text-sm">
           The <strong>first image</strong> is used as the <strong>base scene</strong> (background/person). 
           All later images are <strong>references</strong> (products) that guide the edit.
-          Select at least 2 images and use "Set as Scene" to reorder.
+          Select at least 2 images and use &quot;Set as Scene&quot; to reorder.
         </p>
       </div>
 
@@ -98,7 +98,7 @@ export default function GenerateJobForm({ userImages, onGenerateAction }: Genera
           <div className="space-y-3">
             {selectedImages.map((image, idx) => (
               <div key={image.id} className="flex items-center gap-4 p-3 border rounded-lg">
-                <img src={image.thumb} className="h-12 w-12 rounded object-cover" />
+                <img src={image.thumb} className="h-12 w-12 rounded object-cover" alt={image.name} />
                 <span className="flex-1 font-medium">{image.name}</span>
                 
                 {idx === 0 ? (
