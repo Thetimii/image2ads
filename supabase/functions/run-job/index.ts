@@ -6,7 +6,27 @@ const supabase = createClient(
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
 );
 
-// Helper function for GPT Image 1 edits with preserved MIME types and filenames
+// Helper functions for image validation and MIME detection
+function sniffMime(bytes: Uint8Array): "image/png"|"image/jpeg"|"image/webp"|null {
+  // PNG: 89 50 4E 47 0D 0A 1A 0A
+  if (bytes.length > 8 &&
+      bytes[0]===0x89 && bytes[1]===0x50 && bytes[2]===0x4E && bytes[3]===0x47 &&
+      bytes[4]===0x0D && bytes[5]===0x0A && bytes[6]===0x1A && bytes[7]===0x0A) return "image/png";
+  // JPEG: FF D8 FF
+  if (bytes.length > 3 && bytes[0]===0xFF && bytes[1]===0xD8 && bytes[2]===0xFF) return "image/jpeg";
+  // WEBP: "RIFF....WEBP"
+  if (bytes.length > 12 &&
+      bytes[0]===0x52 && bytes[1]===0x49 && bytes[2]===0x46 && bytes[3]===0x46 &&
+      bytes[8]===0x57 && bytes[9]===0x45 && bytes[10]===0x42 && bytes[11]===0x50) return "image/webp";
+  return null;
+}
+
+function safeName(name: string, mime: string) {
+  const ext = mime === "image/png" ? "png" : mime === "image/webp" ? "webp" : "jpg";
+  return name.includes(".") ? name : `${name}.${ext}`;
+}
+
+// Helper function for GPT Image 1 edits with validation and proper MIME detection
 async function gptImageEdit({
   prompt,
   inputs,
@@ -29,22 +49,34 @@ async function gptImageEdit({
   form.append("size", size);
   form.append("output_format", outputFormat);
 
-  // Attach each image with real MIME type and filename (first = scene)
+  let idx = 0;
   for (const { url, mime, filename } of inputs) {
-    const r = await fetch(url);
-    if (!r.ok) throw new Error(`Failed to fetch input image: ${r.status}`);
-    const buf = await r.arrayBuffer();
-    const name = filename.includes(".") ? filename : `${filename}.${(mime.split("/")[1] || "jpg")}`;
-    form.append("image[]", new Blob([buf], { type: mime }), name);
+    const r = await fetch(url, { redirect: "follow" });
+    if (!r.ok) throw new Error(`Input ${idx+1} fetch failed: ${r.status}`);
+    const buf = new Uint8Array(await r.arrayBuffer());
+    if (buf.byteLength === 0) throw new Error(`Input ${idx+1} is empty`);
+
+    // Sniff bytes to avoid mislabeled/unsupported files (common cause of 400)
+    const detected = sniffMime(buf);
+    if (!detected) throw new Error(`Input ${idx+1} is not a valid PNG/JPEG/WEBP`);
+    const partMime = detected;                      // use detected mime over DB mime
+    const name = safeName(filename, partMime);
+
+    form.append("image[]", new Blob([buf], { type: partMime }), name);
+    idx++;
   }
 
   const resp = await fetch("https://api.openai.com/v1/images/edits", {
     method: "POST",
     headers: { Authorization: `Bearer ${openaiApiKey}` },
-    body: form,
+    body: form, // let fetch set boundary
   });
 
-  if (!resp.ok) throw new Error(`gpt-image-1 edits failed: ${resp.status} ${await resp.text()}`);
+  if (!resp.ok) {
+    const text = await resp.text();
+    throw new Error(`gpt-image-1 edits failed: ${resp.status} ${text}`);
+  }
+
   const json = await resp.json();
   const b64 = json?.data?.[0]?.b64_json;
   if (!b64) throw new Error("No image data in response");
@@ -382,12 +414,12 @@ serve(async (request) => {
       );
     }
 
-    // Get signed URLs for all source images with proper metadata (preserves client order)
+    // Get signed URLs for all source images with proper metadata (preserves client order - scene first)
     type InputPart = { url: string; mime: string; filename: string };
-    const inputs: InputPart[] = [];
+    const inputs: InputPart[] = [];          // image_ids order = scene first
     let targetFolderId: string | null = null;
     
-    for (const imageId of job.image_ids) {        // preserves client order
+    for (const imageId of job.image_ids) {
       // Get image details with metadata
       const { data: image, error: imageError } = await supabase
         .from("images")
@@ -426,14 +458,13 @@ serve(async (request) => {
           })
           .eq("id", jobId);
 
-        return new Response("Failed to access source images", { status: 500 });
+        return new Response("Signed URL error", { status: 500 });
       }
 
       inputs.push({
         url: signedUrl.signedUrl,
-        mime: image.mime_type || "image/jpeg",                  // preserve real type
-        filename: image.original_name ||                        // preserve real name
-                  image.file_path.split("/").pop() || "input",  // sane fallback
+        mime: image.mime_type || "image/jpeg",                           // preserve
+        filename: image.original_name || image.file_path.split("/").pop() || "input.jpg",
       });
     }
 

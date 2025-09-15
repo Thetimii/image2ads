@@ -55,9 +55,9 @@ export default function GenerateJobForm({ userImages, onGenerateAction }: Genera
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
         <h3 className="font-medium text-blue-900 mb-2">How it works:</h3>
         <p className="text-blue-800 text-sm">
-          <strong>Scene</strong>: Choose the background/person photo (base image). 
-          <strong>References</strong>: Choose the product images to insert. 
-          The first image is used as the base scene; the rest guide the insertion.
+          The <strong>first image</strong> is used as the <strong>base scene</strong> (background/person). 
+          All later images are <strong>references</strong> (products) that guide the edit.
+          Select at least 2 images and use "Set as Scene" to reorder.
         </p>
       </div>
 
