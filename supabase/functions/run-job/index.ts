@@ -6,6 +6,51 @@ const supabase = createClient(
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
 );
 
+// Helper function for GPT Image 1 edits with preserved MIME types and filenames
+async function gptImageEdit({
+  prompt,
+  inputs,
+  openaiApiKey,
+  quality = "medium",
+  size = "1024x1024",
+  outputFormat = "png",
+}: {
+  prompt: string;
+  inputs: { url: string; mime: string; filename: string }[];
+  openaiApiKey: string;
+  quality?: "low" | "medium" | "high";
+  size?: "1024x1024" | "1536x1024" | "1024x1536";
+  outputFormat?: "png" | "jpeg" | "webp";
+}) {
+  const form = new FormData();
+  form.append("model", "gpt-image-1");
+  form.append("prompt", prompt);
+  form.append("quality", quality);
+  form.append("size", size);
+  form.append("output_format", outputFormat);
+
+  // Attach each image with real MIME type and filename (first = scene)
+  for (const { url, mime, filename } of inputs) {
+    const r = await fetch(url);
+    if (!r.ok) throw new Error(`Failed to fetch input image: ${r.status}`);
+    const buf = await r.arrayBuffer();
+    const name = filename.includes(".") ? filename : `${filename}.${(mime.split("/")[1] || "jpg")}`;
+    form.append("image[]", new Blob([buf], { type: mime }), name);
+  }
+
+  const resp = await fetch("https://api.openai.com/v1/images/edits", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${openaiApiKey}` },
+    body: form,
+  });
+
+  if (!resp.ok) throw new Error(`gpt-image-1 edits failed: ${resp.status} ${await resp.text()}`);
+  const json = await resp.json();
+  const b64 = json?.data?.[0]?.b64_json;
+  if (!b64) throw new Error("No image data in response");
+  return Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+}
+
 // Polling function to check FAL.ai job status
 async function pollForResult(
   requestId: string,
@@ -156,246 +201,77 @@ async function pollForResult(
     .eq("id", jobId);
 }
 
-// Handle OpenAI GPT Image 1 generation
-async function handleOpenAIGeneration(
+// Handle OpenAI GPT Image 1 edits (scene first, then references)
+async function handleOpenAIEditCombination(
   job: any,
   jobId: string,
   openaiApiKey: string,
-  model: string
+  inputs: { url: string; mime: string; filename: string }[],
+  targetFolderId: string | null
 ) {
-  console.log(
-    `Starting OpenAI GPT Image 1 generation for job ${jobId} with model ${model}`
-  );
-
   try {
-    // Parse model to get quality and aspect ratio
-    // Format: openai-{quality}-{aspect}
-    // Example: openai-low-square, openai-medium-landscape, openai-high-portrait
-    const parts = model.split("-");
-    const quality = parts[1] || "low"; // low, medium, high
-    const aspect = parts[2] || "square"; // square, landscape, portrait
+    // Map your model string to gpt-image-1 params
+    const quality: "low" | "medium" | "high" =
+      job.model?.includes("-high") ? "high" :
+      job.model?.includes("-low")  ? "low"  : "medium";
 
-    // Determine size and credit multiplier based on quality and aspect ratio
-    let size: string;
-    let creditMultiplier: number;
+    const size: "1024x1024" | "1536x1024" | "1024x1536" =
+      job.model?.endsWith("landscape") ? "1536x1024" :
+      job.model?.endsWith("portrait")  ? "1024x1536" : "1024x1024";
 
-    if (quality === "low") {
-      size =
-        aspect === "square"
-          ? "1024x1024"
-          : aspect === "landscape"
-          ? "1536x1024"
-          : "1024x1536";
-      creditMultiplier = 0.5;
-    } else if (quality === "medium") {
-      size =
-        aspect === "square"
-          ? "1024x1024"
-          : aspect === "landscape"
-          ? "1536x1024"
-          : "1024x1536";
-      creditMultiplier = 1;
-    } else {
-      // high
-      size =
-        aspect === "square"
-          ? "1024x1024"
-          : aspect === "landscape"
-          ? "1536x1024"
-          : "1024x1536";
-      // High quality: 7 credits for all sizes
-      creditMultiplier = 7;
-    }
+    console.log(`OpenAI GPT Image 1 settings: quality=${quality}, size=${size}`);
 
-    console.log(
-      `OpenAI GPT Image 1 settings: quality=${quality}, aspect=${aspect}, size=${size}, creditMultiplier=${creditMultiplier}`
-    );
+    // No credit logic here—credits were already consumed via RPC earlier
+    await supabase.from("jobs").update({ status: "processing" }).eq("id", jobId);
 
-    // Check and deduct credits before processing
-    const { data: profile, error: profileError } = await supabase
-      .from("profiles")
-      .select("credits")
-      .eq("id", job.user_id)
-      .single();
+    // Call edit function with ordered inputs (first = scene)
+    const bytes = await gptImageEdit({
+      prompt: job.prompt,
+      inputs,
+      openaiApiKey,
+      quality,
+      size,
+      outputFormat: "png",
+    });
 
-    if (profileError || !profile) {
-      console.error("Failed to get user profile:", profileError);
-      await supabase
-        .from("jobs")
-        .update({
-          status: "failed",
-          error_message: "Failed to get user profile",
-        })
-        .eq("id", jobId);
-      return;
-    }
+    // Save result to the SAME FOLDER structure in results bucket
+    const resultKey = `${job.user_id}/${targetFolderId}/${jobId}-${Date.now()}.png`;
 
-    if (profile.credits < creditMultiplier) {
-      console.error(
-        `Insufficient credits: ${profile.credits} < ${creditMultiplier}`
-      );
-      await supabase
-        .from("jobs")
-        .update({
-          status: "failed",
-          error_message: `Insufficient credits. Required: ${creditMultiplier}, Available: ${profile.credits}`,
-        })
-        .eq("id", jobId);
-      return;
-    }
-
-    // Deduct credits
-    const { error: creditError } = await supabase
-      .from("profiles")
-      .update({ credits: profile.credits - creditMultiplier })
-      .eq("id", job.user_id);
-
-    if (creditError) {
-      console.error("Failed to deduct credits:", creditError);
-      await supabase
-        .from("jobs")
-        .update({
-          status: "failed",
-          error_message: "Failed to deduct credits",
-        })
-        .eq("id", jobId);
-      return;
-    }
-
-    console.log(
-      `Deducted ${creditMultiplier} credits from user ${job.user_id}`
-    );
-
-    // Update job status to processing
-    await supabase
-      .from("jobs")
-      .update({ status: "processing" })
-      .eq("id", jobId);
-
-    // Call OpenAI GPT Image 1 for image generation
-    const response = await fetch(
-      "https://api.openai.com/v1/images/generations",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${openaiApiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "gpt-image-1",
-          prompt: job.prompt,
-          quality: quality,
-          size: size,
-          response_format: "b64_json",
-        }),
-      }
-    );
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error(
-        "OpenAI GPT Image 1 API failed:",
-        response.status,
-        errorText
-      );
-
-      await supabase
-        .from("jobs")
-        .update({
-          status: "failed",
-          error_message: `OpenAI GPT Image 1 API failed: ${response.status} ${errorText}`,
-        })
-        .eq("id", jobId);
-      return;
-    }
-
-    const result = await response.json();
-    console.log("OpenAI GPT Image 1 result:", result);
-
-    if (!result.data || !result.data[0] || !result.data[0].b64_json) {
-      console.error("No image data in OpenAI GPT Image 1 response");
-
-      await supabase
-        .from("jobs")
-        .update({
-          status: "failed",
-          error_message: "No image data in OpenAI GPT Image 1 response",
-        })
-        .eq("id", jobId);
-      return;
-    }
-
-    const b64Data = result.data[0].b64_json;
-
-    // Convert base64 to buffer
-    const imageBuffer = Uint8Array.from(atob(b64Data), (c) => c.charCodeAt(0));
-    const fileName = `generated_${jobId}_${Date.now()}.png`;
-
-    // Upload to Supabase storage
     const { data: uploadData, error: uploadError } = await supabase.storage
-      .from("uploads")
-      .upload(fileName, imageBuffer, {
-        contentType: "image/png",
-      });
+      .from("results")
+      .upload(resultKey, bytes, { contentType: "image/png" });
 
-    if (uploadError) {
-      console.error("Failed to upload image:", uploadError);
+    if (uploadError) throw new Error(`Failed to upload result: ${uploadError.message}`);
 
-      await supabase
-        .from("jobs")
-        .update({
-          status: "failed",
-          error_message: "Failed to save generated image",
-        })
-        .eq("id", jobId);
-      return;
-    }
-
-    // Save image record
+    // Insert image record with correct column names
     const { data: imageRecord, error: imageError } = await supabase
       .from("images")
       .insert({
-        file_path: uploadData.path,
-        file_name: fileName,
+        file_path: resultKey,
+        original_name: resultKey.split("/").pop()!,
+        mime_type: "image/png",
+        file_size: bytes.byteLength,
         user_id: job.user_id,
-        folder_id: job.folder_id,
-        file_size: imageBuffer.byteLength,
-        content_type: "image/png",
+        folder_id: targetFolderId, // same folder as inputs
       })
       .select()
       .single();
 
-    if (imageError) {
-      console.error("Failed to save image record:", imageError);
+    if (imageError) throw new Error(`Failed to insert image record: ${imageError.message}`);
 
-      await supabase
-        .from("jobs")
-        .update({
-          status: "failed",
-          error_message: "Failed to save image record",
-        })
-        .eq("id", jobId);
-      return;
-    }
-
-    // Update job status to completed
     await supabase
       .from("jobs")
-      .update({
-        status: "completed",
-        result_image_id: imageRecord.id,
-      })
+      .update({ status: "completed", result_image_id: imageRecord.id })
       .eq("id", jobId);
 
-    console.log(`OpenAI job ${jobId} completed successfully`);
+    console.log(`OpenAI edit job ${jobId} completed`);
   } catch (error) {
-    console.error("OpenAI generation error:", error);
-
+    console.error("OpenAI edit error:", error);
     await supabase
       .from("jobs")
       .update({
         status: "failed",
-        error_message: (error as Error).message || "OpenAI generation failed",
+        error_message: (error as Error).message ?? "OpenAI edit failed",
       })
       .eq("id", jobId);
   }
@@ -470,13 +346,25 @@ serve(async (request) => {
       .update({ status: "processing" })
       .eq("id", jobId);
 
-    // Check if user has enough credits
-    const canConsume = await supabase.rpc("consume_credit", {
+    // Check if user has enough credits (always 1 credit per generation)
+    const { data: canConsume, error: creditError } = await supabase.rpc("consume_credit", {
       user_uuid: job.user_id,
-      credit_amount: job.credits_used,
+      credit_amount: 1,
     });
 
-    if (!canConsume.data) {
+    if (creditError) {
+      console.error("consume_credit RPC error:", creditError);
+      await supabase
+        .from("jobs")
+        .update({
+          status: "failed",
+          error_message: `Billing system error: ${creditError.message}`,
+        })
+        .eq("id", jobId);
+      return new Response("Billing system error", { status: 500 });
+    }
+
+    if (!canConsume) {
       await supabase
         .from("jobs")
         .update({
@@ -485,16 +373,25 @@ serve(async (request) => {
         })
         .eq("id", jobId);
 
-      return new Response("Insufficient credits", { status: 400 });
+      return new Response(
+        JSON.stringify({ error: "Insufficient credits" }),
+        { 
+          status: 400,
+          headers: { "Content-Type": "application/json" }
+        }
+      );
     }
 
-    // Get signed URLs for all source images
-    const imageUrls = [];
-    for (const imageId of job.image_ids) {
-      // Get image details
+    // Get signed URLs for all source images with proper metadata (preserves client order)
+    type InputPart = { url: string; mime: string; filename: string };
+    const inputs: InputPart[] = [];
+    let targetFolderId: string | null = null;
+    
+    for (const imageId of job.image_ids) {        // preserves client order
+      // Get image details with metadata
       const { data: image, error: imageError } = await supabase
         .from("images")
-        .select("file_path")
+        .select("file_path, folder_id, original_name, mime_type")
         .eq("id", imageId)
         .single();
 
@@ -510,6 +407,9 @@ serve(async (request) => {
 
         return new Response("Image not found", { status: 404 });
       }
+
+      // Use first input's folder for the result
+      if (!targetFolderId) targetFolderId = image.folder_id;
 
       // Create signed URL
       const { data: signedUrl, error: urlError } = await supabase.storage
@@ -529,16 +429,21 @@ serve(async (request) => {
         return new Response("Failed to access source images", { status: 500 });
       }
 
-      imageUrls.push(signedUrl.signedUrl);
+      inputs.push({
+        url: signedUrl.signedUrl,
+        mime: image.mime_type || "image/jpeg",                  // preserve real type
+        filename: image.original_name ||                        // preserve real name
+                  image.file_path.split("/").pop() || "input",  // sane fallback
+      });
     }
 
-    console.log("Calling FAL.ai with", imageUrls.length, "images");
-    console.log("Image URLs:", imageUrls);
+    console.log("Calling API with", inputs.length, "images");
+    console.log("Input files:", inputs.map(i => i.filename));
     console.log("Prompt:", job.prompt);
     console.log("Model:", job.model || "gemini");
 
     // Use fal.subscribe but with timeout handling
-    console.log("Submitting request to FAL.ai...");
+    console.log("Submitting request...");
 
     const falApiKey = Deno.env.get("FAL_KEY");
     const openaiApiKey = Deno.env.get("OPENAI_API_KEY");
@@ -548,9 +453,27 @@ serve(async (request) => {
     }
 
     const model = job.model || "gemini";
+
+    if (model.startsWith("openai-")) {
+      // Use gpt-image-1 composition to combine reference images
+      if (!openaiApiKey) {
+        throw new Error("OPENAI_API_KEY environment variable not set");
+      }
+      
+      await handleOpenAIEditCombination(job, jobId, openaiApiKey, inputs, targetFolderId);
+
+      return new Response(
+        JSON.stringify({ success: true, jobId, message: "OpenAI edit submitted and processed" }),
+        { headers: { "Content-Type": "application/json" } }
+      );
+    }
+
+    // For FAL.ai models, convert inputs back to URLs array
+    const imageUrls = inputs.map(input => input.url);
+
+    // Handle FAL.ai models (gemini, seedream)
     let submitUrl: string;
     let payload: any;
-    let useOpenAI = false;
 
     if (model === "seedream") {
       // ByteDance SeedDream v4 configuration
@@ -563,47 +486,21 @@ serve(async (request) => {
           height: 4096,
         },
         num_images: 1,
-        max_images: 2, // Generate 2 variations for better selection
+        max_images: 2,
         enable_safety_checker: true,
         sync_mode: false,
       };
-    } else if (model.startsWith("openai-")) {
-      // OpenAI DALL-E 3 configuration with quality options
-      useOpenAI = true;
-      const quality = model.includes("low")
-        ? "standard"
-        : model.includes("medium")
-        ? "standard"
-        : "hd";
-      const size = model.includes("low")
-        ? "1024x1024"
-        : model.includes("medium")
-        ? "1024x1792"
-        : "1792x1024";
-
-      if (!openaiApiKey) {
-        throw new Error("OPENAI_API_KEY environment variable not set");
-      }
-
-      submitUrl = "https://api.openai.com/v1/images/edits";
-      // Note: OpenAI image editing requires different handling, we'll handle this in the submission section
     } else {
       // Gemini configuration (default)
       submitUrl = "https://queue.fal.run/fal-ai/gemini-25-flash-image/edit";
       payload = {
         prompt: job.prompt,
         image_urls: imageUrls,
-        num_images: 2, // Generate 2 images for better selection
-        output_format: "png", // Use PNG for better quality
-        sync_mode: false, // Use URLs for better performance
+        num_images: 2,
+        output_format: "png",
+        sync_mode: false,
       };
     }
-
-    // Submit to appropriate API
-    if (useOpenAI) {
-      // Handle OpenAI DALL-E 3 image generation directly
-      await handleOpenAIGeneration(job, jobId, openaiApiKey, model);
-    } else {
       // Submit to FAL.ai queue using direct HTTP
       const submitResponse = await fetch(submitUrl, {
         method: "POST",
@@ -644,7 +541,6 @@ serve(async (request) => {
           job.model || "gemini"
         );
       }, 1000);
-    }
 
     console.log(`Job ${jobId} submitted to FAL.ai, processing in background`);
 
