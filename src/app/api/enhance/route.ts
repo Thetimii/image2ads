@@ -16,11 +16,11 @@ export async function POST(request: NextRequest) {
     }
 
     // Get the image URL from request body
-    const { imageUrl, resultId } = await request.json();
+    const { imageUrl, jobId } = await request.json();
 
-    if (!imageUrl || !resultId) {
+    if (!imageUrl || !jobId) {
       return NextResponse.json(
-        { error: "Image URL and result ID are required" },
+        { error: "Image URL and job ID are required" },
         { status: 400 }
       );
     }
@@ -74,7 +74,7 @@ export async function POST(request: NextRequest) {
     const enhancedImageBuffer = await enhanceResponse.arrayBuffer();
 
     // Save enhanced image to Supabase storage
-    const enhancedFileName = `${user.id}/${resultId}-enhanced.png`;
+    const enhancedFileName = `${user.id}/${jobId}-enhanced.png`;
 
     const { error: uploadError } = await supabase.storage
       .from("results")

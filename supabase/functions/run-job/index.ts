@@ -93,7 +93,7 @@ async function pollForResult(
           }
 
           const imageBuffer = await imageResponse.arrayBuffer();
-          const fileName = `${userId}/${jobId}-result-${i + 1}.png`;
+          const fileName = `${userId}/${jobId}-result.png`;
 
           // Upload result to Supabase storage
           const { error: uploadError } = await supabase.storage
@@ -109,6 +109,7 @@ async function pollForResult(
           }
 
           storedImagePaths.push(fileName);
+          break; // Only save the first result
         }
 
         // Update job with all result URLs (comma-separated for now)
@@ -177,7 +178,7 @@ async function handleOpenAIGeneration(
     // Determine size and credit multiplier based on quality and aspect ratio
     let size: string;
     let creditMultiplier: number;
-    
+
     if (quality === "low") {
       size =
         aspect === "square"
@@ -325,9 +326,9 @@ async function handleOpenAIGeneration(
     }
 
     const b64Data = result.data[0].b64_json;
-    
+
     // Convert base64 to buffer
-    const imageBuffer = Uint8Array.from(atob(b64Data), c => c.charCodeAt(0));
+    const imageBuffer = Uint8Array.from(atob(b64Data), (c) => c.charCodeAt(0));
     const fileName = `generated_${jobId}_${Date.now()}.png`;
 
     // Upload to Supabase storage

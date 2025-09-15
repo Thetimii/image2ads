@@ -49,6 +49,7 @@ export const jobSchema = z.object({
   status: z.enum(["pending", "processing", "completed", "failed"]),
   result_url: z.string().optional(),
   error_message: z.string().optional(),
+  custom_name: z.string().optional(),
   credits_used: z.number().int().min(1),
   created_at: z.string(),
   updated_at: z.string(),

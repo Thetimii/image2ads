@@ -44,7 +44,7 @@ export async function DELETE(
     if (images && images.length > 0) {
       // Delete image files from storage
       const filePaths = images.map((img) => img.file_path);
-      await supabase.storage.from("images").remove(filePaths);
+      await supabase.storage.from("uploads").remove(filePaths);
 
       // Delete image records
       const { error: imagesDeleteError } = await supabase
