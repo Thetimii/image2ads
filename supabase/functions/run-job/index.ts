@@ -26,17 +26,37 @@ function safeName(name: string, mime: string) {
   return name.includes(".") ? name : `${name}.${ext}`;
 }
 
+// Try to sign + download from uploads, then results.
+// IMPORTANT: createSignedUrl doesn't verify object existence, so we must download and sniff.
+async function fetchImageFromEitherBucket(filePath: string): Promise<{ bytes: Uint8Array; mime: "image/png"|"image/jpeg"|"image/webp"; }> {
+  for (const bucket of ["uploads", "results"] as const) {
+    const { data: signed, error } = await supabase.storage.from(bucket).createSignedUrl(filePath, 1200);
+    if (error || !signed) continue;
+
+    const res = await fetch(signed.signedUrl, { redirect: "follow" });
+    if (!res.ok) continue;
+
+    const buf = new Uint8Array(await res.arrayBuffer());
+    const detected = sniffMime(buf);
+    if (detected) return { bytes: buf, mime: detected };
+    // If we got here, it was probably HTML/JSON — try next bucket.
+  }
+  throw new Error(`Could not fetch a valid image for path: ${filePath}`);
+}
+
+type ImagePart = { bytes: Uint8Array; mime: "image/png"|"image/jpeg"|"image/webp"; filename: string };
+
 // Helper function for GPT Image 1 edits with validation and proper MIME detection
 async function gptImageEdit({
   prompt,
-  inputs,
+  parts,
   openaiApiKey,
   quality = "medium",
   size = "1024x1024",
   outputFormat = "png",
 }: {
   prompt: string;
-  inputs: { url: string; mime: string; filename: string }[];
+  parts: ImagePart[];
   openaiApiKey: string;
   quality?: "low" | "medium" | "high";
   size?: "1024x1024" | "1536x1024" | "1024x1536";
@@ -49,22 +69,9 @@ async function gptImageEdit({
   form.append("size", size);
   form.append("output_format", outputFormat);
 
-  let idx = 0;
-  for (const { url, mime, filename } of inputs) {
-    const r = await fetch(url, { redirect: "follow" });
-    if (!r.ok) throw new Error(`Input ${idx+1} fetch failed: ${r.status}`);
-    const buf = new Uint8Array(await r.arrayBuffer());
-    if (buf.byteLength === 0) throw new Error(`Input ${idx+1} is empty`);
-
-    // Sniff bytes to avoid mislabeled/unsupported files (common cause of 400)
-    const detected = sniffMime(buf);
-    if (!detected) throw new Error(`Input ${idx+1} is not a valid PNG/JPEG/WEBP`);
-    const partMime = detected;                      // use detected mime over DB mime
-    const name = safeName(filename, partMime);
-
-    form.append("image[]", new Blob([buf], { type: partMime }), name);
-    idx++;
-  }
+  parts.forEach(({ bytes, mime, filename }) => {
+    form.append("image[]", new Blob([new Uint8Array(bytes)], { type: mime }), filename);
+  });
 
   const resp = await fetch("https://api.openai.com/v1/images/edits", {
     method: "POST",
@@ -238,7 +245,7 @@ async function handleOpenAIEditCombination(
   job: any,
   jobId: string,
   openaiApiKey: string,
-  inputs: { url: string; mime: string; filename: string }[],
+  parts: ImagePart[],
   targetFolderId: string | null
 ) {
   try {
@@ -256,10 +263,10 @@ async function handleOpenAIEditCombination(
     // No credit logic here—credits were already consumed via RPC earlier
     await supabase.from("jobs").update({ status: "processing" }).eq("id", jobId);
 
-    // Call edit function with ordered inputs (first = scene)
+    // Call edit function with ordered parts (first = scene)
     const bytes = await gptImageEdit({
       prompt: job.prompt,
-      inputs,
+      parts,
       openaiApiKey,
       quality,
       size,
@@ -414,16 +421,15 @@ serve(async (request) => {
       );
     }
 
-    // Get signed URLs for all source images with proper metadata (preserves client order - scene first)
-    type InputPart = { url: string; mime: string; filename: string };
-    const inputs: InputPart[] = [];          // image_ids order = scene first
+    // Get images with proper metadata and bytes (preserves client order - scene first)
+    const parts: ImagePart[] = [];          // keeps client order: first = scene/base, rest = references
     let targetFolderId: string | null = null;
     
     for (const imageId of job.image_ids) {
       // Get image details with metadata
       const { data: image, error: imageError } = await supabase
         .from("images")
-        .select("file_path, folder_id, original_name, mime_type")
+        .select("file_path, folder_id, original_name")
         .eq("id", imageId)
         .single();
 
@@ -443,33 +449,19 @@ serve(async (request) => {
       // Use first input's folder for the result
       if (!targetFolderId) targetFolderId = image.folder_id;
 
-      // Create signed URL
-      const { data: signedUrl, error: urlError } = await supabase.storage
-        .from("uploads")
-        .createSignedUrl(image.file_path, 300); // 5 minutes
+      // Fetch actual image bytes from either bucket
+      const { bytes, mime } = await fetchImageFromEitherBucket(image.file_path);
 
-      if (urlError || !signedUrl) {
-        console.error("Error creating signed URL:", urlError);
-        await supabase
-          .from("jobs")
-          .update({
-            status: "failed",
-            error_message: "Failed to access source images",
-          })
-          .eq("id", jobId);
+      const filename = safeName(
+        image.original_name || image.file_path.split("/").pop() || "input",
+        mime
+      );
 
-        return new Response("Signed URL error", { status: 500 });
-      }
-
-      inputs.push({
-        url: signedUrl.signedUrl,
-        mime: image.mime_type || "image/jpeg",                           // preserve
-        filename: image.original_name || image.file_path.split("/").pop() || "input.jpg",
-      });
+      parts.push({ bytes, mime, filename });
     }
 
-    console.log("Calling API with", inputs.length, "images");
-    console.log("Input files:", inputs.map(i => i.filename));
+    console.log("Calling API with", parts.length, "images");
+    console.log("Input files:", parts.map(p => p.filename));
     console.log("Prompt:", job.prompt);
     console.log("Model:", job.model || "gemini");
 
@@ -491,7 +483,7 @@ serve(async (request) => {
         throw new Error("OPENAI_API_KEY environment variable not set");
       }
       
-      await handleOpenAIEditCombination(job, jobId, openaiApiKey, inputs, targetFolderId);
+      await handleOpenAIEditCombination(job, jobId, openaiApiKey, parts, targetFolderId);
 
       return new Response(
         JSON.stringify({ success: true, jobId, message: "OpenAI edit submitted and processed" }),
@@ -499,8 +491,31 @@ serve(async (request) => {
       );
     }
 
-    // For FAL.ai models, convert inputs back to URLs array
-    const imageUrls = inputs.map(input => input.url);
+    // For FAL.ai models, we need to create signed URLs from the parts
+    // Convert parts back to URLs array for FAL.ai compatibility
+    const imageUrls: string[] = [];
+    for (const part of parts) {
+      // Upload the bytes to a temporary location and create signed URL
+      const tempKey = `temp/${jobId}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}.${part.mime.split('/')[1]}`;
+      
+      const { error: tempUploadError } = await supabase.storage
+        .from("uploads")
+        .upload(tempKey, part.bytes, { contentType: part.mime });
+
+      if (tempUploadError) {
+        throw new Error(`Failed to create temp file for FAL.ai: ${tempUploadError.message}`);
+      }
+
+      const { data: signedUrl, error: urlError } = await supabase.storage
+        .from("uploads")
+        .createSignedUrl(tempKey, 3600); // 1 hour
+
+      if (urlError || !signedUrl) {
+        throw new Error("Failed to create signed URL for FAL.ai");
+      }
+
+      imageUrls.push(signedUrl.signedUrl);
+    }
 
     // Handle FAL.ai models (gemini, seedream)
     let submitUrl: string;
