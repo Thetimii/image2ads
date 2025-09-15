@@ -203,7 +203,10 @@ async function handleOpenAIGeneration(
           ? "1536x1024"
           : "1024x1536";
       // High quality: 7 credits for all sizes
-      creditMultiplier = 7;    console.log(
+      creditMultiplier = 7;
+    }
+
+    console.log(
       `OpenAI GPT Image 1 settings: quality=${quality}, aspect=${aspect}, size=${size}, creditMultiplier=${creditMultiplier}`
     );
 
@@ -282,8 +285,6 @@ async function handleOpenAIGeneration(
           prompt: job.prompt,
           quality: quality,
           size: size,
-          output_format: "png",
-          background: "transparent",
           response_format: "b64_json",
         }),
       }
