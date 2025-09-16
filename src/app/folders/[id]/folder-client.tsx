@@ -76,7 +76,7 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
           const { generatedAds } = await response.json()
           
           // Check if any loading jobs are now complete
-          const completedJobIds = generatedAds.map((ad: any) => {
+          const completedJobIds = generatedAds.map((ad: { id: string }) => {
             // Extract job ID from filename (format: jobId-timestamp.png)
             const match = ad.id.match(/^(.+)-\d+$/)
             return match ? match[1] : ad.id
@@ -172,7 +172,7 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [user.id, supabase, fetchJobs])
+  }, [user.id, supabase, fetchJobs, fetchGeneratedAds])
 
   const getImageUrl = useCallback(async (image: Image): Promise<string> => {
     try {

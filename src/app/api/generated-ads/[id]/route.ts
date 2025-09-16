@@ -28,7 +28,7 @@ export async function DELETE(
       .single()
 
     // If no metadata exists, we need to find the file in storage to verify ownership
-    let userId = user.id
+    const userId = user.id
     let folderPath = null
 
     if (fetchError && fetchError.code === 'PGRST116') {
