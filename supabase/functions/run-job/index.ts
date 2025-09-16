@@ -218,8 +218,24 @@ async function handler(req: Request) {
       (job.prompt && String(job.prompt)) || "Create a clean studio ad shot of the product."
     );
 
-    // Size (square by default; you can read from job.model if you like)
-    const size: "1024x1024" | "1536x1024" | "1024x1536" = "1024x1024";
+    // Parse size from model parameter (e.g., "openai-medium-landscape" -> "1536x1024")
+    const model = (job.model && String(job.model)) || "openai-medium-square";
+    let size: "1024x1024" | "1536x1024" | "1024x1536" = "1024x1024";
+    let quality: "low" | "medium" | "high" = "medium";
+    
+    if (model.includes("openai")) {
+      // Parse quality: openai-{quality}-{aspect}
+      if (model.includes("-low-")) quality = "low";
+      else if (model.includes("-medium-")) quality = "medium";
+      else if (model.includes("-high-")) quality = "high";
+      
+      // Parse aspect ratio
+      if (model.includes("-landscape")) size = "1536x1024";
+      else if (model.includes("-portrait")) size = "1024x1536";
+      else size = "1024x1024"; // square or default
+    }
+    
+    console.log(`[run-job] Using model: ${model}, size: ${size}, quality: ${quality}`);
 
     // Mark processing
     await supabase.from("jobs").update({ status: "processing" }).eq("id", jobId);
@@ -257,7 +273,7 @@ async function handler(req: Request) {
       prompt,
       pngFiles: files.map(f => ({ bytes: f.bytes, filename: f.filename })),
       size,
-      quality: "medium", // <- as requested
+      quality, // Use parsed quality from model parameter
       apiKey: OPENAI_API_KEY,
       timeoutMs: 60000,
       retryOnce: true,

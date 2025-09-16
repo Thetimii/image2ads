@@ -37,6 +37,8 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
   const [renamingAd, setRenamingAd] = useState<string | null>(null)
   const [newAdName, setNewAdName] = useState('')
   const [jobNames, setJobNames] = useState<Record<string, string>>({})
+  const [searchTerm, setSearchTerm] = useState('')
+  const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'name'>('newest')
   const supabase = createClient()
   const router = useRouter()
 
@@ -575,102 +577,163 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
         {generatedAds.length > 0 && (
           <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
             <div className="p-6 border-b border-gray-200">
-              <h2 className="text-lg font-semibold text-gray-900">Generated Ads</h2>
-              <p className="text-sm text-gray-600 mt-1">View and manage your AI-generated advertisements</p>
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h2 className="text-lg font-semibold text-gray-900">Generated Ads</h2>
+                  <p className="text-sm text-gray-600 mt-1">View and manage your AI-generated advertisements</p>
+                </div>
+                <div className="flex items-center space-x-3">
+                  <div className="relative">
+                    <svg className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 transform -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                    <input
+                      type="text"
+                      placeholder="Search ads..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+                  <select
+                    value={sortBy}
+                    onChange={(e) => setSortBy(e.target.value as 'newest' | 'oldest' | 'name')}
+                    className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    <option value="newest">Newest First</option>
+                    <option value="oldest">Oldest First</option>
+                    <option value="name">By Name</option>
+                  </select>
+                </div>
+              </div>
             </div>
             
             <div className="p-6 space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {generatedAds.map((ad) => (
-                  <div key={ad.id} className="bg-gray-50 rounded-xl p-4 border border-gray-200">
-                    <div className="aspect-square bg-white rounded-lg overflow-hidden mb-3">
-                      <img
-                        src={ad.url}
-                        alt={ad.name}
-                        className="w-full h-full object-cover"
-                      />
+              {(() => {
+                const filteredAds = generatedAds
+                  .filter(ad => 
+                    (ad.name || '').toLowerCase().includes(searchTerm.toLowerCase())
+                  )
+                  .sort((a, b) => {
+                    switch (sortBy) {
+                      case 'oldest':
+                        return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+                      case 'name':
+                        return (a.name || '').localeCompare(b.name || '');
+                      case 'newest':
+                      default:
+                        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+                    }
+                  });
+
+                if (filteredAds.length === 0) {
+                  return (
+                    <div className="text-center py-8">
+                      <div className="text-gray-400 mb-2">
+                        <svg className="w-12 h-12 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                        </svg>
+                      </div>
+                      <p className="text-gray-500">No ads found matching &ldquo;{searchTerm}&rdquo;</p>
+                      <p className="text-sm text-gray-400 mt-1">Try adjusting your search terms</p>
                     </div>
-                    <div className="space-y-2">
-                      {renamingAd === ad.id ? (
-                        <div className="space-y-2">
-                          <input
-                            type="text"
-                            value={newAdName}
-                            onChange={(e) => setNewAdName(e.target.value)}
-                            className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
-                                handleRenameAd(ad.id, newAdName)
-                              } else if (e.key === 'Escape') {
-                                setRenamingAd(null)
-                                setNewAdName('')
+                  );
+                }
+
+                return (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {filteredAds.map((ad) => (
+                    <div key={ad.id} className="bg-gray-50 rounded-xl p-4 border border-gray-200">
+                      <div className="aspect-square bg-white rounded-lg overflow-hidden mb-3">
+                        <img
+                          src={ad.url}
+                          alt={ad.name}
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        {renamingAd === ad.id ? (
+                          <div className="space-y-2">
+                            <input
+                              type="text"
+                              value={newAdName}
+                              onChange={(e) => setNewAdName(e.target.value)}
+                              className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  handleRenameAd(ad.id, newAdName)
+                                } else if (e.key === 'Escape') {
+                                  setRenamingAd(null)
+                                  setNewAdName('')
+                                }
+                              }}
+                              autoFocus
+                            />
+                            <div className="flex space-x-1">
+                              <button
+                                onClick={() => handleRenameAd(ad.id, newAdName)}
+                                className="px-2 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700"
+                              >
+                                Save
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setRenamingAd(null)
+                                  setNewAdName('')
+                                }}
+                                className="px-2 py-1 bg-gray-400 text-white text-xs rounded hover:bg-gray-500"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <>
+                            <h4 className="font-medium text-gray-900 text-sm truncate">{ad.name}</h4>
+                            <p className="text-xs text-gray-500">
+                              {new Date(ad.created_at).toLocaleDateString()}
+                            </p>
+                          </>
+                        )}
+                        <div className="flex items-center space-x-2">
+                          <button
+                            onClick={() => {
+                              setRenamingAd(ad.id)
+                              setNewAdName(ad.name || '')
+                            }}
+                            className="flex-1 bg-gray-600 text-white text-xs px-3 py-2 rounded-lg hover:bg-gray-700 transition-colors text-center"
+                          >
+                            Rename
+                          </button>
+                          <button
+                            onClick={async () => {
+                              try {
+                                const response = await fetch(ad.url)
+                                const blob = await response.blob()
+                                const url = window.URL.createObjectURL(blob)
+                                const a = document.createElement('a')
+                                a.href = url
+                                a.download = `${ad.name || `generated-ad-${ad.id.slice(0, 8)}`}.png`
+                                document.body.appendChild(a)
+                                a.click()
+                                window.URL.revokeObjectURL(url)
+                                document.body.removeChild(a)
+                              } catch (error) {
+                                console.error('Download failed:', error)
+                                alert('Download failed. Please try again.')
                               }
                             }}
-                            autoFocus
-                          />
-                          <div className="flex space-x-1">
-                            <button
-                              onClick={() => handleRenameAd(ad.id, newAdName)}
-                              className="px-2 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700"
-                            >
-                              Save
-                            </button>
-                            <button
-                              onClick={() => {
-                                setRenamingAd(null)
-                                setNewAdName('')
-                              }}
-                              className="px-2 py-1 bg-gray-400 text-white text-xs rounded hover:bg-gray-500"
-                            >
-                              Cancel
-                            </button>
-                          </div>
+                            className="flex-1 bg-blue-600 text-white text-xs px-3 py-2 rounded-lg hover:bg-blue-700 transition-colors text-center"
+                          >
+                            Download
+                          </button>
                         </div>
-                      ) : (
-                        <>
-                          <h4 className="font-medium text-gray-900 text-sm truncate">{ad.name}</h4>
-                          <p className="text-xs text-gray-500">
-                            {new Date(ad.created_at).toLocaleDateString()}
-                          </p>
-                        </>
-                      )}
-                      <div className="flex items-center space-x-2">
-                        <button
-                          onClick={() => {
-                            setRenamingAd(ad.id)
-                            setNewAdName(ad.name || '')
-                          }}
-                          className="flex-1 bg-gray-600 text-white text-xs px-3 py-2 rounded-lg hover:bg-gray-700 transition-colors text-center"
-                        >
-                          Rename
-                        </button>
-                        <button
-                          onClick={async () => {
-                            try {
-                              const response = await fetch(ad.url)
-                              const blob = await response.blob()
-                              const url = window.URL.createObjectURL(blob)
-                              const a = document.createElement('a')
-                              a.href = url
-                              a.download = `${ad.name || `generated-ad-${ad.id.slice(0, 8)}`}.png`
-                              document.body.appendChild(a)
-                              a.click()
-                              window.URL.revokeObjectURL(url)
-                              document.body.removeChild(a)
-                            } catch (error) {
-                              console.error('Download failed:', error)
-                              alert('Download failed. Please try again.')
-                            }
-                          }}
-                          className="flex-1 bg-blue-600 text-white text-xs px-3 py-2 rounded-lg hover:bg-blue-700 transition-colors text-center"
-                        >
-                          Download
-                        </button>
                       </div>
                     </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+                );
+              })()}
             </div>
           </div>
         )}
