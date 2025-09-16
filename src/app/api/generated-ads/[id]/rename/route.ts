@@ -11,6 +11,7 @@ export async function PATCH(
     const { id: adId } = await context.params
 
     console.log('Rename request - adId:', adId, 'newName:', name)
+    console.log('API VERSION: 2.0 - Fixed storage paths')
 
     // Get the current user
     const { data: { user }, error: authError } = await supabase.auth.getUser()
