@@ -37,6 +37,15 @@ export async function POST(request: NextRequest) {
 
     const { image_ids, prompt, model, quality, size, n, custom_name } = parsed.data;
 
+    // Debug logging
+    console.log("Generate API received:", {
+      image_ids,
+      prompt,
+      model,
+      custom_name,
+      body_keys: Object.keys(body)
+    });
+
     // 3) Compute credits on the server (don't trust client)
     let actualQuality = quality;
     let actualSize = size;
@@ -95,6 +104,12 @@ export async function POST(request: NextRequest) {
       model: model,
       creditsUsed: credits_used,
       customName: custom_name,
+    });
+
+    console.log("Job created:", {
+      id: job?.id,
+      model: job?.model,
+      custom_name: job?.custom_name
     });
 
     if (!job) {

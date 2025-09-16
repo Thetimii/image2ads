@@ -36,18 +36,28 @@ export async function GET(request: NextRequest) {
     }
 
     // Get metadata for custom names
-    const { data: metadata } = await supabase
+    const { data: metadata, error: metadataError } = await supabase
       .from('generated_ads_metadata')
-      .select('file_name, custom_name')
+      .select('file_name, custom_name, name')
       .eq('user_id', user.id)
+
+    if (metadataError) {
+      console.error('Error fetching metadata:', metadataError)
+    }
 
     // Create a map for quick lookup
     const metadataMap = new Map()
     if (metadata) {
       metadata.forEach(meta => {
-        metadataMap.set(meta.file_name, meta.custom_name)
+        // Use custom_name if available, otherwise use name field
+        const displayName = meta.custom_name || meta.name
+        if (displayName) {
+          metadataMap.set(meta.file_name, displayName)
+        }
       })
     }
+
+    console.log('Metadata map:', Object.fromEntries(metadataMap))
 
     // Transform files into a format similar to jobs for UI compatibility
     const generatedAds = await Promise.all(
@@ -65,12 +75,15 @@ export async function GET(request: NextRequest) {
           const nameMatch = file.name.match(/^(.+)-(\d+)\.png$/);
           const timestamp = nameMatch ? parseInt(nameMatch[2]) : file.created_at ? new Date(file.created_at).getTime() : Date.now();
           
-          // Get custom name from metadata, fallback to filename
-          const customName = metadataMap.get(file.name) || file.name.replace('.png', '')
+          // Get custom name from metadata, fallback to filename without extension
+          const customName = metadataMap.get(file.name)
+          const fallbackName = file.name.replace('.png', '').replace(/-\d+$/, '') // Remove timestamp from fallback
+          
+          console.log(`File: ${file.name}, Custom name: ${customName}, Fallback: ${fallbackName}`)
           
           return {
             id: file.name.replace('.png', ''), // Use filename without extension as ID
-            name: customName, // Use custom name if available
+            name: customName || fallbackName, // Use custom name if available, otherwise clean filename
             file_path: filePath,
             url: signedUrl?.signedUrl || '',
             created_at: new Date(timestamp).toISOString(),

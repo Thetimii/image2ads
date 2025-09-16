@@ -189,6 +189,14 @@ async function handler(req: Request) {
     const { data: job, error: jobErr } = await supabase.from("jobs").select("*").eq("id", jobId).single();
     if (jobErr || !job) return new Response("Job not found", { status: 404, headers: cors });
 
+    // Debug logging for job data
+    console.log("[run-job] Job loaded:", {
+      id: job.id,
+      model: job.model,
+      custom_name: job.custom_name,
+      prompt: job.prompt
+    });
+
     // Pull all images and enforce PNG (like the official example)
     const files: Array<{ bytes: Uint8Array; filename: string; folder_id: string | null }> = [];
     for (const imageId of job.image_ids as string[]) {
@@ -298,12 +306,16 @@ async function handler(req: Request) {
 
     // If job has a custom name, automatically create metadata entry for the generated ad
     if (job.custom_name) {
-      console.log("[run-job] Creating metadata entry for custom name:", job.custom_name);
+      // Extract just the filename from the full storage path
+      const fileName = key.split('/').pop() || key
+      console.log("[run-job] Creating metadata entry for custom name:", job.custom_name, "fileName:", fileName);
       const { error: metadataError } = await supabase
         .from("generated_ads_metadata")
         .upsert({
-          job_id: jobId,
+          file_name: fileName, // Use just the filename, not the full path
           custom_name: job.custom_name,
+          user_id: userId,
+          folder_id: targetFolderId,
         });
       
       if (metadataError) {

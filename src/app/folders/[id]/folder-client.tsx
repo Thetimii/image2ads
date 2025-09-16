@@ -6,6 +6,8 @@ import { useRouter } from 'next/navigation'
 import type { User } from '@supabase/supabase-js'
 import type { Profile, Folder, Image, Job } from '@/lib/validations'
 import DashboardLayout from '@/components/DashboardLayout'
+import { ToastContainer, useToast } from '@/components/Toast'
+import LoadingAdCard from '@/components/LoadingAdCard'
 
 interface FolderClientProps {
   user: User
@@ -39,8 +41,76 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
   const [jobNames, setJobNames] = useState<Record<string, string>>({})
   const [searchTerm, setSearchTerm] = useState('')
   const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'name'>('newest')
+  const [loadingJobs, setLoadingJobs] = useState<Array<{ id: string, customName?: string }>>([])
+  const { toasts, addToast, removeToast } = useToast()
   const supabase = createClient()
   const router = useRouter()
+
+  // Load loading jobs from localStorage on mount
+  useEffect(() => {
+    const savedLoadingJobs = localStorage.getItem(`loadingJobs_${folder.id}`)
+    if (savedLoadingJobs) {
+      try {
+        const parsed = JSON.parse(savedLoadingJobs)
+        setLoadingJobs(parsed)
+      } catch (error) {
+        console.error('Error parsing saved loading jobs:', error)
+      }
+    }
+  }, [folder.id])
+
+  // Save loading jobs to localStorage whenever they change
+  useEffect(() => {
+    localStorage.setItem(`loadingJobs_${folder.id}`, JSON.stringify(loadingJobs))
+  }, [loadingJobs, folder.id])
+
+  // Polling for job completion
+  useEffect(() => {
+    if (loadingJobs.length === 0) return
+
+    const pollInterval = setInterval(async () => {
+      try {
+        // Fetch latest generated ads
+        const response = await fetch(`/api/generated-ads?folder_id=${folder.id}`)
+        if (response.ok) {
+          const { generatedAds } = await response.json()
+          
+          // Check if any loading jobs are now complete
+          const completedJobIds = generatedAds.map((ad: any) => {
+            // Extract job ID from filename (format: jobId-timestamp.png)
+            const match = ad.id.match(/^(.+)-\d+$/)
+            return match ? match[1] : ad.id
+          })
+          
+          const stillLoading = loadingJobs.filter(loading => !completedJobIds.includes(loading.id))
+          
+          if (stillLoading.length !== loadingJobs.length) {
+            // Some jobs completed, update the state
+            setLoadingJobs(stillLoading)
+            setGeneratedAds(generatedAds || [])
+            
+            // Show success toast for completed jobs
+            const justCompleted = loadingJobs.filter(loading => completedJobIds.includes(loading.id))
+            justCompleted.forEach(completed => {
+              addToast({
+                message: `"${completed.customName || 'Your ad'}" generated successfully!`,
+                type: 'success'
+              })
+            })
+
+            // If no more loading jobs, clear localStorage
+            if (stillLoading.length === 0) {
+              localStorage.removeItem(`loadingJobs_${folder.id}`)
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error polling for completed jobs:', error)
+      }
+    }, 3000) // Poll every 3 seconds
+
+    return () => clearInterval(pollInterval)
+  }, [loadingJobs, folder.id, addToast])
 
   const fetchJobs = useCallback(async () => {
     try {
@@ -273,49 +343,78 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
 
   const handleGenerateAd = async () => {
     if (!selectedImage || !prompt.trim()) {
-      if (!selectedImage) {
-        alert('Please select an image')
-      } else {
-        alert('Please enter a prompt')
-      }
+      addToast({
+        message: 'Please select an image and enter a prompt',
+        type: 'error'
+      })
       return
     }
+
+    const loadingToastId = addToast({
+      message: 'Starting ad generation...',
+      type: 'loading'
+    })
 
     try {
       // Construct the model string with openai-medium + aspect ratio
       const model = `openai-medium-${aspectRatio}`
+      
+      const requestBody = {
+        image_ids: [selectedImage], // Convert single image to array for API
+        prompt: prompt.trim(),
+        model: model,
+        output_amount: 1,
+        aspect_ratio: aspectRatio,
+        custom_name: jobName.trim() || null, // Include job name if provided
+      }
+      
+      console.log('Sending generation request:', requestBody)
       
       const response = await fetch('/api/generate', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          image_ids: [selectedImage], // Convert single image to array for API
-          prompt: prompt.trim(),
-          model: model,
-          output_amount: 1,
-          aspect_ratio: aspectRatio,
-          custom_name: jobName.trim() || null, // Include job name if provided
-        }),
+        body: JSON.stringify(requestBody),
       })
 
       if (response.ok) {
         const { job } = await response.json()
+        
+        // Add to loading jobs for placeholder
+        setLoadingJobs(prev => [...prev, { 
+          id: job.id, 
+          customName: jobName.trim() || undefined 
+        }])
+        
         setJobs([job, ...jobs])
         setShowGenerateModal(false)
         setSelectedImage('') // Clear selected image
         setPrompt('')
         setJobName('')
         setAspectRatio('square')
-        alert('Ad generation started! You will see the results here when complete.')
+        
+        // Update toast to success
+        removeToast(loadingToastId)
+        addToast({
+          message: `Ad generation started${jobName.trim() ? ` for "${jobName.trim()}"` : ''}! Your ad will appear here when ready.`,
+          type: 'success'
+        })
       } else {
         const errorData = await response.json()
-        alert(`Failed to start generation: ${errorData.error}`)
+        removeToast(loadingToastId)
+        addToast({
+          message: `Failed to start generation: ${errorData.error}`,
+          type: 'error'
+        })
       }
     } catch (error) {
       console.error('Error generating ad:', error)
-      alert('Failed to start generation')
+      removeToast(loadingToastId)
+      addToast({
+        message: 'Failed to start generation. Please try again.',
+        type: 'error'
+      })
     }
   }
 
@@ -400,6 +499,96 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
     }
   }
 
+  const handleDeleteAd = async (adId: string, adName: string) => {
+    // Simple confirmation using browser confirm
+    const confirmed = window.confirm(`Are you sure you want to delete "${adName}"? This action cannot be undone.`)
+    
+    if (!confirmed) return
+
+    const loadingToastId = addToast({
+      message: `Deleting "${adName}"...`,
+      type: 'loading'
+    })
+
+    try {
+      const response = await fetch(`/api/generated-ads/${adId}`, {
+        method: 'DELETE',
+      })
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+
+      const result = await response.json()
+      
+      if (result.success) {
+        // Remove the ad from local state
+        setGeneratedAds(prev => prev.filter(ad => ad.id !== adId))
+        
+        removeToast(loadingToastId)
+        addToast({
+          message: `"${adName}" deleted successfully`,
+          type: 'success'
+        })
+        
+        console.log(`Generated ad ${adId} deleted successfully`)
+      } else {
+        throw new Error(result.error || 'Failed to delete generated ad')
+      }
+    } catch (error) {
+      console.error('Error deleting generated ad:', error)
+      removeToast(loadingToastId)
+      addToast({
+        message: `Failed to delete "${adName}": ${error instanceof Error ? error.message : 'Unknown error'}`,
+        type: 'error'
+      })
+    }
+  }
+
+  const confirmDeleteAd = async (adId: string, adName: string, confirmToastId: string) => {
+    // Remove confirmation toast
+    removeToast(confirmToastId)
+    
+    const loadingToastId = addToast({
+      message: `Deleting "${adName}"...`,
+      type: 'loading'
+    })
+
+    try {
+      const response = await fetch(`/api/generated-ads/${adId}`, {
+        method: 'DELETE',
+      })
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+
+      const result = await response.json()
+      
+      if (result.success) {
+        // Remove the ad from local state
+        setGeneratedAds(prev => prev.filter(ad => ad.id !== adId))
+        
+        removeToast(loadingToastId)
+        addToast({
+          message: `"${adName}" deleted successfully`,
+          type: 'success'
+        })
+        
+        console.log(`Generated ad ${adId} deleted successfully`)
+      } else {
+        throw new Error(result.error || 'Failed to delete generated ad')
+      }
+    } catch (error) {
+      console.error('Error deleting generated ad:', error)
+      removeToast(loadingToastId)
+      addToast({
+        message: `Failed to delete "${adName}": ${error instanceof Error ? error.message : 'Unknown error'}`,
+        type: 'error'
+      })
+    }
+  }
+
   const handleEnhance = async (jobId: string, imageUrl: string) => {
     setEnhancementStatus(prev => ({ ...prev, [jobId]: 'enhancing' }))
     
@@ -438,6 +627,7 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
 
   return (
     <DashboardLayout user={user} profile={profile}>
+      <ToastContainer toasts={toasts} onCloseAction={removeToast} />
       <div className="p-6 lg:p-8">
         {/* Header */}
         <div className="mb-8">
@@ -642,6 +832,11 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
 
                 return (
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {/* Loading placeholders for generating ads */}
+                    {loadingJobs.map((loading) => (
+                      <LoadingAdCard key={`loading-${loading.id}`} customName={loading.customName} />
+                    ))}
+                    
                     {filteredAds.map((ad) => (
                     <div key={ad.id} className="bg-gray-50 rounded-xl p-4 border border-gray-200">
                       <div className="aspect-square bg-white rounded-lg overflow-hidden mb-3">
@@ -720,12 +915,22 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
                                 document.body.removeChild(a)
                               } catch (error) {
                                 console.error('Download failed:', error)
-                                alert('Download failed. Please try again.')
+                                addToast({
+                                  message: 'Download failed. Please try again.',
+                                  type: 'error'
+                                })
                               }
                             }}
                             className="flex-1 bg-blue-600 text-white text-xs px-3 py-2 rounded-lg hover:bg-blue-700 transition-colors text-center"
                           >
                             Download
+                          </button>
+                          <button
+                            onClick={() => handleDeleteAd(ad.id, ad.name || `Ad ${ad.id.slice(0, 8)}`)}
+                            className="bg-red-600 text-white text-xs px-3 py-2 rounded-lg hover:bg-red-700 transition-colors"
+                            title="Delete ad"
+                          >
+                            🗑️
                           </button>
                         </div>
                       </div>
@@ -734,6 +939,26 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
                 </div>
                 );
               })()}
+            </div>
+          </div>
+        )}
+
+        {/* Loading ads section - show when generating but no ads yet */}
+        {loadingJobs.length > 0 && generatedAds.length === 0 && (
+          <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
+            <div className="p-6 border-b border-gray-200">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900">Generated Ads</h2>
+                <p className="text-sm text-gray-600 mt-1">Your AI-generated advertisements will appear here</p>
+              </div>
+            </div>
+            
+            <div className="p-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {loadingJobs.map((loading) => (
+                  <LoadingAdCard key={`loading-${loading.id}`} customName={loading.customName} />
+                ))}
+              </div>
             </div>
           </div>
         )}
