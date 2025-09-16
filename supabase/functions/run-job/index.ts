@@ -136,8 +136,42 @@ async function openaiGenerateFromRefs({
   }
 }
 
-// --- Handler ---
-async function handler(req: Request): Promise<Response> {
+// Enhanced prompt builder with text-focused requirements
+function buildPrompt(clientPrompt: string) {
+  const prefix = `
+You are generating a photorealistic commercial image from reference photos.
+
+Absolute requirements for TEXT:
+- All existing text, labels, or logos on products must be reproduced exactly as provided.
+- Text must be crystal-clear, sharp, and perfectly legible, without distortion.
+- No misspellings, extra characters, or invented words.
+- Fonts should look natural and consistent with printed packaging.
+- Do not alter, blur, crop, or re-style existing text.
+
+General quality rules:
+- Photorealistic composition; natural lighting and realistic textures.
+- Correct perspective and proportions; no warping of text or product surfaces.
+- Clean, professional aesthetic suitable for advertising.
+
+Hard constraints:
+1) Do not add random watermarks, captions, or unrelated text.
+2) Do not place text outside of its intended product area.
+3) Do not change product design or label content.
+
+Avoid (negatives):
+- Gibberish or illegible characters.
+- Extra text or labels not in the reference.
+- Distorted, curved, or stretched text.
+- Fake handwriting or cartoon fonts.
+
+Now follow the user's instructions for the overall scene:
+`.trim();
+
+  return `${prefix}\n\n${clientPrompt.trim()}`;
+}
+
+// --- Main handler ---
+async function handler(req: Request) {
   const cors = corsHeadersFor(req);
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   if (req.method !== "POST") return new Response("Method not allowed", { status: 405, headers: cors });
@@ -179,13 +213,10 @@ async function handler(req: Request): Promise<Response> {
     }
     if (files.length === 0) return new Response("No images for job", { status: 400, headers: cors });
 
-    // Prompt: use job.prompt, else a strong brand-new scene prompt
-    const prompt: string =
-      (job.prompt && String(job.prompt).trim()) ||
-      `Create a brand-new, photorealistic commercial scene on a clean studio background.
-       Arrange all reference items together in a stylish composition. Use tasteful, realistic lighting,
-       soft contact shadows, correct scale and perspective, natural materials, and premium color grading.
-       If you include any text or labels, keep them clean, legible, and consistent with high-end product photography.`;
+    // Enhanced prompt with house style and negatives
+    const prompt: string = buildPrompt(
+      (job.prompt && String(job.prompt)) || "Create a clean studio ad shot of the product."
+    );
 
     // Size (square by default; you can read from job.model if you like)
     const size: "1024x1024" | "1536x1024" | "1024x1536" = "1024x1024";

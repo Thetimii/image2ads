@@ -35,7 +35,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { image_ids, prompt, model, quality, size, n } = parsed.data;
+    const { image_ids, prompt, model, quality, size, n, custom_name } = parsed.data;
 
     // 3) Compute credits on the server (don't trust client)
     let actualQuality = quality;
@@ -94,6 +94,7 @@ export async function POST(request: NextRequest) {
       prompt: prompt,
       model: model,
       creditsUsed: credits_used,
+      customName: custom_name,
     });
 
     if (!job) {

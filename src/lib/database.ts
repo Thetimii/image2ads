@@ -208,12 +208,14 @@ export async function createJob({
   prompt,
   model = "gemini",
   creditsUsed = 1,
+  customName,
 }: {
   userId: string;
   imageIds: string[];
   prompt: string;
   model?: string;
   creditsUsed?: number;
+  customName?: string;
 }): Promise<Job | null> {
   const supabase = await createClient();
 
@@ -226,6 +228,7 @@ export async function createJob({
       prompt: prompt,
       model: model,
       credits_used: creditsUsed,
+      custom_name: customName,
       status: "pending",
     })
     .select()

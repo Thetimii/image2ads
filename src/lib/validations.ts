@@ -89,6 +89,7 @@ export const createJobSchema = z
     quality: z.enum(["low", "medium", "high"]).default("medium"),
     size: z.enum(["1024x1024", "1024x1536", "1536x1024"]).default("1024x1024"),
     n: z.number().int().min(1).max(4).default(1),
+    custom_name: z.string().max(255, "Name too long").optional(),
   })
   .transform((v) => ({
     image_ids: v.image_ids ?? v.imageIds!,
@@ -97,6 +98,7 @@ export const createJobSchema = z
     quality: v.quality,
     size: v.size,
     n: v.n,
+    custom_name: v.custom_name,
   }));
 
 // Upload URL request schema

@@ -22,6 +22,7 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
   const [uploadProgress, setUploadProgress] = useState(0)
   const [selectedImages, setSelectedImages] = useState<string[]>([])
   const [prompt, setPrompt] = useState('')
+  const [jobName, setJobName] = useState('')
   const [outputAmount, setOutputAmount] = useState(1)
   const [aspectRatio, setAspectRatio] = useState('square')
   const [showGenerateModal, setShowGenerateModal] = useState(false)
@@ -33,6 +34,8 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
   const [enhancedImages, setEnhancedImages] = useState<Record<string, string>>({})
   const [renamingJob, setRenamingJob] = useState<string | null>(null)
   const [newJobName, setNewJobName] = useState('')
+  const [renamingAd, setRenamingAd] = useState<string | null>(null)
+  const [newAdName, setNewAdName] = useState('')
   const [jobNames, setJobNames] = useState<Record<string, string>>({})
   const supabase = createClient()
   const router = useRouter()
@@ -288,6 +291,7 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
           model: model,
           output_amount: 1,
           aspect_ratio: aspectRatio,
+          custom_name: jobName.trim() || null, // Include job name if provided
         }),
       })
 
@@ -297,6 +301,7 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
         setShowGenerateModal(false)
         setSelectedImages([])
         setPrompt('')
+        setJobName('')
         setAspectRatio('square')
         alert('Ad generation started! You will see the results here when complete.')
       } else {
@@ -347,6 +352,46 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
     } catch (error) {
       console.error('Error renaming job:', error)
       alert(`Failed to rename ad: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    }
+  }
+
+  const handleRenameAd = async (adId: string, newName: string) => {
+    if (!newName.trim()) return
+
+    try {
+      const response = await fetch(`/api/generated-ads/${adId}/rename`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: newName.trim(),
+        }),
+      })
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+
+      const result = await response.json()
+      
+      if (result.success) {
+        // Update the generated ad name in local state
+        setGeneratedAds(prev => prev.map(ad => 
+          ad.id === adId ? { ...ad, name: newName.trim() } : ad
+        ))
+        
+        // Reset renaming state
+        setRenamingAd(null)
+        setNewAdName('')
+        
+        console.log(`Generated ad ${adId} renamed to: ${newName.trim()}`)
+      } else {
+        throw new Error(result.error || 'Failed to rename generated ad')
+      }
+    } catch (error) {
+      console.error('Error renaming generated ad:', error)
+      alert(`Failed to rename generated ad: ${error instanceof Error ? error.message : 'Unknown error'}`)
     }
   }
 
@@ -548,18 +593,81 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
                       />
                     </div>
                     <div className="space-y-2">
-                      <h4 className="font-medium text-gray-900 text-sm truncate">{ad.name}</h4>
-                      <p className="text-xs text-gray-500">
-                        {new Date(ad.created_at).toLocaleDateString()}
-                      </p>
+                      {renamingAd === ad.id ? (
+                        <div className="space-y-2">
+                          <input
+                            type="text"
+                            value={newAdName}
+                            onChange={(e) => setNewAdName(e.target.value)}
+                            className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                handleRenameAd(ad.id, newAdName)
+                              } else if (e.key === 'Escape') {
+                                setRenamingAd(null)
+                                setNewAdName('')
+                              }
+                            }}
+                            autoFocus
+                          />
+                          <div className="flex space-x-1">
+                            <button
+                              onClick={() => handleRenameAd(ad.id, newAdName)}
+                              className="px-2 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700"
+                            >
+                              Save
+                            </button>
+                            <button
+                              onClick={() => {
+                                setRenamingAd(null)
+                                setNewAdName('')
+                              }}
+                              className="px-2 py-1 bg-gray-400 text-white text-xs rounded hover:bg-gray-500"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          <h4 className="font-medium text-gray-900 text-sm truncate">{ad.name}</h4>
+                          <p className="text-xs text-gray-500">
+                            {new Date(ad.created_at).toLocaleDateString()}
+                          </p>
+                        </>
+                      )}
                       <div className="flex items-center space-x-2">
-                        <a
-                          href={ad.url}
-                          download={ad.name}
+                        <button
+                          onClick={() => {
+                            setRenamingAd(ad.id)
+                            setNewAdName(ad.name || '')
+                          }}
+                          className="flex-1 bg-gray-600 text-white text-xs px-3 py-2 rounded-lg hover:bg-gray-700 transition-colors text-center"
+                        >
+                          Rename
+                        </button>
+                        <button
+                          onClick={async () => {
+                            try {
+                              const response = await fetch(ad.url)
+                              const blob = await response.blob()
+                              const url = window.URL.createObjectURL(blob)
+                              const a = document.createElement('a')
+                              a.href = url
+                              a.download = `${ad.name || `generated-ad-${ad.id.slice(0, 8)}`}.png`
+                              document.body.appendChild(a)
+                              a.click()
+                              window.URL.revokeObjectURL(url)
+                              document.body.removeChild(a)
+                            } catch (error) {
+                              console.error('Download failed:', error)
+                              alert('Download failed. Please try again.')
+                            }
+                          }}
                           className="flex-1 bg-blue-600 text-white text-xs px-3 py-2 rounded-lg hover:bg-blue-700 transition-colors text-center"
                         >
                           Download
-                        </a>
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -664,6 +772,20 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
                       <p className="text-xs mt-1">Close this modal and select images to continue</p>
                     </div>
                   )}
+                </div>
+
+                {/* Job Name Input */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Ad Name (optional)
+                  </label>
+                  <input
+                    type="text"
+                    value={jobName}
+                    onChange={(e) => setJobName(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                    placeholder="e.g., Product Launch Ad, Summer Campaign..."
+                  />
                 </div>
 
                 {/* Prompt Input */}
