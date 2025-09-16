@@ -17,6 +17,7 @@ interface FolderClientProps {
 export default function FolderClient({ user, profile, folder, initialImages }: FolderClientProps) {
   const [images, setImages] = useState(initialImages)
   const [jobs, setJobs] = useState<Job[]>([])
+  const [generatedAds, setGeneratedAds] = useState<any[]>([])
   const [isUploading, setIsUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
   const [selectedImages, setSelectedImages] = useState<string[]>([])
@@ -57,6 +58,18 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
     }
   }, [folder.id])
 
+  const fetchGeneratedAds = useCallback(async () => {
+    try {
+      const response = await fetch(`/api/generated-ads?folder_id=${folder.id}`)
+      if (response.ok) {
+        const { generatedAds } = await response.json()
+        setGeneratedAds(generatedAds || [])
+      }
+    } catch (error) {
+      console.error('Error fetching generated ads:', error)
+    }
+  }, [folder.id])
+
   // Subscribe to job status changes
   useEffect(() => {
     const channel = supabase
@@ -72,11 +85,14 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
         (payload) => {
           console.log('Job update:', payload)
           fetchJobs()
+          // Also fetch generated ads when jobs change
+          fetchGeneratedAds()
         }
       )
       .subscribe()
 
     fetchJobs()
+    fetchGeneratedAds()
 
     return () => {
       supabase.removeChannel(channel)
@@ -513,7 +529,7 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
         )}
 
         {/* Generated Ads section */}
-        {jobs.length > 0 && (
+        {generatedAds.length > 0 && (
           <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
             <div className="p-6 border-b border-gray-200">
               <h2 className="text-lg font-semibold text-gray-900">Generated Ads</h2>
@@ -522,24 +538,32 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
             
             <div className="p-6 space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {jobs
-                  .filter(job => job?.id)
-                  .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-                  .map((job) => (
-                    <JobCard 
-                      key={job.id} 
-                      job={job} 
-                      onEnhance={handleEnhance}
-                      enhancementStatus={enhancementStatus}
-                      enhancedImages={enhancedImages}
-                      onRename={handleJobRename}
-                      renamingJob={renamingJob}
-                      setRenamingJob={setRenamingJob}
-                      newJobName={newJobName}
-                      setNewJobName={setNewJobName}
-                      jobNames={jobNames}
-                    />
-                  ))}
+                {generatedAds.map((ad) => (
+                  <div key={ad.id} className="bg-gray-50 rounded-xl p-4 border border-gray-200">
+                    <div className="aspect-square bg-white rounded-lg overflow-hidden mb-3">
+                      <img
+                        src={ad.url}
+                        alt={ad.name}
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <h4 className="font-medium text-gray-900 text-sm truncate">{ad.name}</h4>
+                      <p className="text-xs text-gray-500">
+                        {new Date(ad.created_at).toLocaleDateString()}
+                      </p>
+                      <div className="flex items-center space-x-2">
+                        <a
+                          href={ad.url}
+                          download={ad.name}
+                          className="flex-1 bg-blue-600 text-white text-xs px-3 py-2 rounded-lg hover:bg-blue-700 transition-colors text-center"
+                        >
+                          Download
+                        </a>
+                      </div>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           </div>
