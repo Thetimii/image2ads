@@ -296,6 +296,24 @@ async function handler(req: Request) {
       result_url: key // Store the storage path directly
     }).eq("id", jobId);
 
+    // If job has a custom name, automatically create metadata entry for the generated ad
+    if (job.custom_name) {
+      console.log("[run-job] Creating metadata entry for custom name:", job.custom_name);
+      const { error: metadataError } = await supabase
+        .from("generated_ads_metadata")
+        .upsert({
+          job_id: jobId,
+          custom_name: job.custom_name,
+        });
+      
+      if (metadataError) {
+        console.error("[run-job] Failed to create metadata entry:", metadataError);
+        // Don't fail the job for metadata issues, just log it
+      } else {
+        console.log("[run-job] Metadata entry created successfully");
+      }
+    }
+
     return new Response(
       JSON.stringify({ success: true, jobId, result_path: key }),
       { headers: { ...cors, "Content-Type": "application/json" } }
