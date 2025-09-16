@@ -35,6 +35,20 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Failed to load generated ads" }, { status: 500 });
     }
 
+    // Get metadata for custom names
+    const { data: metadata } = await supabase
+      .from('generated_ads_metadata')
+      .select('file_name, custom_name')
+      .eq('user_id', user.id)
+
+    // Create a map for quick lookup
+    const metadataMap = new Map()
+    if (metadata) {
+      metadata.forEach(meta => {
+        metadataMap.set(meta.file_name, meta.custom_name)
+      })
+    }
+
     // Transform files into a format similar to jobs for UI compatibility
     const generatedAds = await Promise.all(
       (files || [])
@@ -51,9 +65,12 @@ export async function GET(request: NextRequest) {
           const nameMatch = file.name.match(/^(.+)-(\d+)\.png$/);
           const timestamp = nameMatch ? parseInt(nameMatch[2]) : file.created_at ? new Date(file.created_at).getTime() : Date.now();
           
+          // Get custom name from metadata, fallback to filename
+          const customName = metadataMap.get(file.name) || file.name.replace('.png', '')
+          
           return {
             id: file.name.replace('.png', ''), // Use filename without extension as ID
-            name: file.name,
+            name: customName, // Use custom name if available
             file_path: filePath,
             url: signedUrl?.signedUrl || '',
             created_at: new Date(timestamp).toISOString(),

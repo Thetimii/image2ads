@@ -362,7 +362,7 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
     if (!newName.trim()) return
 
     try {
-      const response = await fetch(`/api/generated-ads/${adId}/rename`, {
+      const response = await fetch(`/api/generated-ads/${adId}/rename-metadata`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
@@ -379,21 +379,10 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
       const result = await response.json()
       
       if (result.success) {
-        // Update the generated ad name in local state by finding and updating the URL
-        setGeneratedAds(prev => prev.map(ad => {
-          if (ad.id === adId) {
-            // Update the ad with new name and potentially new URL
-            const newId = result.newName.replace('.png', '') // Remove extension for ID
-            return { 
-              ...ad, 
-              id: newId,
-              name: newName.trim(),
-              // Update the URL if the file was renamed
-              url: ad.url.replace(result.oldName, result.newName)
-            }
-          }
-          return ad
-        }))
+        // Update the generated ad name in local state
+        setGeneratedAds(prev => prev.map(ad => 
+          ad.id === adId ? { ...ad, name: newName.trim() } : ad
+        ))
         
         // Reset renaming state
         setRenamingAd(null)
