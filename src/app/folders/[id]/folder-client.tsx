@@ -20,7 +20,7 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
   const [generatedAds, setGeneratedAds] = useState<{ id: string; url: string; job_id: string; created_at: string; name?: string }[]>([])
   const [isUploading, setIsUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
-  const [selectedImages, setSelectedImages] = useState<string[]>([])
+  const [selectedImage, setSelectedImage] = useState<string>('')
   const [prompt, setPrompt] = useState('')
   const [jobName, setJobName] = useState('')
   const [outputAmount, setOutputAmount] = useState(1)
@@ -136,7 +136,10 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
 
       if (response.ok) {
         setImages(images.filter(img => img.id !== imageToDelete))
-        setSelectedImages(selectedImages.filter(id => id !== imageToDelete))
+        // If the deleted image was selected, clear the selection
+        if (selectedImage === imageToDelete) {
+          setSelectedImage('')
+        }
         setShowDeleteModal(false)
         setImageToDelete(null)
       } else {
@@ -267,9 +270,9 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
   }
 
   const handleGenerateAd = async () => {
-    if (selectedImages.length === 0 || !prompt.trim()) {
-      if (selectedImages.length === 0) {
-        alert('Please select at least one image')
+    if (!selectedImage || !prompt.trim()) {
+      if (!selectedImage) {
+        alert('Please select an image')
       } else {
         alert('Please enter a prompt')
       }
@@ -286,7 +289,7 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          image_ids: selectedImages,
+          image_ids: [selectedImage], // Convert single image to array for API
           prompt: prompt.trim(),
           model: model,
           output_amount: 1,
@@ -299,7 +302,7 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
         const { job } = await response.json()
         setJobs([job, ...jobs])
         setShowGenerateModal(false)
-        setSelectedImages([])
+        setSelectedImage('') // Clear selected image
         setPrompt('')
         setJobName('')
         setAspectRatio('square')
@@ -376,10 +379,21 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
       const result = await response.json()
       
       if (result.success) {
-        // Update the generated ad name in local state
-        setGeneratedAds(prev => prev.map(ad => 
-          ad.id === adId ? { ...ad, name: newName.trim() } : ad
-        ))
+        // Update the generated ad name in local state by finding and updating the URL
+        setGeneratedAds(prev => prev.map(ad => {
+          if (ad.id === adId) {
+            // Update the ad with new name and potentially new URL
+            const newId = result.newName.replace('.png', '') // Remove extension for ID
+            return { 
+              ...ad, 
+              id: newId,
+              name: newName.trim(),
+              // Update the URL if the file was renamed
+              url: ad.url.replace(result.oldName, result.newName)
+            }
+          }
+          return ad
+        }))
         
         // Reset renaming state
         setRenamingAd(null)
@@ -517,30 +531,23 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
                 <div>
                   <h2 className="text-lg font-semibold text-gray-900">Your Images</h2>
                   <p className="text-sm text-gray-600 mt-1">
-                    Select images to generate ads • {selectedImages.length} of {Math.min(images.length, 10)} selected
+                    Select one image to generate an ad {selectedImage && '• 1 image selected'}
                   </p>
                 </div>
                 <div className="flex items-center space-x-3">
                   <button
-                    onClick={() => setSelectedImages([])}
+                    onClick={() => setSelectedImage('')}
                     className="text-sm text-gray-600 hover:text-gray-900 transition-colors"
-                    disabled={selectedImages.length === 0}
+                    disabled={!selectedImage}
                   >
-                    Clear All
+                    Clear Selection
                   </button>
-                  <button
-                    onClick={() => setSelectedImages(images.slice(0, 10).map(img => img.id))}
-                    className="text-sm text-blue-600 hover:text-blue-700 transition-colors"
-                    disabled={images.length === 0}
-                  >
-                    Select All
-                  </button>
-                  {selectedImages.length > 0 && (
+                  {selectedImage && (
                     <button
                       onClick={() => setShowGenerateModal(true)}
                       className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:from-blue-700 hover:to-purple-700 transition-all duration-200 shadow-lg shadow-blue-500/20"
                     >
-                      Generate Ad ({selectedImages.length})
+                      Generate Ad
                     </button>
                   )}
                 </div>
@@ -553,12 +560,14 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
                   <ImageCard
                     key={image.id}
                     image={image}
-                    isSelected={selectedImages.includes(image.id)}
+                    isSelected={selectedImage === image.id}
                     onToggleSelect={() => {
-                      if (selectedImages.includes(image.id)) {
-                        setSelectedImages(selectedImages.filter(id => id !== image.id))
-                      } else if (selectedImages.length < 10) {
-                        setSelectedImages([...selectedImages, image.id])
+                      // If clicking the already selected image, deselect it
+                      if (selectedImage === image.id) {
+                        setSelectedImage('')
+                      } else {
+                        // Otherwise, select this image (replacing any previous selection)
+                        setSelectedImage(image.id)
                       }
                     }}
                     onDelete={() => {
@@ -724,7 +733,7 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
                 <div>
                   <h3 className="text-xl font-semibold text-gray-900">Generate Ad</h3>
                   <p className="text-sm text-gray-600 mt-1">
-                    Create professional ads from {selectedImages.length} selected image{selectedImages.length !== 1 ? 's' : ''}
+                    Create a professional ad from your selected image
                   </p>
                 </div>
                 <button
@@ -741,35 +750,36 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
             {/* Content */}
             <div className="flex-1 overflow-y-auto">
               <div className="p-6 space-y-6">
-                {/* Selected Images Preview */}
+                {/* Selected Image Preview */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-3">
-                    Selected Images ({selectedImages.length})
+                    Selected Image
                   </label>
-                  <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3">
-                    {selectedImages.map((imageId) => {
-                      const image = images.find(img => img?.id === imageId)
-                      if (!image) return null
-                      
-                      return (
-                        <GenerateModalImageCard
-                          key={imageId}
-                          image={image}
-                          onRemove={() => {
-                            setSelectedImages(selectedImages.filter(id => id !== imageId))
-                          }}
-                          getImageUrl={getImageUrl}
-                        />
-                      )
-                    })}
-                  </div>
-                  {selectedImages.length === 0 && (
+                  {selectedImage ? (
+                    <div className="grid grid-cols-1 gap-3">
+                      {(() => {
+                        const image = images.find(img => img?.id === selectedImage)
+                        if (!image) return null
+                        
+                        return (
+                          <GenerateModalImageCard
+                            key={selectedImage}
+                            image={image}
+                            onRemove={() => {
+                              setSelectedImage('')
+                            }}
+                            getImageUrl={getImageUrl}
+                          />
+                        )
+                      })()}
+                    </div>
+                  ) : (
                     <div className="text-center py-8 text-gray-500">
                       <svg className="w-12 h-12 mx-auto mb-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                       </svg>
-                      <p>No images selected</p>
-                      <p className="text-xs mt-1">Close this modal and select images to continue</p>
+                      <p>No image selected</p>
+                      <p className="text-xs mt-1">Close this modal and select an image to continue</p>
                     </div>
                   )}
                 </div>
@@ -862,15 +872,15 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
             <div className="px-6 py-4 border-t border-gray-200 bg-gray-50">
               <div className="flex items-center justify-between">
                 <div className="text-sm text-gray-600">
-                  {selectedImages.length > 0 ? (
+                  {selectedImage ? (
                     <div>
-                      <span>Ready to generate 1 ad from {selectedImages.length} image{selectedImages.length !== 1 ? 's' : ''}</span>
+                      <span>Ready to generate 1 ad from your selected image</span>
                       <div className="text-xs text-gray-500 mt-1">
                         Cost: 1 credit
                       </div>
                     </div>
                   ) : (
-                    <span className="text-red-600">Please select at least one image</span>
+                    <span className="text-red-600">Please select an image</span>
                   )}
                 </div>
                 <div className="flex space-x-3">
@@ -882,7 +892,7 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
                   </button>
                   <button
                     onClick={handleGenerateAd}
-                    disabled={!prompt.trim() || selectedImages.length === 0}
+                    disabled={!prompt.trim() || !selectedImage}
                     className="px-6 py-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg hover:from-blue-700 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-lg shadow-blue-500/20"
                   >
                     Generate Ad

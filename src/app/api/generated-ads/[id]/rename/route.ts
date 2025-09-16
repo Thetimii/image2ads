@@ -16,38 +16,52 @@ export async function PATCH(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // First, get the current generated ad details to verify ownership
-    const { data: generatedAd, error: fetchError } = await supabase
-      .from('generated_ads')
-      .select(`
-        *,
-        jobs!inner(user_id)
-      `)
-      .eq('id', adId)
-      .single()
+    // The adId is actually the filename without extension (e.g., "jobId-timestamp")
+    // We need to find the actual file in storage
+    const originalFileName = `${adId}.png`
+    
+    // Search in all user folders to find the file
+    const { data: folders, error: foldersError } = await supabase
+      .from('folders')
+      .select('id')
+      .eq('user_id', user.id)
 
-    if (fetchError || !generatedAd) {
+    if (foldersError || !folders) {
+      return NextResponse.json({ error: 'Failed to get user folders' }, { status: 500 })
+    }
+
+    let foundFile = null
+    let folderPath = null
+
+    // Look for the file in each folder
+    for (const folder of folders) {
+      const searchPath = `${user.id}/${folder.id}/`
+      const { data: files, error: listError } = await supabase.storage
+        .from('results')
+        .list(searchPath)
+
+      if (!listError && files) {
+        const file = files.find(f => f.name === originalFileName)
+        if (file) {
+          foundFile = file
+          folderPath = searchPath
+          break
+        }
+      }
+    }
+
+    if (!foundFile || !folderPath) {
       return NextResponse.json({ error: 'Generated ad not found' }, { status: 404 })
     }
 
-    // Verify the user owns this generated ad through the job
-    if (generatedAd.jobs.user_id !== user.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
-    }
-
-    // Get the old file path for renaming in storage
-    const oldPath = generatedAd.url
-    const oldFileName = oldPath.split('/').pop()
-    const pathWithoutFileName = oldPath.substring(0, oldPath.lastIndexOf('/'))
-    
     // Create new file name with proper extension
-    const fileExtension = oldFileName?.split('.').pop() || 'jpg'
     const sanitizedName = name.replace(/[^a-zA-Z0-9\-_]/g, '_') // Sanitize filename
-    const newFileName = `${sanitizedName}.${fileExtension}`
-    const newPath = `${pathWithoutFileName}/${newFileName}`
+    const newFileName = `${sanitizedName}.png`
+    const oldPath = `${folderPath}${originalFileName}`
+    const newPath = `${folderPath}${newFileName}`
 
     // Rename the file in Supabase storage
-    const { data: moveData, error: moveError } = await supabase.storage
+    const { error: moveError } = await supabase.storage
       .from('results')
       .move(oldPath.replace('results/', ''), newPath.replace('results/', ''))
 
@@ -56,30 +70,11 @@ export async function PATCH(
       return NextResponse.json({ error: 'Failed to rename file in storage' }, { status: 500 })
     }
 
-    // Update the generated ad record with new name and URL
-    const { data: updatedAd, error: updateError } = await supabase
-      .from('generated_ads')
-      .update({ 
-        name: name,
-        url: newPath
-      })
-      .eq('id', adId)
-      .select()
-      .single()
-
-    if (updateError) {
-      console.error('Error updating generated ad:', updateError)
-      // Try to move the file back if database update failed
-      await supabase.storage
-        .from('results')
-        .move(newPath.replace('results/', ''), oldPath.replace('results/', ''))
-      
-      return NextResponse.json({ error: 'Failed to update generated ad' }, { status: 500 })
-    }
-
     return NextResponse.json({ 
       success: true, 
-      generatedAd: updatedAd 
+      oldName: originalFileName,
+      newName: newFileName,
+      newPath: newPath 
     })
 
   } catch (error) {
