@@ -73,7 +73,7 @@ export async function GET(request: NextRequest) {
 
     // List files in user directory
     if (path) {
-      const results: Record<string, any> = {}
+      const results: Record<string, { error?: string; files?: string[] }> = {}
       
       for (const bucket of ['uploads', 'results']) {
         try {
@@ -84,7 +84,7 @@ export async function GET(request: NextRequest) {
           if (error) {
             results[bucket] = { error: error.message }
           } else {
-            results[bucket] = { files: data?.map((f: any) => f.name) || [] }
+            results[bucket] = { files: data?.map((f: { name: string }) => f.name) || [] }
           }
         } catch (e) {
           results[bucket] = { error: (e as Error).message }

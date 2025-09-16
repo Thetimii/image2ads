@@ -17,7 +17,7 @@ interface FolderClientProps {
 export default function FolderClient({ user, profile, folder, initialImages }: FolderClientProps) {
   const [images, setImages] = useState(initialImages)
   const [jobs, setJobs] = useState<Job[]>([])
-  const [generatedAds, setGeneratedAds] = useState<any[]>([])
+  const [generatedAds, setGeneratedAds] = useState<{ id: string; url: string; job_id: string; created_at: string; name?: string }[]>([])
   const [isUploading, setIsUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
   const [selectedImages, setSelectedImages] = useState<string[]>([])
