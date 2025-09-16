@@ -77,15 +77,19 @@ export async function PATCH(
     // Create new file name with proper extension
     const sanitizedName = name.replace(/[^a-zA-Z0-9\-_]/g, '_') // Sanitize filename
     const newFileName = `${sanitizedName}.png`
-    const oldPath = `${folderPath}${originalFileName}`
-    const newPath = `${folderPath}${newFileName}`
+    
+    // Storage paths should NOT include the bucket name - they are relative to the bucket
+    const oldStoragePath = `${folderPath}${originalFileName}`
+    const newStoragePath = `${folderPath}${newFileName}`
 
-    console.log('Renaming file from:', oldPath, 'to:', newPath)
+    console.log('Storage move operation:')
+    console.log('  From (storage path):', oldStoragePath)
+    console.log('  To (storage path):', newStoragePath)
 
     // Rename the file in Supabase storage
     const { error: moveError } = await supabase.storage
       .from('results')
-      .move(oldPath.replace(/^results\//, ''), newPath.replace(/^results\//, ''))
+      .move(oldStoragePath, newStoragePath)
 
     if (moveError) {
       console.error('Error moving file in storage:', moveError)
@@ -101,7 +105,7 @@ export async function PATCH(
       success: true, 
       oldName: originalFileName,
       newName: newFileName,
-      newPath: newPath 
+      newPath: `results/${newStoragePath}` // Include bucket name for UI
     })
 
   } catch (error) {
