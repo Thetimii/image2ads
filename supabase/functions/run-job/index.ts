@@ -193,6 +193,33 @@ async function handler(req: Request): Promise<Response> {
     // Mark processing
     await supabase.from("jobs").update({ status: "processing" }).eq("id", jobId);
 
+    // Deduct credits BEFORE calling OpenAI API
+    console.log("[run-job] deducting 1 credit for user", job.user_id);
+    const { data: creditResult, error: creditError } = await supabase.rpc("consume_credit", {
+      user_uuid: job.user_id,
+      credit_amount: 1
+    });
+    
+    if (creditError) {
+      console.error("[run-job] Credit deduction error:", creditError);
+      await supabase.from("jobs").update({ 
+        status: "error", 
+        error_message: "Credit deduction failed" 
+      }).eq("id", jobId);
+      return new Response("Credit deduction failed", { status: 500, headers: cors });
+    }
+    
+    if (!creditResult) {
+      console.log("[run-job] Insufficient credits for user", job.user_id);
+      await supabase.from("jobs").update({ 
+        status: "error", 
+        error_message: "Insufficient credits" 
+      }).eq("id", jobId);
+      return new Response("Insufficient credits", { status: 402, headers: cors });
+    }
+    
+    console.log("[run-job] Credit deducted successfully, proceeding with OpenAI generation");
+
     // Call OpenAI (all refs; new scene)
     console.log("[run-job] sending", files.length, "images to OpenAI");
     const outBytes = await openaiGenerateFromRefs({
