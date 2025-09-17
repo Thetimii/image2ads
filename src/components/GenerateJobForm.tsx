@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Image from 'next/image';
 
 interface ImageItem {
   id: string;
@@ -75,11 +76,15 @@ export default function GenerateJobForm({ userImages, onGenerateAction }: Genera
               }`}
               onClick={() => toggleImageSelection(image)}
             >
-              <img
-                src={image.thumb}
-                alt={image.name}
-                className="w-full h-24 object-cover"
-              />
+              <div className="relative w-full h-24">
+                <Image
+                  src={image.thumb}
+                  alt={image.name}
+                  fill
+                  className="object-cover"
+                  sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+                />
+              </div>
               <div className="absolute inset-0 bg-black bg-opacity-0 hover:bg-opacity-10 transition-all" />
               {selectedImages.find(s => s.id === image.id) && (
                 <div className="absolute top-1 right-1 bg-blue-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs">
@@ -98,7 +103,15 @@ export default function GenerateJobForm({ userImages, onGenerateAction }: Genera
           <div className="space-y-3">
             {selectedImages.map((image, idx) => (
               <div key={image.id} className="flex items-center gap-4 p-3 border rounded-lg">
-                <img src={image.thumb} className="h-12 w-12 rounded object-cover" alt={image.name} />
+                <div className="relative h-12 w-12 rounded overflow-hidden">
+                  <Image 
+                    src={image.thumb} 
+                    fill
+                    className="object-cover" 
+                    alt={image.name}
+                    sizes="48px"
+                  />
+                </div>
                 <span className="flex-1 font-medium">{image.name}</span>
                 
                 {idx === 0 ? (

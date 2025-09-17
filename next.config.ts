@@ -9,7 +9,14 @@ const nextConfig: NextConfig = {
     ignoreDuringBuilds: false,
   },
   images: {
-    domains: ['cqnaooicfxqtnbuwsopu.supabase.co'],
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: 'cqnaooicfxqtnbuwsopu.supabase.co',
+        port: '',
+        pathname: '/**',
+      },
+    ],
     unoptimized: false,
   },
   outputFileTracingRoot: path.join(__dirname),

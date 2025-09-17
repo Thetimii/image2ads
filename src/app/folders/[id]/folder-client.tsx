@@ -3,8 +3,9 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
+import Image from 'next/image'
 import type { User } from '@supabase/supabase-js'
-import type { Profile, Folder, Image, Job } from '@/lib/validations'
+import type { Profile, Folder, Image as ImageType, Job } from '@/lib/validations'
 import DashboardLayout from '@/components/DashboardLayout'
 import { ToastContainer, useToast } from '@/components/Toast'
 import LoadingAdCard from '@/components/LoadingAdCard'
@@ -14,7 +15,7 @@ interface FolderClientProps {
   user: User
   profile: Profile
   folder: Folder
-  initialImages: Image[]
+  initialImages: ImageType[]
 }
 
 export default function FolderClient({ user, profile, folder, initialImages }: FolderClientProps) {
@@ -194,7 +195,7 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
     }
   }, [user.id, supabase, fetchJobs, fetchGeneratedAds])
 
-  const getImageUrl = useCallback(async (image: Image): Promise<string> => {
+  const getImageUrl = useCallback(async (image: ImageType): Promise<string> => {
     try {
       // First try to get signed URL from uploads bucket
       const { data, error } = await supabase.storage
@@ -915,11 +916,13 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
                     
                     {filteredAds.map((ad) => (
                     <div key={ad.id} className="bg-gray-50 rounded-xl p-4 border border-gray-200">
-                      <div className="aspect-square bg-white rounded-lg overflow-hidden mb-3">
-                        <img
+                      <div className="aspect-square bg-white rounded-lg overflow-hidden mb-3 relative">
+                        <Image
                           src={ad.url}
-                          alt={ad.name}
-                          className="w-full h-full object-cover"
+                          alt={ad.name || 'Generated ad'}
+                          fill
+                          className="object-cover"
+                          sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
                         />
                       </div>
                       <div className="space-y-2">
@@ -1370,11 +1373,11 @@ function ImageCard({
   onDelete, 
   getImageUrl
 }: { 
-  image: Image
+  image: ImageType
   isSelected: boolean
   onToggleSelect: () => void
   onDelete: () => void
-  getImageUrl: (image: Image) => Promise<string>
+  getImageUrl: (image: ImageType) => Promise<string>
 }) {
   const [imageUrl, setImageUrl] = useState<string>('')
   const [isLoading, setIsLoading] = useState(true)
@@ -1440,12 +1443,13 @@ function ImageCard({
         )}
         
         {!isLoading && !hasError && imageUrl && (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
+          <Image
             src={imageUrl}
             alt={image.original_name}
+            fill
             className="w-full h-full object-cover"
             onError={() => setHasError(true)}
+            sizes="(max-width: 768px) 50vw, (max-width: 1200px) 33vw, 25vw"
           />
         )}
         
@@ -1570,11 +1574,12 @@ function JobCard({
       <div className="relative aspect-square bg-gray-100 rounded-t-xl overflow-hidden">
         {job.status === 'completed' && job.result_signed_url ? (
           <>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
+            <Image
               src={job.result_signed_url}
               alt={`Generated ad ${job.id.slice(0, 8)}`}
-              className="w-full h-full object-cover"
+              fill
+              className="object-cover cursor-pointer"
+              sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
               onClick={() => window.open(job.result_signed_url, '_blank')}
             />
             {/* Action buttons overlay - Always visible */}
@@ -1750,9 +1755,9 @@ function GenerateModalImageCard({
   onRemove, 
   getImageUrl 
 }: { 
-  image: Image
+  image: ImageType
   onRemove: () => void
-  getImageUrl: (image: Image) => Promise<string>
+  getImageUrl: (image: ImageType) => Promise<string>
 }) {
   const [imageUrl, setImageUrl] = useState<string>('')
   const [isLoading, setIsLoading] = useState(true)
@@ -1802,11 +1807,12 @@ function GenerateModalImageCard({
         )}
         
         {!isLoading && !hasError && imageUrl && (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
+          <Image
             src={imageUrl}
             alt={image.original_name}
-            className="w-full h-full object-cover"
+            fill
+            className="object-cover"
+            sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
             onError={() => setHasError(true)}
           />
         )}

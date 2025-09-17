@@ -4,6 +4,7 @@ import { useState, ReactNode } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
+import Image from 'next/image'
 import type { User } from '@supabase/supabase-js'
 import type { Profile } from '@/lib/validations'
 
@@ -94,9 +95,11 @@ export default function DashboardLayout({ user, profile, children }: DashboardLa
           {/* Header */}
           <div className="flex items-center justify-between h-16 px-6 border-b border-gray-200 flex-shrink-0">
             <Link href="/" className="flex items-center space-x-2">
-              <img 
+              <Image
                 src="/logo.svg" 
                 alt="Image2Ad Logo" 
+                width={32}
+                height={32}
                 className="w-8 h-8"
               />
               <span className="text-xl font-bold text-gray-900">Image2Ad</span>
@@ -210,9 +213,11 @@ export default function DashboardLayout({ user, profile, children }: DashboardLa
               </svg>
             </button>
             <div className="flex items-center space-x-2">
-              <img 
+              <Image
                 src="/logo.svg" 
                 alt="Image2Ad Logo" 
+                width={24}
+                height={24}
                 className="w-6 h-6"
               />
               <span className="font-semibold text-gray-900">Image2Ad</span>

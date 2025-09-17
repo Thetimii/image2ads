@@ -38,3 +38,49 @@ body {
   backdrop-filter: blur(20px);
   border: 1px solid rgba(255, 255, 255, 0.4);
 }
+
+/* Loading animations */
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.animate-shimmer {
+  background: linear-gradient(90deg, transparent 25%, rgba(255, 255, 255, 0.5) 50%, transparent 75%);
+  background-size: 200% 100%;
+  animation: shimmer 2s infinite linear;
+}
+
+/* Pulse enhancement for better loading feel */
+@keyframes pulse-enhanced {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.7;
+    transform: scale(1.02);
+  }
+}
+
+.animate-pulse-enhanced {
+  animation: pulse-enhanced 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* Loading bounce for dots */
+@keyframes loading-bounce {
+  0%, 80%, 100% {
+    transform: scale(0);
+  }
+  40% {
+    transform: scale(1);
+  }
+}
+
+.animate-loading-bounce {
+  animation: loading-bounce 1.4s infinite ease-in-out;
+}

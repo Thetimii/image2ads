@@ -124,15 +124,37 @@ export default function SettingsClient({ user, profile }: SettingsClientProps) {
   const handleDeleteAccount = async () => {
     setIsDeleting(true)
     try {
-      // TODO: Implement account deletion API call
-      setTimeout(() => {
-        setIsDeleting(false)
-        setShowDeleteConfirm(false)
-        router.push('/')
-      }, 2000)
+      // Get the current session to include the JWT token
+      const { data: { session } } = await supabase.auth.getSession()
+      
+      if (!session?.access_token) {
+        throw new Error('No valid session found')
+      }
+
+      const response = await fetch('/api/account/delete', {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || 'Failed to delete account')
+      }
+
+      // Account deleted successfully, sign out and redirect
+      await supabase.auth.signOut()
+      setIsDeleting(false)
+      setShowDeleteConfirm(false)
+      router.push('/')
+      
     } catch (error) {
       console.error('Error deleting account:', error)
       setIsDeleting(false)
+      // Show error message to user
+      alert('Failed to delete account. Please try again or contact support.')
     }
   }
 
