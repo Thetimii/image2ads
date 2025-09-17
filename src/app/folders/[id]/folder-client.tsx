@@ -44,6 +44,7 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
   const [searchTerm, setSearchTerm] = useState('')
   const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'name'>('newest')
   const [loadingJobs, setLoadingJobs] = useState<Array<{ id: string, customName?: string }>>([])
+  const [isGenerating, setIsGenerating] = useState(false)
   const { toasts, addToast, removeToast } = useToast()
   const supabase = createClient()
   const router = useRouter()
@@ -365,6 +366,8 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
       return
     }
 
+    setIsGenerating(true)
+
     const loadingToastId = addToast({
       message: 'Starting ad generation...',
       type: 'loading'
@@ -444,6 +447,8 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
         message: 'Failed to start generation. Please try again.',
         type: 'error'
       })
+    } finally {
+      setIsGenerating(false)
     }
   }
 
@@ -1322,10 +1327,17 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
                   </button>
                   <button
                     onClick={handleGenerateAd}
-                    disabled={!prompt.trim() || !selectedImage}
+                    disabled={!prompt.trim() || !selectedImage || isGenerating}
                     className="px-6 py-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg hover:from-blue-700 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-lg shadow-blue-500/20"
                   >
-                    Generate Ad
+                    {isGenerating ? (
+                      <div className="flex items-center space-x-2">
+                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                        <span>Generating...</span>
+                      </div>
+                    ) : (
+                      'Generate Ad'
+                    )}
                   </button>
                 </div>
               </div>

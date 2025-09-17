@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import type { User } from '@supabase/supabase-js'
 import type { Profile, Folder } from '@/lib/validations'
 import DashboardLayout from '@/components/DashboardLayout'
@@ -18,10 +19,17 @@ type ViewMode = 'grid' | 'list'
 export default function DashboardClient({ user, profile, initialFolders }: DashboardClientProps) {
   const [folders, setFolders] = useState(initialFolders)
   const [isCreating, setIsCreating] = useState(false)
+  const [loadingFolderId, setLoadingFolderId] = useState<string | null>(null)
   const [newFolderName, setNewFolderName] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
   const [sortBy, setSortBy] = useState<SortOption>('date-desc')
   const [viewMode, setViewMode] = useState<ViewMode>('grid')
+  const router = useRouter()
+
+  const handleFolderClick = (folderId: string) => {
+    setLoadingFolderId(folderId)
+    router.push(`/folders/${folderId}`)
+  }
 
   // Filter and sort folders based on search and sort options
   const filteredAndSortedFolders = useMemo(() => {
@@ -200,24 +208,36 @@ export default function DashboardClient({ user, profile, initialFolders }: Dashb
               {filteredAndSortedFolders.map((folder) => (
                 viewMode === 'grid' ? (
                   // Grid View
-                  <Link
+                  <button
                     key={folder.id}
-                    href={`/folders/${folder.id}`}
-                    className="group relative bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl p-6 hover:from-blue-50 hover:to-purple-50 transition-all duration-200 border border-gray-200 hover:border-blue-200 hover:shadow-lg hover:shadow-blue-100/50"
+                    onClick={() => handleFolderClick(folder.id)}
+                    disabled={loadingFolderId === folder.id}
+                    className="group relative bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl p-6 hover:from-blue-50 hover:to-purple-50 transition-all duration-200 border border-gray-200 hover:border-blue-200 hover:shadow-lg hover:shadow-blue-100/50 disabled:opacity-50 disabled:cursor-not-allowed w-full text-left"
                   >
                     <div className="flex items-start justify-between mb-4">
                       <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center group-hover:bg-gradient-to-r group-hover:from-blue-500 group-hover:to-purple-500 transition-all duration-200 shadow-sm">
-                        <svg className="w-6 h-6 text-gray-600 group-hover:text-white transition-colors duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-5l-2-2H5a2 2 0 00-2 2z" />
-                        </svg>
+                        {loadingFolderId === folder.id ? (
+                          <div className="w-5 h-5 border-2 border-blue-500/30 border-t-blue-500 rounded-full animate-spin"></div>
+                        ) : (
+                          <svg className="w-6 h-6 text-gray-600 group-hover:text-white transition-colors duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-5l-2-2H5a2 2 0 00-2 2z" />
+                          </svg>
+                        )}
                       </div>
-                      <svg className="w-5 h-5 text-gray-400 group-hover:text-blue-500 transition-colors duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                      </svg>
+                      {loadingFolderId === folder.id ? (
+                        <div className="w-5 h-5 border-2 border-blue-500/30 border-t-blue-500 rounded-full animate-spin"></div>
+                      ) : (
+                        <svg className="w-5 h-5 text-gray-400 group-hover:text-blue-500 transition-colors duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        </svg>
+                      )}
                     </div>
                     
                     <h3 className="text-lg font-semibold text-gray-900 mb-2 group-hover:text-blue-900 transition-colors duration-200">
                       {folder.name}
+                      {loadingFolderId === folder.id && (
+                        <span className="ml-2 text-sm text-blue-500">Loading...</span>
+                      )}
                     </h3>
                     
                     <p className="text-sm text-gray-500 group-hover:text-blue-600 transition-colors duration-200">
@@ -227,23 +247,31 @@ export default function DashboardClient({ user, profile, initialFolders }: Dashb
                         year: 'numeric'
                       })}
                     </p>
-                  </Link>
+                  </button>
                 ) : (
                   // List View
-                  <Link
+                  <button
                     key={folder.id}
-                    href={`/folders/${folder.id}`}
-                    className="group flex items-center justify-between p-4 hover:bg-gray-50 transition-colors duration-200"
+                    onClick={() => handleFolderClick(folder.id)}
+                    disabled={loadingFolderId === folder.id}
+                    className="group flex items-center justify-between p-4 hover:bg-gray-50 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed w-full text-left"
                   >
                     <div className="flex items-center space-x-4">
                       <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-500 rounded-lg flex items-center justify-center group-hover:from-blue-600 group-hover:to-purple-600 transition-all duration-200">
-                        <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-5l-2-2H5a2 2 0 00-2 2z" />
-                        </svg>
+                        {loadingFolderId === folder.id ? (
+                          <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                        ) : (
+                          <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-5l-2-2H5a2 2 0 00-2 2z" />
+                          </svg>
+                        )}
                       </div>
                       <div>
                         <h3 className="text-base font-semibold text-gray-900 group-hover:text-blue-900 transition-colors duration-200">
                           {folder.name}
+                          {loadingFolderId === folder.id && (
+                            <span className="ml-2 text-sm text-blue-500">Loading...</span>
+                          )}
                         </h3>
                         <p className="text-sm text-gray-500">
                           Created {new Date(folder.created_at).toLocaleDateString('en-US', {
@@ -254,10 +282,14 @@ export default function DashboardClient({ user, profile, initialFolders }: Dashb
                         </p>
                       </div>
                     </div>
-                    <svg className="w-5 h-5 text-gray-400 group-hover:text-blue-500 transition-colors duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                    </svg>
-                  </Link>
+                    {loadingFolderId === folder.id ? (
+                      <div className="w-5 h-5 border-2 border-blue-500/30 border-t-blue-500 rounded-full animate-spin"></div>
+                    ) : (
+                      <svg className="w-5 h-5 text-gray-400 group-hover:text-blue-500 transition-colors duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                    )}
+                  </button>
                 )
               ))}
             </div>
