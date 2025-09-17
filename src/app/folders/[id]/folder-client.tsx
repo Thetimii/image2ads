@@ -146,6 +146,25 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
     }
   }, [folder.id])
 
+  const refetchImages = useCallback(async () => {
+    try {
+      const { data: updatedImages, error } = await supabase
+        .from('images')
+        .select('*')
+        .eq('folder_id', folder.id)
+        .order('created_at', { ascending: false })
+
+      if (error) {
+        console.error('Error refetching images:', error)
+        return
+      }
+
+      setImages(updatedImages || [])
+    } catch (error) {
+      console.error('Error refetching images:', error)
+    }
+  }, [folder.id, supabase])
+
   // Subscribe to job status changes
   useEffect(() => {
     const channel = supabase
@@ -266,79 +285,54 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
     setUploadProgress(0)
 
     try {
-      const uploadedImages = []
-      const totalFiles = files.length
+      // Create FormData for multiple file upload
+      const formData = new FormData()
+      formData.append('folderId', folder.id)
+      
+      // Add all files to FormData
+      Array.from(files).forEach((file) => {
+        formData.append('files', file)
+      })
 
-      for (let i = 0; i < files.length; i++) {
-        const file = files[i]
-        setUploadProgress((i / totalFiles) * 100)
+      // Upload all files at once (with PNG conversion)
+      const uploadResponse = await fetch('/api/upload-png', {
+        method: 'POST',
+        body: formData,
+      })
 
-        // Get upload URL
-        const uploadResponse = await fetch('/api/upload-url', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            fileName: file.name,
-            fileType: file.type,
-            fileSize: file.size,
-            folderId: folder.id,
-          }),
-        })
-
-        if (!uploadResponse.ok) {
-          throw new Error('Failed to get upload URL')
-        }
-
-        const { uploadUrl, filePath, fileName } = await uploadResponse.json()
-
-        // Upload file to Supabase Storage
-        const uploadFileResponse = await fetch(uploadUrl, {
-          method: 'PUT',
-          body: file,
-          headers: {
-            'Content-Type': file.type,
-          },
-        })
-
-        if (!uploadFileResponse.ok) {
-          throw new Error('Failed to upload file')
-        }
-
-        // Create image record in database
-        const { data: imageRecord, error: dbError } = await supabase
-          .from('images')
-          .insert({
-            user_id: user.id,
-            folder_id: folder.id,
-            file_path: filePath,
-            original_name: file.name,
-            file_size: file.size,
-            mime_type: file.type,
-          })
-          .select()
-          .single()
-
-        if (dbError || !imageRecord) {
-          console.error('Failed to create image record:', dbError)
-          throw new Error('Failed to save image record')
-        }
-
-        uploadedImages.push(imageRecord)
+      if (!uploadResponse.ok) {
+        throw new Error('Failed to upload images')
       }
 
-      // Add new images to the end of the existing images array
-      setImages([...images, ...uploadedImages])
+      const result = await uploadResponse.json()
+      
+      if (!result.success) {
+        throw new Error(result.error || 'Upload failed')
+      }
+
+      // Update progress to 100%
       setUploadProgress(100)
+
+      // Refresh images after successful upload
+      await refetchImages()
+      
+      // Show success message
+      const successMessage = result.uploadedImages.length === files.length 
+        ? `Successfully uploaded ${result.uploadedImages.length} image${result.uploadedImages.length > 1 ? 's' : ''}!`
+        : `Uploaded ${result.uploadedImages.length} of ${files.length} images. Some files may have failed.`
+      
+      alert(successMessage)
+
     } catch (error) {
-      console.error('Error uploading files:', error)
-      alert('Failed to upload files')
+      console.error('Upload error:', error)
+      alert('Failed to upload images. Please try again.')
     } finally {
       setIsUploading(false)
       setUploadProgress(0)
-      // Reset the file input
-      e.target.value = ''
+      // Reset file input
+      if (e.target) {
+        e.target.value = ''
+      }
     }
   }
 
