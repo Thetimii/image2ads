@@ -11,6 +11,7 @@ export default function SignUpPage() {
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+  const [loadingMessage, setLoadingMessage] = useState('')
   const [message, setMessage] = useState('')
   const [isSafari, setIsSafari] = useState(false)
   const router = useRouter()
@@ -26,11 +27,13 @@ export default function SignUpPage() {
     e.preventDefault()
     setIsLoading(true)
     setMessage('')
+    setLoadingMessage('Validating your information...')
 
     // Validate password confirmation
     if (password !== confirmPassword) {
       setMessage('Passwords do not match')
       setIsLoading(false)
+      setLoadingMessage('')
       return
     }
 
@@ -38,10 +41,12 @@ export default function SignUpPage() {
     if (password.length < 6) {
       setMessage('Password must be at least 6 characters long')
       setIsLoading(false)
+      setLoadingMessage('')
       return
     }
 
     try {
+      setLoadingMessage('Creating your account...')
       const { error } = await supabase.auth.signUp({
         email,
         password,
@@ -52,18 +57,22 @@ export default function SignUpPage() {
       
       if (error) throw error
       
+      setLoadingMessage('Setting up your dashboard...')
       // Temporarily skip email confirmation and go directly to dashboard
       // TODO: Re-enable email confirmation when mail sender is fixed
       router.push('/dashboard')
     } catch (error: unknown) {
       setMessage((error as Error).message || 'An error occurred')
+      setLoadingMessage('')
     } finally {
       setIsLoading(false)
+      setLoadingMessage('')
     }
   }
 
   const handleGoogleAuth = async () => {
     setIsLoading(true)
+    setLoadingMessage('Connecting with Google...')
     try {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
@@ -75,6 +84,7 @@ export default function SignUpPage() {
     } catch (error: unknown) {
       setMessage((error as Error).message || 'An error occurred')
       setIsLoading(false)
+      setLoadingMessage('')
     }
   }
 
@@ -111,7 +121,17 @@ export default function SignUpPage() {
         </div>
 
         {/* Main Card */}
-        <div className="bg-white/80 backdrop-blur-sm border border-gray-200/50 rounded-2xl shadow-xl shadow-gray-200/20 p-8">
+        <div className="bg-white/80 backdrop-blur-sm border border-gray-200/50 rounded-2xl shadow-xl shadow-gray-200/20 p-8 relative">
+          {/* Loading Overlay */}
+          {isLoading && (
+            <div className="absolute inset-0 bg-white/50 backdrop-blur-sm rounded-2xl flex items-center justify-center z-10">
+              <div className="bg-white rounded-xl p-6 shadow-lg flex items-center space-x-3">
+                <div className="w-6 h-6 border-3 border-blue-600/30 border-t-blue-600 rounded-full animate-spin"></div>
+                <span className="text-gray-700 font-medium">{loadingMessage || 'Creating your account...'}</span>
+              </div>
+            </div>
+          )}
+          
           <div className="text-center mb-8">
             <h2 className="text-2xl font-bold text-gray-900 mb-2">
               Create your account
@@ -188,15 +208,19 @@ export default function SignUpPage() {
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white font-medium py-3 px-4 rounded-xl hover:from-blue-700 hover:to-purple-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-lg shadow-blue-500/20"
+              className={`w-full font-medium py-3 px-4 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all duration-200 shadow-lg ${
+                isLoading
+                  ? 'bg-gray-400 cursor-not-allowed transform scale-98'
+                  : 'bg-gradient-to-r from-blue-600 to-purple-600 text-white hover:from-blue-700 hover:to-purple-700 hover:scale-105 shadow-blue-500/20'
+              }`}
             >
               {isLoading ? (
                 <div className="flex items-center justify-center space-x-2">
-                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                  <span>Creating Account...</span>
+                  <div className="w-5 h-5 border-3 border-white/30 border-t-white rounded-full animate-spin"></div>
+                  <span className="text-white">{loadingMessage || 'Creating Account...'}</span>
                 </div>
               ) : (
-                'Create Account'
+                <span className="text-white">Create Account</span>
               )}
             </button>
           </form>
