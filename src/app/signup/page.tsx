@@ -14,6 +14,7 @@ export default function SignUpPage() {
   const [loadingMessage, setLoadingMessage] = useState('')
   const [message, setMessage] = useState('')
   const [isSafari, setIsSafari] = useState(false)
+  const [isRedirecting, setIsRedirecting] = useState(false)
   const router = useRouter()
   const supabase = createClient()
 
@@ -58,16 +59,25 @@ export default function SignUpPage() {
       if (error) throw error
       
       setLoadingMessage('Setting up your dashboard...')
+      setIsRedirecting(true)
+      
       // Temporarily skip email confirmation and go directly to dashboard
       // TODO: Re-enable email confirmation when mail sender is fixed
       router.push('/dashboard')
+      
+      // Keep loading state active for a bit longer to show until navigation completes
+      setTimeout(() => {
+        setIsLoading(false)
+        setLoadingMessage('')
+        setIsRedirecting(false)
+      }, 2000)
     } catch (error: unknown) {
       setMessage((error as Error).message || 'An error occurred')
       setLoadingMessage('')
-    } finally {
       setIsLoading(false)
-      setLoadingMessage('')
+      setIsRedirecting(false)
     }
+    // Don't set isLoading to false here - let the timeout handle it after redirect
   }
 
   const handleGoogleAuth = async () => {
@@ -123,7 +133,7 @@ export default function SignUpPage() {
         {/* Main Card */}
         <div className="bg-white/80 backdrop-blur-sm border border-gray-200/50 rounded-2xl shadow-xl shadow-gray-200/20 p-8 relative">
           {/* Loading Overlay */}
-          {isLoading && (
+          {(isLoading || isRedirecting) && (
             <div className="absolute inset-0 bg-white/50 backdrop-blur-sm rounded-2xl flex items-center justify-center z-10">
               <div className="bg-white rounded-xl p-6 shadow-lg flex items-center space-x-3">
                 <div className="w-6 h-6 border-3 border-blue-600/30 border-t-blue-600 rounded-full animate-spin"></div>
@@ -207,14 +217,14 @@ export default function SignUpPage() {
 
             <button
               type="submit"
-              disabled={isLoading}
+              disabled={isLoading || isRedirecting}
               className={`w-full font-medium py-3 px-4 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all duration-200 shadow-lg ${
-                isLoading
+                (isLoading || isRedirecting)
                   ? 'bg-gray-400 cursor-not-allowed transform scale-98'
                   : 'bg-gradient-to-r from-blue-600 to-purple-600 text-white hover:from-blue-700 hover:to-purple-700 hover:scale-105 shadow-blue-500/20'
               }`}
             >
-              {isLoading ? (
+              {(isLoading || isRedirecting) ? (
                 <div className="flex items-center justify-center space-x-2">
                   <div className="w-5 h-5 border-3 border-white/30 border-t-white rounded-full animate-spin"></div>
                   <span className="text-white">{loadingMessage || 'Creating Account...'}</span>
@@ -238,7 +248,7 @@ export default function SignUpPage() {
           <button
             type="button"
             onClick={handleGoogleAuth}
-            disabled={isLoading}
+            disabled={isLoading || isRedirecting}
             className="w-full mt-4 bg-white border border-gray-300 text-gray-700 font-medium py-3 px-4 rounded-xl hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-500/20 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-sm flex items-center justify-center space-x-3"
           >
             <svg className="w-5 h-5" viewBox="0 0 24 24">
