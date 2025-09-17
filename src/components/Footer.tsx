@@ -11,12 +11,7 @@ const Footer = () => {
     setIsSafari(isSafariBrowser);
   }, []);
 
-  const scrollToSignup = () => {
-    const signupElement = document.getElementById('signup-section');
-    if (signupElement) {
-      signupElement.scrollIntoView({ behavior: 'smooth' });
-    }
-  };
+
 
   return (
     <footer className="py-16 px-6 bg-white/20 backdrop-blur-sm border-t border-gray-300/30">
@@ -43,12 +38,12 @@ const Footer = () => {
               <a href="/terms" className="text-gray-600 hover:text-gray-800 transition-colors duration-300">Terms</a>
             </div>
             
-            <button
-              onClick={scrollToSignup}
+            <a
+              href="/signin"
               className="px-6 py-3 text-white font-semibold rounded-full bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 transition-all duration-300 hover:scale-105"
             >
               Get Started
-            </button>
+            </a>
           </div>
         </div>
         
