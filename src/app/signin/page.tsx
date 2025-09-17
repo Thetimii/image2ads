@@ -1,9 +1,10 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import Image from 'next/image'
 
 export default function SignInPage() {
   const [email, setEmail] = useState('')
@@ -11,8 +12,15 @@ export default function SignInPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [isSignUp, setIsSignUp] = useState(false)
   const [message, setMessage] = useState('')
+  const [isSafari, setIsSafari] = useState(false)
   const router = useRouter()
   const supabase = createClient()
+
+  useEffect(() => {
+    // Detect Safari
+    const userAgent = navigator.userAgent.toLowerCase();
+    setIsSafari(userAgent.includes('safari') && !userAgent.includes('chrome'));
+  }, []);
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -70,9 +78,28 @@ export default function SignInPage() {
         {/* Logo/Brand */}
         <div className="text-center mb-8">
           <Link href="/" className="inline-flex items-center space-x-2">
-            <div className="w-8 h-8 bg-gradient-to-r from-blue-600 to-purple-600 rounded-lg flex items-center justify-center">
-              <span className="text-white font-bold text-sm">IA</span>
-            </div>
+            {isSafari ? (
+              // Safari-specific PNG fallback
+              <Image
+                src="/logo.png"
+                alt="Image2Ad Logo"
+                width={32}
+                height={32}
+                className="w-8 h-8"
+                style={{
+                  imageRendering: 'auto'
+                } as React.CSSProperties}
+              />
+            ) : (
+              // Standard SVG for other browsers
+              <Image
+                src="/logo.svg"
+                alt="Image2Ad Logo"
+                width={32}
+                height={32}
+                className="w-8 h-8"
+              />
+            )}
             <span className="text-xl font-semibold text-gray-900">Image2Ad</span>
           </Link>
         </div>

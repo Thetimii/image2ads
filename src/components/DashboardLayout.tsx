@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, ReactNode } from 'react'
+import { useState, useEffect, ReactNode } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
@@ -58,9 +58,16 @@ const bottomNavigation = [
 
 export default function DashboardLayout({ user, profile, children }: DashboardLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [isSafari, setIsSafari] = useState(false)
   const router = useRouter()
   const pathname = usePathname()
   const supabase = createClient()
+
+  useEffect(() => {
+    // Detect Safari
+    const userAgent = navigator.userAgent.toLowerCase();
+    setIsSafari(userAgent.includes('safari') && !userAgent.includes('chrome'));
+  }, []);
 
   const handleSignOut = async () => {
     await supabase.auth.signOut()
@@ -95,13 +102,28 @@ export default function DashboardLayout({ user, profile, children }: DashboardLa
           {/* Header */}
           <div className="flex items-center justify-between h-16 px-6 border-b border-gray-200 flex-shrink-0">
             <Link href="/" className="flex items-center space-x-2">
-              <Image
-                src="/logo.svg" 
-                alt="Image2Ad Logo" 
-                width={32}
-                height={32}
-                className="w-8 h-8"
-              />
+              {isSafari ? (
+                // Safari-specific PNG fallback
+                <Image
+                  src="/logo.png" 
+                  alt="Image2Ad Logo" 
+                  width={32}
+                  height={32}
+                  className="w-8 h-8"
+                  style={{
+                    imageRendering: 'auto'
+                  } as React.CSSProperties}
+                />
+              ) : (
+                // Standard SVG for other browsers
+                <Image
+                  src="/logo.svg" 
+                  alt="Image2Ad Logo" 
+                  width={32}
+                  height={32}
+                  className="w-8 h-8"
+                />
+              )}
               <span className="text-xl font-bold text-gray-900">Image2Ad</span>
             </Link>
             <button
@@ -213,13 +235,28 @@ export default function DashboardLayout({ user, profile, children }: DashboardLa
               </svg>
             </button>
             <div className="flex items-center space-x-2">
-              <Image
-                src="/logo.svg" 
-                alt="Image2Ad Logo" 
-                width={24}
-                height={24}
-                className="w-6 h-6"
-              />
+              {isSafari ? (
+                // Safari-specific PNG fallback
+                <Image
+                  src="/logo.png" 
+                  alt="Image2Ad Logo" 
+                  width={24}
+                  height={24}
+                  className="w-6 h-6"
+                  style={{
+                    imageRendering: 'auto'
+                  } as React.CSSProperties}
+                />
+              ) : (
+                // Standard SVG for other browsers
+                <Image
+                  src="/logo.svg" 
+                  alt="Image2Ad Logo" 
+                  width={24}
+                  height={24}
+                  className="w-6 h-6"
+                />
+              )}
               <span className="font-semibold text-gray-900">Image2Ad</span>
             </div>
           </div>
