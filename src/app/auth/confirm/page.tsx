@@ -2,13 +2,19 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 
 export default function ConfirmPage() {
   const [email, setEmail] = useState('')
+  const [isSafari, setIsSafari] = useState(false)
   const router = useRouter()
 
   useEffect(() => {
+    // Detect Safari
+    const userAgent = navigator.userAgent.toLowerCase();
+    setIsSafari(userAgent.includes('safari') && !userAgent.includes('chrome'));
+
     // Get email from URL params or localStorage if available
     const urlParams = new URLSearchParams(window.location.search)
     const emailParam = urlParams.get('email')
@@ -23,9 +29,28 @@ export default function ConfirmPage() {
         {/* Logo/Brand */}
         <div className="text-center mb-8">
           <Link href="/" className="inline-flex items-center space-x-2">
-            <div className="w-8 h-8 bg-gradient-to-r from-blue-600 to-purple-600 rounded-lg flex items-center justify-center">
-              <span className="text-white font-bold text-sm">IA</span>
-            </div>
+            {isSafari ? (
+              // Safari-specific PNG fallback
+              <Image
+                src="/logo.png"
+                alt="Image2Ad Logo"
+                width={32}
+                height={32}
+                className="w-8 h-8"
+                style={{
+                  imageRendering: 'auto'
+                } as React.CSSProperties}
+              />
+            ) : (
+              // Standard SVG for other browsers
+              <Image
+                src="/logo.svg"
+                alt="Image2Ad Logo"
+                width={32}
+                height={32}
+                className="w-8 h-8"
+              />
+            )}
             <span className="text-xl font-semibold text-gray-900">Image2Ad</span>
           </Link>
         </div>

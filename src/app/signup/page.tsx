@@ -51,8 +51,10 @@ export default function SignUpPage() {
       })
       
       if (error) throw error
-      // Redirect to confirmation page instead of showing message here
-      router.push('/auth/confirm')
+      
+      // Temporarily skip email confirmation and go directly to dashboard
+      // TODO: Re-enable email confirmation when mail sender is fixed
+      router.push('/dashboard')
     } catch (error: unknown) {
       setMessage((error as Error).message || 'An error occurred')
     } finally {
