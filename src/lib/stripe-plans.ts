@@ -15,8 +15,8 @@ export const STRIPE_PLANS = {
   },
   business: {
     name: "Business",
-    credits: 2000,
-    price: 129.99,
+    credits: 1500,
+    price: 149.99,
     priceId: process.env.STRIPE_BUSINESS_PRICE_ID,
     allowCoupons: true,
   },

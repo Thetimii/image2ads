@@ -1,6 +1,7 @@
 import Stripe from "stripe";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { STRIPE_PLANS } from "@/lib/stripe-plans";
 
 export const runtime = "nodejs"; // raw body + crypto
 
@@ -19,6 +20,18 @@ const supabaseAdmin = createClient(
     },
   }
 );
+
+// Helper function to get credits for a given Stripe price ID
+function getCreditsByPriceId(priceId: string): number {
+  if (priceId === process.env.STRIPE_STARTER_PRICE_ID) {
+    return STRIPE_PLANS.starter.credits;
+  } else if (priceId === process.env.STRIPE_PRO_PRICE_ID) {
+    return STRIPE_PLANS.pro.credits;
+  } else if (priceId === process.env.STRIPE_BUSINESS_PRICE_ID) {
+    return STRIPE_PLANS.business.credits;
+  }
+  return 0;
+}
 
 // Helper function to add credits to a customer by Stripe customer ID
 async function addCreditsToCustomer(stripeCustomerId: string, credits: number) {
@@ -153,14 +166,11 @@ export async function POST(req: NextRequest) {
 
           // Add credits based on subscription plan
           const planItem = subscription.items.data[0];
-          if (planItem?.price?.id === process.env.STRIPE_STARTER_PRICE_ID) {
-            await addCreditsToCustomer(customerId, 150);
-          } else if (planItem?.price?.id === process.env.STRIPE_PRO_PRICE_ID) {
-            await addCreditsToCustomer(customerId, 400);
-          } else if (
-            planItem?.price?.id === process.env.STRIPE_BUSINESS_PRICE_ID
-          ) {
-            await addCreditsToCustomer(customerId, 700);
+          if (planItem?.price?.id) {
+            const creditsToAdd = getCreditsByPriceId(planItem.price.id);
+            if (creditsToAdd > 0) {
+              await addCreditsToCustomer(customerId, creditsToAdd);
+            }
           }
         }
         break;
@@ -256,14 +266,8 @@ export async function POST(req: NextRequest) {
           const planItem = subscription.items.data[0];
           let creditsToAdd = 0;
 
-          if (planItem?.price?.id === process.env.STRIPE_STARTER_PRICE_ID) {
-            creditsToAdd = 150;
-          } else if (planItem?.price?.id === process.env.STRIPE_PRO_PRICE_ID) {
-            creditsToAdd = 400;
-          } else if (
-            planItem?.price?.id === process.env.STRIPE_BUSINESS_PRICE_ID
-          ) {
-            creditsToAdd = 700;
+          if (planItem?.price?.id) {
+            creditsToAdd = getCreditsByPriceId(planItem.price.id);
           }
 
           if (creditsToAdd > 0) {
@@ -318,14 +322,8 @@ export async function POST(req: NextRequest) {
           const planItem = subscription.items.data[0];
           let creditsToAdd = 0;
 
-          if (planItem?.price?.id === process.env.STRIPE_STARTER_PRICE_ID) {
-            creditsToAdd = 150;
-          } else if (planItem?.price?.id === process.env.STRIPE_PRO_PRICE_ID) {
-            creditsToAdd = 400;
-          } else if (
-            planItem?.price?.id === process.env.STRIPE_BUSINESS_PRICE_ID
-          ) {
-            creditsToAdd = 700;
+          if (planItem?.price?.id) {
+            creditsToAdd = getCreditsByPriceId(planItem.price.id);
           }
 
           if (creditsToAdd > 0) {

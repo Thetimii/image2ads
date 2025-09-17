@@ -8,6 +8,7 @@ import type { Profile, Folder, Image, Job } from '@/lib/validations'
 import DashboardLayout from '@/components/DashboardLayout'
 import { ToastContainer, useToast } from '@/components/Toast'
 import LoadingAdCard from '@/components/LoadingAdCard'
+import FailedAdCard from '@/components/FailedAdCard'
 
 interface FolderClientProps {
   user: User
@@ -511,7 +512,7 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
     })
 
     try {
-      const response = await fetch(`/api/generated-ads/${adId}`, {
+      const response = await fetch(`/api/generated-ads/${adId}?folder_id=${folder.id}`, {
         method: 'DELETE',
       })
 
@@ -522,9 +523,6 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
       const result = await response.json()
       
       if (result.success) {
-        // Remove the ad from local state
-        setGeneratedAds(prev => prev.filter(ad => ad.id !== adId))
-        
         removeToast(loadingToastId)
         addToast({
           message: `"${adName}" deleted successfully`,
@@ -532,6 +530,20 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
         })
         
         console.log(`Generated ad ${adId} deleted successfully`)
+        
+        // Force refresh the generated ads from server instead of just removing from local state
+        setTimeout(async () => {
+          try {
+            const refreshResponse = await fetch(`/api/generated-ads?folder_id=${folder.id}`)
+            if (refreshResponse.ok) {
+              const { generatedAds: refreshedAds } = await refreshResponse.json()
+              setGeneratedAds(refreshedAds || [])
+              console.log('Refreshed generated ads after deletion')
+            }
+          } catch (error) {
+            console.error('Error refreshing generated ads:', error)
+          }
+        }, 500) // Wait 500ms for storage to propagate changes
       } else {
         throw new Error(result.error || 'Failed to delete generated ad')
       }
@@ -540,6 +552,52 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
       removeToast(loadingToastId)
       addToast({
         message: `Failed to delete "${adName}": ${error instanceof Error ? error.message : 'Unknown error'}`,
+        type: 'error'
+      })
+    }
+  }
+
+  const handleDeleteJob = async (jobId: string, jobName: string) => {
+    // Simple confirmation using browser confirm
+    const confirmed = window.confirm(`Are you sure you want to delete the failed job "${jobName}"? This action cannot be undone.`)
+    
+    if (!confirmed) return
+
+    const loadingToastId = addToast({
+      message: `Deleting failed job "${jobName}"...`,
+      type: 'loading'
+    })
+
+    try {
+      const response = await fetch(`/api/jobs/${jobId}`, {
+        method: 'DELETE',
+      })
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+
+      const result = await response.json()
+      
+      if (result.success) {
+        removeToast(loadingToastId)
+        addToast({
+          message: `Failed job "${jobName}" deleted successfully`,
+          type: 'success'
+        })
+        
+        console.log(`Failed job ${jobId} deleted successfully`)
+        
+        // Refresh the jobs list to remove the deleted job from UI
+        fetchJobs()
+      } else {
+        throw new Error(result.error || 'Failed to delete job')
+      }
+    } catch (error) {
+      console.error('Error deleting failed job:', error)
+      removeToast(loadingToastId)
+      addToast({
+        message: `Failed to delete job "${jobName}": ${error instanceof Error ? error.message : 'Unknown error'}`,
         type: 'error'
       })
     }
@@ -555,7 +613,7 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
     })
 
     try {
-      const response = await fetch(`/api/generated-ads/${adId}`, {
+      const response = await fetch(`/api/generated-ads/${adId}?folder_id=${folder.id}`, {
         method: 'DELETE',
       })
 
@@ -566,9 +624,6 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
       const result = await response.json()
       
       if (result.success) {
-        // Remove the ad from local state
-        setGeneratedAds(prev => prev.filter(ad => ad.id !== adId))
-        
         removeToast(loadingToastId)
         addToast({
           message: `"${adName}" deleted successfully`,
@@ -576,6 +631,20 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
         })
         
         console.log(`Generated ad ${adId} deleted successfully`)
+        
+        // Force refresh the generated ads from server instead of just removing from local state
+        setTimeout(async () => {
+          try {
+            const refreshResponse = await fetch(`/api/generated-ads?folder_id=${folder.id}`)
+            if (refreshResponse.ok) {
+              const { generatedAds: refreshedAds } = await refreshResponse.json()
+              setGeneratedAds(refreshedAds || [])
+              console.log('Refreshed generated ads after deletion')
+            }
+          } catch (error) {
+            console.error('Error refreshing generated ads:', error)
+          }
+        }, 500) // Wait 500ms for storage to propagate changes
       } else {
         throw new Error(result.error || 'Failed to delete generated ad')
       }
@@ -837,6 +906,19 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
                       <LoadingAdCard key={`loading-${loading.id}`} customName={loading.customName} />
                     ))}
                     
+                    {/* Failed job cards */}
+                    {jobs
+                      .filter(job => job.status === 'failed')
+                      .map((failedJob) => (
+                        <FailedAdCard 
+                          key={`failed-${failedJob.id}`} 
+                          customName={failedJob.custom_name || 'Failed Job'}
+                          errorMessage={failedJob.error_message}
+                          onDeleteAction={() => handleDeleteJob(failedJob.id, failedJob.custom_name || 'Failed Job')}
+                        />
+                      ))
+                    }
+                    
                     {filteredAds.map((ad) => (
                     <div key={ad.id} className="bg-gray-50 rounded-xl p-4 border border-gray-200">
                       <div className="aspect-square bg-white rounded-lg overflow-hidden mb-3">
@@ -943,8 +1025,8 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
           </div>
         )}
 
-        {/* Loading ads section - show when generating but no ads yet */}
-        {loadingJobs.length > 0 && generatedAds.length === 0 && (
+        {/* Loading ads section - show when generating but no ads yet, or when there are failed jobs */}
+        {(loadingJobs.length > 0 || jobs.some(job => job.status === 'failed')) && generatedAds.length === 0 && (
           <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
             <div className="p-6 border-b border-gray-200">
               <div>
@@ -958,6 +1040,19 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
                 {loadingJobs.map((loading) => (
                   <LoadingAdCard key={`loading-${loading.id}`} customName={loading.customName} />
                 ))}
+                
+                {/* Failed job cards */}
+                {jobs
+                  .filter(job => job.status === 'failed')
+                  .map((failedJob) => (
+                    <FailedAdCard 
+                      key={`failed-${failedJob.id}`} 
+                      customName={failedJob.custom_name || 'Failed Job'}
+                      errorMessage={failedJob.error_message}
+                      onDeleteAction={() => handleDeleteJob(failedJob.id, failedJob.custom_name || 'Failed Job')}
+                    />
+                  ))
+                }
               </div>
             </div>
           </div>

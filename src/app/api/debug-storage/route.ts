@@ -15,6 +15,82 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const path = searchParams.get('path')
     const imageId = searchParams.get('imageId')
+    const fileName = searchParams.get('fileName')
+
+    // If checking a specific file by name
+    if (fileName) {
+      const bucketResults = []
+      
+      // Check both buckets for the file
+      for (const bucket of ['results', 'generated-ads']) {
+        try {
+          // First try to list files to see if it exists
+          let fileExists = false
+          
+          if (bucket === 'results') {
+            // For results bucket, we need to check all user folders
+            const { data: folders } = await supabase
+              .from('folders')
+              .select('id')
+              .eq('user_id', user.id)
+
+            if (folders) {
+              for (const folder of folders) {
+                const testPath = `${user.id}/${folder.id}/`
+                const { data: files } = await supabase.storage
+                  .from(bucket)
+                  .list(testPath)
+
+                if (files && files.find(f => f.name === fileName)) {
+                  fileExists = true
+                  bucketResults.push({
+                    bucket,
+                    path: testPath,
+                    exists: true,
+                    foundInFolder: folder.id
+                  })
+                  break
+                }
+              }
+            }
+          } else {
+            // For generated-ads bucket, check root level
+            const { data: files } = await supabase.storage
+              .from(bucket)
+              .list('', { search: fileName })
+
+            fileExists = !!(files && files.find(f => f.name === fileName))
+            bucketResults.push({
+              bucket,
+              path: 'root',
+              exists: fileExists,
+              fileCount: files?.length || 0
+            })
+          }
+
+          if (!fileExists && bucket === 'results') {
+            bucketResults.push({
+              bucket,
+              path: 'not found in any folder',
+              exists: false
+            })
+          }
+
+        } catch (e) {
+          bucketResults.push({
+            bucket,
+            error: (e as Error).message,
+            exists: false
+          })
+        }
+      }
+
+      return NextResponse.json({
+        fileName,
+        bucketResults,
+        timestamp: new Date().toISOString()
+      })
+    }
 
     // If checking a specific image ID
     if (imageId) {

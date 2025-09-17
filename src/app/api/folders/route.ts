@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createFolderSchema } from '@/lib/validations'
 import { getUserFolders, createFolder } from '@/lib/database'
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient()

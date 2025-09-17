@@ -1,8 +1,6 @@
 'use client'
 
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
-import Link from 'next/link'
 import type { User } from '@supabase/supabase-js'
 import type { Profile } from '@/lib/validations'
 import { STRIPE_PLANS, type StripePlan } from '@/lib/stripe-plans'
@@ -15,7 +13,6 @@ interface BillingClientProps {
 
 export default function BillingClient({ user, profile }: BillingClientProps) {
   const [isLoading, setIsLoading] = useState<string | null>(null)
-  const router = useRouter()
 
   // Simple function to determine plan display name
   const getPlanDisplayName = () => {
