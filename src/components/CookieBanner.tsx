@@ -1,6 +1,7 @@
 "use client";
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { createClient } from '@/lib/supabase/client';
 
 // Extend Window interface for Facebook Pixel
 declare global {
@@ -21,6 +22,7 @@ const CookieBanner = () => {
   const [showBanner, setShowBanner] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [currentUser, setCurrentUser] = useState<any>(null);
   const [preferences, setPreferences] = useState<CookiePreferences>({
     necessary: true, // Always required
     analytics: false,
@@ -28,28 +30,54 @@ const CookieBanner = () => {
     functional: false,
   });
 
+  const supabase = createClient();
+
   useEffect(() => {
     setMounted(true);
     
-    // Check if user has already made a choice
-    const cookieConsent = localStorage.getItem('cookieConsent');
-    const savedPreferences = localStorage.getItem('cookiePreferences');
+    // Get current user
+    const getUser = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      setCurrentUser(user);
+      
+      // Check for saved preferences in database if user is logged in
+      if (user) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('cookie_preferences')
+          .eq('id', user.id)
+          .single();
+          
+        if (profile?.cookie_preferences) {
+          const savedPrefs = profile.cookie_preferences;
+          setPreferences(savedPrefs);
+          applyPreferences(savedPrefs);
+          return; // Don't show banner if user has saved preferences
+        }
+      }
+      
+      // Check localStorage for non-logged-in users or as fallback
+      const cookieConsent = localStorage.getItem('cookieConsent');
+      const savedPreferences = localStorage.getItem('cookiePreferences');
+      
+      if (!cookieConsent) {
+        // Show banner after a short delay for better UX
+        const timer = setTimeout(() => {
+          setShowBanner(true);
+        }, 1000);
+        return () => clearTimeout(timer);
+      } else if (savedPreferences) {
+        // Apply saved preferences
+        const parsedPreferences = JSON.parse(savedPreferences);
+        setPreferences(parsedPreferences);
+        applyPreferences(parsedPreferences);
+      }
+    };
     
-    if (!cookieConsent) {
-      // Show banner after a short delay for better UX
-      const timer = setTimeout(() => {
-        setShowBanner(true);
-      }, 1000);
-      return () => clearTimeout(timer);
-    } else if (savedPreferences) {
-      // Apply saved preferences
-      const parsedPreferences = JSON.parse(savedPreferences);
-      setPreferences(parsedPreferences);
-      applyPreferences(parsedPreferences);
-    }
+    getUser();
   }, []);
 
-  const applyPreferences = (prefs: CookiePreferences) => {
+  const applyPreferences = async (prefs: CookiePreferences) => {
     if (typeof window === 'undefined') return;
 
     // Analytics cookies
@@ -71,8 +99,23 @@ const CookieBanner = () => {
       window.fbq('consent', 'revoke');
     }
 
-    // Store in localStorage for future visits
+    // Store in localStorage for immediate access
     localStorage.setItem('cookiePreferences', JSON.stringify(prefs));
+    
+    // Store in database if user is logged in
+    if (currentUser) {
+      try {
+        await supabase
+          .from('profiles')
+          .upsert({
+            id: currentUser.id,
+            email: currentUser.email,
+            cookie_preferences: prefs
+          });
+      } catch (error) {
+        console.log('Could not save cookie preferences to database:', error);
+      }
+    }
   };
 
   const handleAcceptAll = () => {
