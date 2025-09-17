@@ -37,6 +37,11 @@ function getCreditsByPriceId(priceId: string): number {
 function getPlanByProductId(productId: string): { credits: number; planName: string } | null {
   // Map Stripe product IDs to our plan structure
   const productIdToPlan: Record<string, { credits: number; planName: string }> = {
+    // Use actual Stripe product IDs from environment variables
+    [process.env.STRIPE_PRODUCT_ID_STARTER!]: { credits: STRIPE_PLANS.starter.credits, planName: 'starter' },
+    [process.env.STRIPE_PRODUCT_ID_PRO!]: { credits: STRIPE_PLANS.pro.credits, planName: 'pro' },
+    [process.env.STRIPE_PRODUCT_ID_BUSINESS!]: { credits: STRIPE_PLANS.business.credits, planName: 'business' },
+    // Fallback for metadata-based plan names
     'starter': { credits: STRIPE_PLANS.starter.credits, planName: 'starter' },
     'pro': { credits: STRIPE_PLANS.pro.credits, planName: 'pro' },
     'business': { credits: STRIPE_PLANS.business.credits, planName: 'business' },

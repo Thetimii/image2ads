@@ -21,10 +21,13 @@ export default function BillingClient({ user, profile }: BillingClientProps) {
       if (profile.subscription_id) {
         switch (profile.subscription_id.toLowerCase()) {
           case 'starter':
+          case 'prod_t2wztl6zmyzqda': // Stripe product ID for starter
             return 'Starter Plan'
           case 'pro':
+          case 'prod_t2x00jxheiyfr4': // Stripe product ID for pro
             return 'Pro Plan'
           case 'business':
+          case 'prod_t2x1ll9q9hicqr': // Stripe product ID for business
             return 'Business Plan'
           default:
             return 'Subscribed Plan' // Fallback for old subscription IDs
