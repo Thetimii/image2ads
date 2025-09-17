@@ -1,9 +1,10 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import Link from 'next/link'
+import Image from 'next/image'
 import type { User } from '@supabase/supabase-js'
-import type { Profile, Folder } from '@/lib/validations'
+import type { Profile } from '@/lib/validations'
+import type { GeneratedAd } from '@/types'
 import DashboardLayout from '@/components/DashboardLayout'
 
 interface LibraryClientProps {
@@ -12,32 +13,78 @@ interface LibraryClientProps {
 }
 
 export default function LibraryClient({ user, profile }: LibraryClientProps) {
-  const [folders, setFolders] = useState<Folder[]>([])
+  const [ads, setAds] = useState<GeneratedAd[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
+  const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'name'>('newest')
 
   useEffect(() => {
-    const fetchFolders = async () => {
+    const fetchAllImages = async () => {
       try {
-        const response = await fetch('/api/folders')
+        const response = await fetch('/api/generated-ads')
         if (response.ok) {
-          const { folders } = await response.json()
-          setFolders(folders)
+          const data = await response.json()
+          console.log('API Response:', data)
+          console.log('Type of data:', typeof data)
+          console.log('Is data array:', Array.isArray(data))
+          console.log('data.generatedAds:', data.generatedAds)
+          console.log('Is data.generatedAds array:', Array.isArray(data.generatedAds))
+          
+          // The API returns { generatedAds: [...] }
+          const adsArray = Array.isArray(data.generatedAds) ? data.generatedAds : 
+                          Array.isArray(data.ads) ? data.ads : 
+                          Array.isArray(data) ? data : []
+          setAds(adsArray)
         }
       } catch (error) {
-        console.error('Error fetching folders:', error)
+        console.error('Error fetching images:', error)
+        setAds([]) // Ensure we always have an array
       } finally {
         setIsLoading(false)
       }
     }
 
-    fetchFolders()
+    fetchAllImages()
   }, [])
 
-  const filteredFolders = folders.filter(folder =>
-    folder.name.toLowerCase().includes(searchTerm.toLowerCase())
-  )
+  const downloadImage = async (ad: GeneratedAd) => {
+    try {
+      const response = await fetch(ad.url)
+      const blob = await response.blob()
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.style.display = 'none'
+      a.href = url
+      a.download = `${ad.name || 'image'}.png`
+      document.body.appendChild(a)
+      a.click()
+      window.URL.revokeObjectURL(url)
+      document.body.removeChild(a)
+    } catch (error) {
+      console.error('Error downloading image:', error)
+    }
+  }
+
+  const filteredAds = Array.isArray(ads) ? ads.filter(ad =>
+    (ad.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (ad.folder_name || '').toLowerCase().includes(searchTerm.toLowerCase())
+  ) : []
+
+  const sortedAds = [...filteredAds].sort((a, b) => {
+    switch (sortBy) {
+      case 'newest':
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      case 'oldest':
+        return new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+      case 'name':
+        const nameA = (a.name || '').toLowerCase()
+        const nameB = (b.name || '').toLowerCase()
+        return nameA.localeCompare(nameB)
+      default:
+        return 0
+    }
+  })
 
   return (
     <DashboardLayout user={user} profile={profile}>
@@ -62,13 +109,24 @@ export default function LibraryClient({ user, profile }: LibraryClientProps) {
               </div>
               <input
                 type="text"
-                placeholder="Search folders..."
+                placeholder="Search images and folders..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="pl-10 pr-4 py-3 w-full border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all duration-200"
               />
             </div>
           </div>
+
+          {/* Sort Dropdown */}
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value as 'newest' | 'oldest' | 'name')}
+            className="px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all duration-200 bg-white"
+          >
+            <option value="newest">Newest First</option>
+            <option value="oldest">Oldest First</option>
+            <option value="name">Name A-Z</option>
+          </select>
 
           {/* View Toggle */}
           <div className="flex items-center space-x-1 bg-gray-100 p-1 rounded-lg">
@@ -101,14 +159,14 @@ export default function LibraryClient({ user, profile }: LibraryClientProps) {
           </div>
         </div>
 
-        {/* Folders Display */}
+        {/* Images Display */}
         <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
           <div className="p-6 border-b border-gray-200">
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-lg font-semibold text-gray-900">All Folders</h2>
+                <h2 className="text-lg font-semibold text-gray-900">All Images</h2>
                 <p className="text-sm text-gray-600 mt-1">
-                  {filteredFolders.length} folder{filteredFolders.length !== 1 ? 's' : ''} found
+                  {sortedAds.length} image{sortedAds.length !== 1 ? 's' : ''} found
                 </p>
               </div>
             </div>
@@ -117,62 +175,88 @@ export default function LibraryClient({ user, profile }: LibraryClientProps) {
           {isLoading ? (
             <div className="p-12 text-center">
               <div className="inline-flex items-center justify-center w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
-              <p className="mt-4 text-gray-600">Loading folders...</p>
+              <p className="mt-4 text-gray-600">Loading images...</p>
             </div>
-          ) : filteredFolders.length > 0 ? (
+          ) : sortedAds.length > 0 ? (
             <div className={`p-6 ${
               viewMode === 'grid' 
                 ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4'
                 : 'space-y-2'
             }`}>
-              {filteredFolders.map((folder) => (
+              {sortedAds.map((ad) => (
                 viewMode === 'grid' ? (
-                  <Link
-                    key={folder.id}
-                    href={`/folders/${folder.id}`}
-                    className="group relative bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl p-4 hover:from-blue-50 hover:to-purple-50 transition-all duration-200 border border-gray-200 hover:border-blue-200 hover:shadow-lg hover:shadow-blue-100/50 cursor-pointer block"
+                  <div
+                    key={ad.id}
+                    className="group relative bg-white rounded-xl border border-gray-200 hover:border-blue-200 hover:shadow-lg hover:shadow-blue-100/50 transition-all duration-200 overflow-hidden"
                   >
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center group-hover:bg-gradient-to-r group-hover:from-blue-500 group-hover:to-purple-500 transition-all duration-200 shadow-sm">
-                        <svg className="w-5 h-5 text-gray-600 group-hover:text-white transition-colors duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-5l-2-2H5a2 2 0 00-2 2z" />
+                    <div className="aspect-square relative">
+                      <Image
+                        src={ad.url}
+                        alt={ad.name || 'Generated Ad'}
+                        fill
+                        className="object-cover"
+                        sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 25vw"
+                      />
+                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-all duration-200" />
+                      <button
+                        onClick={() => downloadImage(ad)}
+                        className="absolute top-2 right-2 p-2 bg-white/90 backdrop-blur-sm rounded-lg opacity-0 group-hover:opacity-100 transition-all duration-200 hover:bg-white"
+                        title="Download image"
+                      >
+                        <svg className="w-4 h-4 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                         </svg>
-                      </div>
+                      </button>
                     </div>
                     
-                    <h3 className="font-semibold text-gray-900 mb-1 group-hover:text-blue-900 transition-colors duration-200 truncate">
-                      {folder.name}
-                    </h3>
-                    
-                    <p className="text-xs text-gray-500 group-hover:text-blue-600 transition-colors duration-200">
-                      {new Date(folder.created_at).toLocaleDateString('en-US', {
-                        month: 'short',
-                        day: 'numeric',
-                        year: 'numeric'
-                      })}
-                    </p>
-                  </Link>
-                ) : (
-                  <Link
-                    key={folder.id}
-                    href={`/folders/${folder.id}`}
-                    className="flex items-center p-3 rounded-lg hover:bg-gray-50 transition-colors duration-200 border border-transparent hover:border-gray-200"
-                  >
-                    <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center mr-3">
-                      <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-5l-2-2H5a2 2 0 00-2 2z" />
-                      </svg>
-                    </div>
-                    <div className="flex-1">
-                      <h3 className="font-medium text-gray-900">{folder.name}</h3>
-                      <p className="text-sm text-gray-500">
-                        Created {new Date(folder.created_at).toLocaleDateString()}
+                    <div className="p-3">
+                      <h3 className="font-medium text-gray-900 mb-1 truncate">
+                        {ad.name || 'Untitled'}
+                      </h3>
+                      
+                      <p className="text-xs text-gray-500 mb-1 truncate">
+                        Folder: {ad.folder_name || 'Unknown'}
+                      </p>
+                      
+                      <p className="text-xs text-gray-400">
+                        {new Date(ad.created_at).toLocaleDateString('en-US', {
+                          month: 'short',
+                          day: 'numeric',
+                          year: 'numeric'
+                        })}
                       </p>
                     </div>
-                    <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                    </svg>
-                  </Link>
+                  </div>
+                ) : (
+                  <div
+                    key={ad.id}
+                    className="flex items-center p-3 rounded-lg hover:bg-gray-50 transition-colors duration-200 border border-transparent hover:border-gray-200"
+                  >
+                    <div className="w-12 h-12 relative rounded-lg overflow-hidden mr-3 flex-shrink-0">
+                      <Image
+                        src={ad.url}
+                        alt={ad.name || 'Generated Ad'}
+                        fill
+                        className="object-cover"
+                        sizes="48px"
+                      />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-medium text-gray-900 truncate">{ad.name || 'Untitled'}</h3>
+                      <p className="text-sm text-gray-500 truncate">
+                        Folder: {ad.folder_name || 'Unknown'} • {new Date(ad.created_at).toLocaleDateString()}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => downloadImage(ad)}
+                      className="p-2 text-gray-400 hover:text-gray-600 transition-colors duration-200"
+                      title="Download image"
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                      </svg>
+                    </button>
+                  </div>
                 )
               ))}
             </div>
@@ -180,24 +264,13 @@ export default function LibraryClient({ user, profile }: LibraryClientProps) {
             <div className="p-12 text-center">
               <div className="w-16 h-16 bg-gray-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
                 <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-5l-2-2H5a2 2 0 00-2 2z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                 </svg>
               </div>
-              <h3 className="text-lg font-medium text-gray-900 mb-2">No folders found</h3>
+              <h3 className="text-lg font-medium text-gray-900 mb-2">No images found</h3>
               <p className="text-gray-600 mb-6">
-                {searchTerm ? 'Try adjusting your search terms.' : 'Create your first folder to get started.'}
+                {searchTerm ? 'Try adjusting your search terms.' : 'Generate your first ad to get started.'}
               </p>
-              {!searchTerm && (
-                <Link
-                  href="/dashboard"
-                  className="inline-flex items-center space-x-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white px-6 py-3 rounded-lg font-medium hover:from-blue-700 hover:to-purple-700 transition-all duration-200"
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                  </svg>
-                  <span>Create Folder</span>
-                </Link>
-              )}
             </div>
           )}
         </div>

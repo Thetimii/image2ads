@@ -27,11 +27,13 @@ export async function createCheckoutSession({
   plan,
   successUrl,
   cancelUrl,
+  customerEmail,
 }: {
   userId: string;
   plan: StripePlan;
   successUrl: string;
   cancelUrl: string;
+  customerEmail?: string;
 }) {
   const planData = STRIPE_PLANS[plan];
 
@@ -51,6 +53,7 @@ export async function createCheckoutSession({
     ],
     success_url: successUrl,
     cancel_url: cancelUrl,
+    customer_email: customerEmail, // Prefill and lock the email
     metadata: {
       user_id: userId,
       plan: plan,

@@ -33,6 +33,7 @@ export async function POST(request: NextRequest) {
       plan,
       successUrl,
       cancelUrl,
+      customerEmail: user.email, // Pass user's email to prefill and lock it
     })
 
     return NextResponse.json({ 

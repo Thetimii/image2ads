@@ -23,6 +23,20 @@ export type JobWithResult = Job & {
   result_signed_url?: string;
 };
 
+// Generated Ad type for library display
+export interface GeneratedAd {
+  id: string;
+  name?: string;
+  custom_name?: string;
+  file_path: string;
+  url: string;
+  folder_id: string;
+  folder_name?: string;
+  created_at: string;
+  size: number;
+  status: string;
+}
+
 // API response types
 export interface ApiResponse<T = unknown> {
   data?: T;

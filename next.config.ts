@@ -9,7 +9,7 @@ const nextConfig: NextConfig = {
     ignoreDuringBuilds: false,
   },
   images: {
-    domains: [],
+    domains: ['cqnaooicfxqtnbuwsopu.supabase.co'],
     unoptimized: false,
   },
   outputFileTracingRoot: path.join(__dirname),
