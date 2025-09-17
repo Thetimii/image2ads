@@ -16,21 +16,32 @@ export default function BillingClient({ user, profile }: BillingClientProps) {
 
   // Function to determine plan display name based on subscription_id (which now contains product ID)
   const getPlanDisplayName = () => {
+    // Debug: Log the current subscription info
+    console.log('Debug - Profile subscription info:', {
+      subscription_status: profile.subscription_status,
+      subscription_id: profile.subscription_id,
+      stripe_customer_id: profile.stripe_customer_id
+    })
+
     if (profile.subscription_status === 'active' || profile.subscription_status === 'trialing') {
       // Check if subscription_id contains a product ID
       if (profile.subscription_id) {
-        switch (profile.subscription_id.toLowerCase()) {
+        const subId = profile.subscription_id.toLowerCase()
+        console.log('Debug - Checking subscription_id:', subId)
+        
+        switch (subId) {
           case 'starter':
           case 'prod_t2wztl6zmyzqda': // Stripe product ID for starter
             return 'Starter Plan'
           case 'pro':
-          case 'prod_t2x00jxheiyfr4': // Stripe product ID for pro
+          case 'prod_t2x00jxheiyfr4': // Stripe product ID for pro  
             return 'Pro Plan'
           case 'business':
           case 'prod_t2x1ll9q9hicqr': // Stripe product ID for business
             return 'Business Plan'
           default:
-            return 'Subscribed Plan' // Fallback for old subscription IDs
+            console.log('Debug - No match found for subscription_id:', subId)
+            return `Subscribed Plan (${profile.subscription_id})` // Show the actual value for debugging
         }
       }
       return 'Subscribed Plan'
