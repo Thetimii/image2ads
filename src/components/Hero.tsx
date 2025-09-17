@@ -4,13 +4,6 @@ import { motion } from "framer-motion";
 import Image from "next/image";
 
 export default function Hero() {
-  const scrollToSignup = () => {
-    const signupSection = document.getElementById("signup-section");
-    if (signupSection) {
-      signupSection.scrollIntoView({ behavior: "smooth" });
-    }
-  };
-
   return (
     <section className="relative min-h-screen flex items-center justify-center overflow-hidden pt-24">
       {/* Animated background elements */}
@@ -75,14 +68,14 @@ export default function Hero() {
             from their existing product images in seconds, not hours.
           </p>
 
-          <motion.button
-            onClick={scrollToSignup}
-            className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white font-semibold py-4 px-8 rounded-full text-lg transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl"
+          <motion.a
+            href="/signin"
+            className="inline-block bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white font-semibold py-4 px-8 rounded-full text-lg transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl"
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
           >
-            Join the Waitlist
-          </motion.button>
+            Get Started Free
+          </motion.a>
         </motion.div>
 
         {/* Before/After Preview */}

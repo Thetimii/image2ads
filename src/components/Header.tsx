@@ -33,13 +33,6 @@ const Header = () => {
     }
   }, [lastScrollY]);
 
-  const scrollToSignup = () => {
-    const signupElement = document.getElementById('signup-section');
-    if (signupElement) {
-      signupElement.scrollIntoView({ behavior: 'smooth' });
-    }
-  };
-
   return (
     <header className={`fixed top-0 left-0 right-0 z-50 flex justify-between items-center px-8 py-6 transition-transform duration-300 ${
       isVisible ? 'transform translate-y-0' : 'transform -translate-y-full'
@@ -82,12 +75,12 @@ const Header = () => {
         >
           Sign In
         </a>
-        <button 
-          onClick={scrollToSignup}
+        <a
+          href="/signin"
           className="px-8 py-3 text-white font-semibold rounded-full bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 transition-all duration-300 hover:scale-105 shadow-lg hover:shadow-purple-500/25"
         >
-          Get Early Access
-        </button>
+          Sign Up
+        </a>
       </div>
     </header>
   );

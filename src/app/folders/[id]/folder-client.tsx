@@ -1136,12 +1136,21 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
               </p>
               <label
                 htmlFor="file-upload-empty"
-                className="inline-flex items-center space-x-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white px-6 py-3 rounded-lg font-medium hover:from-blue-700 hover:to-purple-700 transition-all duration-200 cursor-pointer"
+                className={`inline-flex items-center space-x-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white px-6 py-3 rounded-lg font-medium hover:from-blue-700 hover:to-purple-700 transition-all duration-200 cursor-pointer ${isUploading ? 'opacity-75 cursor-not-allowed' : ''}`}
               >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                </svg>
-                <span>Upload Images</span>
+                {isUploading ? (
+                  <>
+                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                    <span>Uploading... {uploadProgress.toFixed(0)}%</span>
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                    </svg>
+                    <span>Upload Images</span>
+                  </>
+                )}
                 <input
                   id="file-upload-empty"
                   name="file-upload-empty"
@@ -1153,6 +1162,23 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
                   disabled={isUploading}
                 />
               </label>
+              
+              {isUploading && (
+                <div className="mt-6 max-w-sm mx-auto">
+                  <div className="flex items-center justify-between text-sm text-gray-600 mb-2">
+                    <span>Converting and processing images...</span>
+                    <span>{uploadProgress.toFixed(0)}%</span>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
+                    <div 
+                      className="bg-gradient-to-r from-blue-500 to-purple-600 h-3 rounded-full transition-all duration-500 ease-out relative" 
+                      style={{ width: `${uploadProgress}%` }}
+                    >
+                      <div className="absolute inset-0 bg-white/20 animate-pulse rounded-full"></div>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}

@@ -59,6 +59,7 @@ const bottomNavigation = [
 export default function DashboardLayout({ user, profile, children }: DashboardLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [isSafari, setIsSafari] = useState(false)
+  const [loadingPath, setLoadingPath] = useState<string | null>(null)
   const router = useRouter()
   const pathname = usePathname()
   const supabase = createClient()
@@ -73,6 +74,18 @@ export default function DashboardLayout({ user, profile, children }: DashboardLa
     await supabase.auth.signOut()
     router.push('/')
   }
+
+  const handleNavigation = (href: string) => {
+    if (href !== pathname) {
+      setLoadingPath(href)
+      router.push(href)
+    }
+  }
+
+  // Clear loading state when pathname changes
+  useEffect(() => {
+    setLoadingPath(null)
+  }, [pathname])
 
   const isCurrentPath = (href: string) => {
     if (href === '/dashboard') {
@@ -159,50 +172,68 @@ export default function DashboardLayout({ user, profile, children }: DashboardLa
           {/* Main navigation - Fixed height, no scrolling */}
           <nav className="flex-1 px-4 py-4 space-y-1">
             {navigation.map((item) => (
-              <Link
+              <button
                 key={item.name}
-                href={item.href}
+                onClick={() => handleNavigation(item.href)}
+                disabled={loadingPath === item.href}
                 className={`
-                  group flex items-center px-3 py-2.5 text-sm font-medium rounded-xl transition-all duration-200
+                  group flex items-center px-3 py-2.5 text-sm font-medium rounded-xl transition-all duration-200 w-full text-left
                   ${isCurrentPath(item.href)
                     ? 'bg-gradient-to-r from-blue-50 to-purple-50 text-blue-700 border border-blue-200/50'
                     : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
                   }
+                  ${loadingPath === item.href ? 'opacity-75' : ''}
                 `}
               >
                 <span className={`
                   mr-3 transition-colors duration-200
                   ${isCurrentPath(item.href) ? 'text-blue-600' : 'text-gray-400 group-hover:text-gray-500'}
                 `}>
-                  {item.icon}
+                  {loadingPath === item.href ? (
+                    <div className="w-5 h-5 border-2 border-blue-500/30 border-t-blue-500 rounded-full animate-spin"></div>
+                  ) : (
+                    item.icon
+                  )}
                 </span>
                 {item.name}
-              </Link>
+                {loadingPath === item.href && (
+                  <span className="ml-auto text-xs text-blue-500">Loading...</span>
+                )}
+              </button>
             ))}
           </nav>
 
           {/* Bottom navigation - Always fixed at bottom */}
           <div className="px-4 py-4 border-t border-gray-200 space-y-1 flex-shrink-0 mt-auto">
             {bottomNavigation.map((item) => (
-              <Link
+              <button
                 key={item.name}
-                href={item.href}
+                onClick={() => handleNavigation(item.href)}
+                disabled={loadingPath === item.href}
                 className={`
-                  group flex items-center px-3 py-2.5 text-sm font-medium rounded-xl transition-all duration-200
+                  group flex items-center px-3 py-2.5 text-sm font-medium rounded-xl transition-all duration-200 w-full text-left
                   ${isCurrentPath(item.href)
                     ? 'bg-gradient-to-r from-blue-50 to-purple-50 text-blue-700 border border-blue-200/50'
                     : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
                   }
+                  ${loadingPath === item.href ? 'opacity-75' : ''}
                 `}
               >
                 <span className={`
                   mr-3 transition-colors duration-200
                   ${isCurrentPath(item.href) ? 'text-blue-600' : 'text-gray-400 group-hover:text-gray-500'}
                 `}>
-                  {item.icon}
+                  {loadingPath === item.href ? (
+                    <div className="w-5 h-5 border-2 border-blue-500/30 border-t-blue-500 rounded-full animate-spin"></div>
+                  ) : (
+                    item.icon
+                  )}
                 </span>
                 {item.name}
-              </Link>
+                {loadingPath === item.href && (
+                  <span className="ml-auto text-xs text-blue-500">Loading...</span>
+                )}
+              </button>
             ))}
             
             {/* Sign out button */}
