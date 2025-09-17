@@ -29,10 +29,23 @@ export default function SettingsClient({ user, profile }: SettingsClientProps) {
   const router = useRouter()
   const supabase = createClient()
 
-  // Simple function to determine plan display name
+  // Function to determine plan display name based on subscription_id (which now contains product ID)
   const getPlanDisplayName = () => {
     if (profile.subscription_status === 'active' || profile.subscription_status === 'trialing') {
-      return 'Pro Plan' // We can make this more specific later when we have plan type in DB
+      // Check if subscription_id contains a product ID
+      if (profile.subscription_id) {
+        switch (profile.subscription_id.toLowerCase()) {
+          case 'starter':
+            return 'Starter Plan'
+          case 'pro':
+            return 'Pro Plan'
+          case 'business':
+            return 'Business Plan'
+          default:
+            return 'Subscribed Plan' // Fallback for old subscription IDs
+        }
+      }
+      return 'Subscribed Plan'
     }
     return 'Free Plan'
   }

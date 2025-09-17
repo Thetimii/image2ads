@@ -14,10 +14,23 @@ interface BillingClientProps {
 export default function BillingClient({ user, profile }: BillingClientProps) {
   const [isLoading, setIsLoading] = useState<string | null>(null)
 
-  // Simple function to determine plan display name
+  // Function to determine plan display name based on subscription_id (which now contains product ID)
   const getPlanDisplayName = () => {
     if (profile.subscription_status === 'active' || profile.subscription_status === 'trialing') {
-      return 'Pro Plan' // We can make this more specific later when we have plan type in DB
+      // Check if subscription_id contains a product ID
+      if (profile.subscription_id) {
+        switch (profile.subscription_id.toLowerCase()) {
+          case 'starter':
+            return 'Starter Plan'
+          case 'pro':
+            return 'Pro Plan'
+          case 'business':
+            return 'Business Plan'
+          default:
+            return 'Subscribed Plan' // Fallback for old subscription IDs
+        }
+      }
+      return 'Subscribed Plan'
     }
     return 'Free Plan'
   }
@@ -34,26 +47,18 @@ export default function BillingClient({ user, profile }: BillingClientProps) {
   const handleSubscribe = async (plan: StripePlan) => {
     setIsLoading(plan)
     try {
-      const response = await fetch('/api/stripe/create-checkout-session', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          plan,
-          successUrl: `${window.location.origin}/billing?success=true`,
-          cancelUrl: `${window.location.origin}/billing`,
-        }),
-      })
-
-      if (response.ok) {
-        const { url } = await response.json()
-        window.location.href = url
-      } else {
-        console.error('Failed to create checkout session')
+      const planData = STRIPE_PLANS[plan]
+      
+      // Construct payment link with prefilled email
+      const paymentUrl = new URL(planData.paymentLink)
+      if (user.email) {
+        paymentUrl.searchParams.set('prefilled_email', user.email)
       }
+      
+      // Redirect to payment link
+      window.location.href = paymentUrl.toString()
     } catch (error) {
-      console.error('Error creating checkout session:', error)
+      console.error('Error redirecting to payment link:', error)
     } finally {
       setIsLoading(null)
     }

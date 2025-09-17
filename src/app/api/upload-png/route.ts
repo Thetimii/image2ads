@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import sharp from 'sharp'
 
 export async function POST(request: NextRequest) {
   try {
@@ -41,33 +42,44 @@ export async function POST(request: NextRequest) {
 
     for (const file of files) {
       try {
-        // Convert file to PNG using Sharp
+        // Convert file to PNG using Sharp directly
         const arrayBuffer = await file.arrayBuffer()
-        const uint8Array = new Uint8Array(arrayBuffer)
+        const buffer = Buffer.from(arrayBuffer)
         
-        // Call edge function to convert to PNG
-        const convertResponse = await fetch(
-          `${process.env.SUPABASE_URL}/functions/v1/convert-to-png`,
-          {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              imageData: Array.from(uint8Array),
-              originalName: file.name,
-              userId: user.id,
-              folderId: folderId,
-            }),
-          }
-        )
+        // Convert to PNG with Sharp
+        const pngBuffer = await sharp(buffer)
+          .png({
+            quality: 95, // High quality PNG
+            compressionLevel: 6, // Good compression
+          })
+          .toBuffer()
 
-        if (!convertResponse.ok) {
-          throw new Error('Failed to convert image to PNG')
+        // Generate unique filename
+        const timestamp = Date.now()
+        const randomId = Math.random().toString(36).substring(2)
+        const pngFileName = `${timestamp}-${randomId}.png`
+        const filePath = `${user.id}/${folderId}/${pngFileName}`
+
+        // Upload to Supabase Storage
+        const { error: uploadError } = await supabase.storage
+          .from('uploads')
+          .upload(filePath, pngBuffer, {
+            contentType: 'image/png',
+            upsert: true,
+          })
+
+        if (uploadError) {
+          console.error('Upload error:', uploadError)
+          throw new Error(`Failed to upload PNG: ${uploadError.message}`)
         }
 
-        const result = await convertResponse.json()
+        const result = {
+          fileName: pngFileName,
+          filePath: filePath,
+          fileSize: pngBuffer.length,
+          originalName: file.name,
+          convertedFormat: 'png'
+        }
         
         // Create image record in database
         const { data: imageRecord, error: dbError } = await supabase
