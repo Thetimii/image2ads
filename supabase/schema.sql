@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS public.profiles (
     stripe_customer_id TEXT,
     subscription_id TEXT,
     subscription_status TEXT,
+    tutorial_completed BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -225,7 +226,7 @@ CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
 BEGIN
     INSERT INTO public.profiles (id, email, full_name, credits)
-    VALUES (NEW.id, NEW.email, NEW.raw_user_meta_data->>'full_name', 10); -- 10 free credits
+    VALUES (NEW.id, NEW.email, NEW.raw_user_meta_data->>'full_name', 3); -- 3 free credits
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;

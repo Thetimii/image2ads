@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import type { User } from '@supabase/supabase-js'
 import type { Profile, Folder } from '@/lib/validations'
 import DashboardLayout from '@/components/DashboardLayout'
+import OnboardingTutorial from '@/components/OnboardingTutorial'
 
 interface DashboardClientProps {
   user: User
@@ -24,11 +25,20 @@ export default function DashboardClient({ user, profile, initialFolders }: Dashb
   const [searchQuery, setSearchQuery] = useState('')
   const [sortBy, setSortBy] = useState<SortOption>('date-desc')
   const [viewMode, setViewMode] = useState<ViewMode>('grid')
+  const [showTutorial, setShowTutorial] = useState(!profile.tutorial_completed)
   const router = useRouter()
 
   const handleFolderClick = (folderId: string) => {
     setLoadingFolderId(folderId)
     router.push(`/folders/${folderId}`)
+  }
+
+  const handleTutorialComplete = () => {
+    setShowTutorial(false)
+  }
+
+  const handleTutorialSkip = () => {
+    setShowTutorial(false)
   }
 
   // Filter and sort folders based on search and sort options
@@ -115,6 +125,7 @@ export default function DashboardClient({ user, profile, initialFolders }: Dashb
             <button
               type="submit"
               disabled={isCreating || !newFolderName.trim()}
+              data-tutorial="create-button"
               className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-6 py-3 rounded-xl font-medium hover:from-blue-700 hover:to-purple-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-lg shadow-blue-500/20"
             >
               {isCreating ? (
@@ -336,6 +347,14 @@ export default function DashboardClient({ user, profile, initialFolders }: Dashb
           )}
         </div>
       </div>
+
+      {/* Tutorial */}
+      {showTutorial && (
+        <OnboardingTutorial
+          onCompleteAction={handleTutorialComplete}
+          onSkipAction={handleTutorialSkip}
+        />
+      )}
     </DashboardLayout>
   )
 }

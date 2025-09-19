@@ -10,6 +10,7 @@ export const profileSchema = z.object({
   stripe_customer_id: z.string().optional(),
   subscription_id: z.string().optional(),
   subscription_status: z.string().optional(),
+  tutorial_completed: z.boolean().optional(),
   created_at: z.string(),
   updated_at: z.string(),
 });
@@ -111,7 +112,7 @@ export const uploadUrlSchema = z.object({
     .number()
     .int()
     .min(1)
-    .max(10 * 1024 * 1024), // 10MB max
+    .max(20 * 1024 * 1024), // 20MB max
   folderId: z.string().uuid(),
 });
 

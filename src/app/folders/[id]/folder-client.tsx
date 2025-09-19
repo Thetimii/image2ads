@@ -279,8 +279,8 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
         alert('Please upload only image files')
         return
       }
-      if (file.size > 10 * 1024 * 1024) {
-        alert('Each file must be less than 10MB')
+      if (file.size > 20 * 1024 * 1024) {
+        alert('Each file must be less than 20MB')
         return
       }
     }
@@ -334,14 +334,29 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
       await refetchImages()
       
       // Show success message with toast instead of alert
-      const successMessage = result.uploadedImages.length === files.length 
-        ? `Successfully uploaded ${result.uploadedImages.length} image${result.uploadedImages.length > 1 ? 's' : ''}!`
-        : `Uploaded ${result.uploadedImages.length} of ${files.length} images. Some files may have failed.`
-      
-      addToast({
-        message: successMessage,
-        type: 'success'
-      })
+      if (result.uploadedImages.length === files.length) {
+        addToast({
+          message: `Successfully uploaded ${result.uploadedImages.length} image${result.uploadedImages.length > 1 ? 's' : ''}!`,
+          type: 'success'
+        })
+      } else if (result.uploadedImages.length > 0) {
+        addToast({
+          message: `Uploaded ${result.uploadedImages.length} of ${files.length} images. ${result.failedFiles?.length || 0} failed.`,
+          type: 'info'
+        })
+        // Show details about failed files if any
+        if (result.failedFiles && result.failedFiles.length > 0) {
+          console.error('Failed file details:', result.failedFiles)
+        }
+      } else {
+        addToast({
+          message: 'All files failed to upload. Please check file formats and try again.',
+          type: 'error'
+        })
+        if (result.failedFiles && result.failedFiles.length > 0) {
+          console.error('Failed file details:', result.failedFiles)
+        }
+      }
 
     } catch (error) {
       console.error('Upload error:', error)
@@ -813,7 +828,7 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
                       onChange={handleFileUpload}
                       disabled={isUploading}
                     />
-                    <p className="text-xs text-gray-500 mt-3">PNG, JPG, WEBP up to 10MB each</p>
+                    <p className="text-xs text-gray-500 mt-3">PNG, JPG, WEBP up to 20MB each</p>
                     
                     {isUploading && (
                       <div className="mt-4">
@@ -852,7 +867,7 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
                       : `Select one image to generate an ad ${selectedImage && '• 1 image selected'}`
                     }
                   </p>
-                  {profile.credits < 5 && (
+                  {profile.credits < 2 && (
                     <div className="flex items-center space-x-1 mt-2">
                       <svg className="w-4 h-4 text-amber-500" fill="currentColor" viewBox="0 0 20 20">
                         <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
@@ -901,6 +916,7 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
                   <button
                     onClick={() => setShowGenerateModal(true)}
                     disabled={multipleImagesMode ? selectedImages.length === 0 : !selectedImage}
+                    data-tutorial="generate-button"
                     className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 shadow-lg ${
                       (multipleImagesMode ? selectedImages.length > 0 : selectedImage)
                         ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white hover:from-blue-700 hover:to-purple-700 shadow-blue-500/20'
@@ -917,7 +933,7 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
             </div>
             
             <div className="p-6">
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4" data-tutorial="image-grid">
                 {images.filter(image => image?.id).map((image) => (
                   <ImageCard
                     key={image.id}
@@ -1184,7 +1200,7 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
 
         {/* Empty state */}
         {images.length === 0 && (
-          <div className="bg-white rounded-2xl border border-gray-200 p-12">
+          <div className="bg-white rounded-2xl border border-gray-200 p-12" data-tutorial="upload-area">
             <div className="text-center">
               <div className="w-16 h-16 bg-gray-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
                 <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">

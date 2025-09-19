@@ -39,6 +39,7 @@ export async function POST(request: NextRequest) {
 
     // Process files and convert to PNG
     const uploadedImages = []
+    const failedFiles = []
 
     for (const file of files) {
       try {
@@ -46,7 +47,7 @@ export async function POST(request: NextRequest) {
         const arrayBuffer = await file.arrayBuffer()
         const buffer = Buffer.from(arrayBuffer)
         
-        // Convert to PNG with Sharp
+        // Convert to PNG with Sharp - this should handle JPG, PNG, WEBP, etc.
         const pngBuffer = await sharp(buffer)
           .png({
             quality: 95, // High quality PNG
@@ -109,14 +110,21 @@ export async function POST(request: NextRequest) {
 
       } catch (error) {
         console.error(`Error processing file ${file.name}:`, error)
+        failedFiles.push({
+          fileName: file.name,
+          error: error instanceof Error ? error.message : 'Unknown error'
+        })
         // Continue with other files instead of failing completely
       }
     }
 
     return NextResponse.json({
-      success: true,
+      success: uploadedImages.length > 0,
       uploadedImages,
-      message: `Successfully uploaded ${uploadedImages.length} of ${files.length} images`,
+      failedFiles,
+      message: uploadedImages.length > 0 
+        ? `Successfully uploaded ${uploadedImages.length} of ${files.length} images${failedFiles.length > 0 ? `. ${failedFiles.length} failed.` : ''}`
+        : 'All files failed to upload',
     })
 
   } catch (error) {

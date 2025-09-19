@@ -74,12 +74,12 @@ async function downloadFromKnownBuckets(filePath: string) {
   throw new Error(`Object not found in uploads/results for: ${filePath}`);
 }
 
-// --- OpenAI: brand-new scene from references (all files as image[]) ---
+// --- OpenAI: edits with references (no mask) ---
 async function openaiGenerateFromRefs({
   prompt,
-  pngFiles, // [{ bytes, filename }]
+  pngFiles,
   size = "1024x1024",
-  quality = "medium", // <- cost-friendly
+  quality = "medium",
   apiKey,
   timeoutMs = 60000,
   retryOnce = true,
@@ -94,10 +94,10 @@ async function openaiGenerateFromRefs({
 }) {
   async function call() {
     const form = new FormData();
-    form.append("model", "gpt-image-1");
+    form.append("model", "gpt-image-1"); // ✅ same as Python example
     form.append("prompt", prompt.trim());
     form.append("size", size);
-    form.append("quality", quality); // <- medium
+    form.append("quality", quality);
 
     for (const f of pngFiles) {
       const name = f.filename.endsWith(".png") ? f.filename : `${f.filename}.png`;
@@ -107,7 +107,7 @@ async function openaiGenerateFromRefs({
     const ctrl = new AbortController();
     const t = setTimeout(() => ctrl.abort("openai-timeout"), timeoutMs);
     try {
-      console.log("[run-job] OpenAI edits (new scene, refs)", { images: pngFiles.length, size, quality });
+      console.log("[run-job] OpenAI call (edits, refs)");
       const resp = await fetch("https://api.openai.com/v1/images/edits", {
         method: "POST",
         headers: { Authorization: `Bearer ${apiKey}` },
@@ -117,8 +117,10 @@ async function openaiGenerateFromRefs({
       const text = await resp.text();
       console.log("[run-job] OpenAI resp", { status: resp.status });
       if (!resp.ok) throw new Error(text);
+
       const b64 = JSON.parse(text)?.data?.[0]?.b64_json;
       if (!b64) throw new Error("No image data in response");
+
       return Uint8Array.from(atob(b64), c => c.charCodeAt(0));
     } finally {
       clearTimeout(t);
@@ -129,42 +131,22 @@ async function openaiGenerateFromRefs({
     return await call();
   } catch (e: any) {
     if (retryOnce) {
-      console.warn("[run-job] OpenAI call failed once, retrying…", String(e?.message || e));
+      console.warn("[run-job] OpenAI retrying…", e.message);
       return await call();
     }
     throw e;
   }
 }
 
-// Enhanced prompt builder with text-focused requirements
+// --- Prompt wrapper ---
 function buildPrompt(clientPrompt: string) {
   const prefix = `
-You are generating a photorealistic commercial image from reference photos.
+Generate a photorealistic commercial image from the reference photos.
 
 Absolute requirements for TEXT:
-- All existing text, labels, or logos on products must be reproduced exactly as provided.
-- Text must be crystal-clear, sharp, and perfectly legible, without distortion.
-- No misspellings, extra characters, or invented words.
-- Fonts should look natural and consistent with printed packaging.
-- Do not alter, blur, crop, or re-style existing text.
-
-General quality rules:
-- Photorealistic composition; natural lighting and realistic textures.
-- Correct perspective and proportions; no warping of text or product surfaces.
-- Clean, professional aesthetic suitable for advertising.
-
-Hard constraints:
-1) Do not add random watermarks, captions, or unrelated text.
-2) Do not place text outside of its intended product area.
-3) Do not change product design or label content.
-
-Avoid (negatives):
-- Gibberish or illegible characters.
-- Extra text or labels not in the reference.
-- Distorted, curved, or stretched text.
-- Fake handwriting or cartoon fonts.
-
-Now follow the user's instructions for the overall scene:
+- All existing labels/logos must be reproduced exactly.
+- Text must be crystal-clear, sharp, and perfectly legible.
+- No misspellings, distortions, or extra words.
 `.trim();
 
   return `${prefix}\n\n${clientPrompt.trim()}`;
@@ -185,19 +167,12 @@ async function handler(req: Request) {
     const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
     if (!OPENAI_API_KEY) throw new Error("OPENAI_API_KEY not set");
 
-    // Load job (expects job.image_ids[])
     const { data: job, error: jobErr } = await supabase.from("jobs").select("*").eq("id", jobId).single();
     if (jobErr || !job) return new Response("Job not found", { status: 404, headers: cors });
 
-    // Debug logging for job data
-    console.log("[run-job] Job loaded:", {
-      id: job.id,
-      model: job.model,
-      custom_name: job.custom_name,
-      prompt: job.prompt
-    });
+    console.log("[run-job] Job loaded", job);
 
-    // Pull all images and enforce PNG (like the official example)
+    // Load reference images
     const files: Array<{ bytes: Uint8Array; filename: string; folder_id: string | null }> = [];
     for (const imageId of job.image_ids as string[]) {
       const { data: img, error: imgErr } = await supabase
@@ -210,85 +185,49 @@ async function handler(req: Request) {
       const { bytes, mime } = await downloadFromKnownBuckets(img.file_path);
       const filename = safeName(img.original_name || img.file_path.split("/").pop() || "input", mime);
       if (!isPng(bytes)) {
-        await supabase.from("jobs").update({
-          status: "failed",
-          error_message: `Image must be PNG for edits: ${filename}`,
-        }).eq("id", jobId);
-        return new Response("Only PNG supported for edits", { status: 400, headers: cors });
+        await supabase.from("jobs").update({ status: "failed", error_message: `Not PNG: ${filename}` }).eq("id", jobId);
+        return new Response("Only PNG allowed", { status: 400, headers: cors });
       }
       files.push({ bytes, filename, folder_id: img.folder_id });
-      console.log("[run-job] ref loaded", { filename, bytes: bytes.length });
     }
     if (files.length === 0) return new Response("No images for job", { status: 400, headers: cors });
 
-    // Enhanced prompt with house style and negatives
-    const prompt: string = buildPrompt(
-      (job.prompt && String(job.prompt)) || "Create a clean studio ad shot of the product."
-    );
+    const prompt: string = buildPrompt(job.prompt || "Create a clean studio ad shot of the product.");
 
-    // Parse size from model parameter (e.g., "openai-medium-landscape" -> "1536x1024")
-    const model = (job.model && String(job.model)) || "openai-medium-square";
+    const model = job.model || "openai-medium-square";
     let size: "1024x1024" | "1536x1024" | "1024x1536" = "1024x1024";
     let quality: "low" | "medium" | "high" = "medium";
-    
-    if (model.includes("openai")) {
-      // Parse quality: openai-{quality}-{aspect}
-      if (model.includes("-low-")) quality = "low";
-      else if (model.includes("-medium-")) quality = "medium";
-      else if (model.includes("-high-")) quality = "high";
-      
-      // Parse aspect ratio
-      if (model.includes("-landscape")) size = "1536x1024";
-      else if (model.includes("-portrait")) size = "1024x1536";
-      else size = "1024x1024"; // square or default
-    }
-    
-    console.log(`[run-job] Using model: ${model}, size: ${size}, quality: ${quality}`);
+    if (model.includes("-low-")) quality = "low";
+    else if (model.includes("-medium-")) quality = "medium";
+    else if (model.includes("-high-")) quality = "high";
+    if (model.includes("-landscape")) size = "1536x1024";
+    else if (model.includes("-portrait")) size = "1024x1536";
 
-    // Mark processing
     await supabase.from("jobs").update({ status: "processing" }).eq("id", jobId);
 
-    // Deduct credits BEFORE calling OpenAI API
-    console.log("[run-job] deducting 1 credit for user", job.user_id);
+    // Deduct credits
     const { data: creditResult, error: creditError } = await supabase.rpc("consume_credit", {
       user_uuid: job.user_id,
-      credit_amount: 1
+      credit_amount: 1,
     });
-    
-    if (creditError) {
-      console.error("[run-job] Credit deduction error:", creditError);
-      await supabase.from("jobs").update({ 
-        status: "error", 
-        error_message: "Credit deduction failed" 
+    if (creditError || !creditResult) {
+      await supabase.from("jobs").update({
+        status: "error",
+        error_message: creditError ? "Credit deduction failed" : "Insufficient credits",
       }).eq("id", jobId);
-      return new Response("Credit deduction failed", { status: 500, headers: cors });
+      return new Response("Credit error", { status: creditError ? 500 : 402, headers: cors });
     }
-    
-    if (!creditResult) {
-      console.log("[run-job] Insufficient credits for user", job.user_id);
-      await supabase.from("jobs").update({ 
-        status: "error", 
-        error_message: "Insufficient credits" 
-      }).eq("id", jobId);
-      return new Response("Insufficient credits", { status: 402, headers: cors });
-    }
-    
-    console.log("[run-job] Credit deducted successfully, proceeding with OpenAI generation");
 
-    // Call OpenAI (all refs; new scene)
-    console.log("[run-job] sending", files.length, "images to OpenAI");
+    // Call OpenAI
     const outBytes = await openaiGenerateFromRefs({
       prompt,
       pngFiles: files.map(f => ({ bytes: f.bytes, filename: f.filename })),
       size,
-      quality, // Use parsed quality from model parameter
+      quality,
       apiKey: OPENAI_API_KEY,
-      timeoutMs: 60000,
-      retryOnce: true,
     });
-    console.log("[run-job] OpenAI OK; bytes", outBytes.length);
 
-    // Save ONLY to results/
+    // Save to Supabase
     const userId = job.user_id as string;
     const targetFolderId = files[0].folder_id ?? "root";
     const key = `${userId}/${targetFolderId}/${jobId}-${Date.now()}.png`;
@@ -296,47 +235,31 @@ async function handler(req: Request) {
       contentType: "image/png",
       upsert: true,
     });
-    if (up.error) throw new Error(`Failed to upload result: ${up.error.message}`);
+    if (up.error) throw new Error(up.error.message);
 
-    // Mark job complete (no need to insert into images table - we'll read directly from results bucket)
-    await supabase.from("jobs").update({ 
-      status: "completed", 
-      result_url: key // Store the storage path directly
-    }).eq("id", jobId);
+    await supabase.from("jobs").update({ status: "completed", result_url: key }).eq("id", jobId);
 
-    // If job has a custom name, automatically create metadata entry for the generated ad
+    // ✅ Restore metadata block
     if (job.custom_name) {
-      // Extract just the filename from the full storage path
-      const fileName = key.split('/').pop() || key
-      console.log("[run-job] Creating metadata entry for custom name:", job.custom_name, "fileName:", fileName);
+      const fileName = key.split("/").pop() || key;
       const { error: metadataError } = await supabase
         .from("generated_ads_metadata")
         .upsert({
-          file_name: fileName, // Use just the filename, not the full path
+          file_name: fileName,
           custom_name: job.custom_name,
           user_id: userId,
           folder_id: targetFolderId,
         });
-      
-      if (metadataError) {
-        console.error("[run-job] Failed to create metadata entry:", metadataError);
-        // Don't fail the job for metadata issues, just log it
-      } else {
-        console.log("[run-job] Metadata entry created successfully");
-      }
+      if (metadataError) console.error("[run-job] Metadata entry failed", metadataError);
     }
 
-    return new Response(
-      JSON.stringify({ success: true, jobId, result_path: key }),
-      { headers: { ...cors, "Content-Type": "application/json" } }
-    );
+    return new Response(JSON.stringify({ success: true, jobId, result_path: key }), {
+      headers: { ...cors, "Content-Type": "application/json" },
+    });
 
   } catch (err: any) {
     if (jobId) {
-      await supabase.from("jobs").update({
-        status: "failed",
-        error_message: String(err?.message ?? err),
-      }).eq("id", jobId);
+      await supabase.from("jobs").update({ status: "failed", error_message: String(err?.message ?? err) }).eq("id", jobId);
     }
     return new Response(JSON.stringify({ error: String(err?.message ?? err) }), {
       status: 500,
