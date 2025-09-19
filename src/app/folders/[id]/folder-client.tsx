@@ -7,6 +7,7 @@ import Image from 'next/image'
 import type { User } from '@supabase/supabase-js'
 import type { Profile, Folder, Image as ImageType, Job } from '@/lib/validations'
 import DashboardLayout from '@/components/DashboardLayout'
+import OnboardingTutorial from '@/components/OnboardingTutorial'
 import { ToastContainer, useToast } from '@/components/Toast'
 import LoadingAdCard from '@/components/LoadingAdCard'
 import FailedAdCard from '@/components/FailedAdCard'
@@ -47,9 +48,18 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
   const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'name'>('newest')
   const [loadingJobs, setLoadingJobs] = useState<Array<{ id: string, customName?: string }>>([])
   const [isGenerating, setIsGenerating] = useState(false)
+  const [showTutorial, setShowTutorial] = useState(!profile.tutorial_completed)
   const { toasts, addToast, removeToast } = useToast()
   const supabase = createClient()
   const router = useRouter()
+
+  const handleTutorialComplete = () => {
+    setShowTutorial(false)
+  }
+
+  const handleTutorialSkip = () => {
+    setShowTutorial(false)
+  }
 
   // Load loading jobs from localStorage on mount
   useEffect(() => {
@@ -763,6 +773,12 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
   return (
     <DashboardLayout user={user} profile={profile}>
       <ToastContainer toasts={toasts} onCloseAction={removeToast} />
+      {showTutorial && (
+        <OnboardingTutorial
+          onCompleteAction={handleTutorialComplete}
+          onSkipAction={handleTutorialSkip}
+        />
+      )}
       <div className="p-6 lg:p-8">
         {/* Header */}
         <div className="mb-8">

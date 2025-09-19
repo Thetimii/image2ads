@@ -19,10 +19,24 @@ interface OnboardingTutorialProps {
 }
 
 export default function OnboardingTutorial({ onCompleteAction, onSkipAction }: OnboardingTutorialProps) {
-  const [currentStep, setCurrentStep] = useState(0)
+  const [currentStep, setCurrentStep] = useState(() => {
+    // Initialize from localStorage or start at 0
+    if (typeof window !== 'undefined') {
+      const savedStep = localStorage.getItem('onboarding-tutorial-step')
+      return savedStep ? parseInt(savedStep, 10) : 0
+    }
+    return 0
+  })
   const [isVisible, setIsVisible] = useState(true)
   const [showActionNeeded, setShowActionNeeded] = useState(false)
   const supabase = createClient()
+
+  // Save current step to localStorage whenever it changes
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('onboarding-tutorial-step', currentStep.toString())
+    }
+  }, [currentStep])
 
   const tutorialSteps: TutorialStep[] = [
     {
@@ -120,6 +134,11 @@ export default function OnboardingTutorial({ onCompleteAction, onSkipAction }: O
       }
     } catch (error) {
       console.error('Error completing tutorial:', error)
+    }
+
+    // Clear tutorial progress from localStorage
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('onboarding-tutorial-step')
     }
 
     setIsVisible(false)
