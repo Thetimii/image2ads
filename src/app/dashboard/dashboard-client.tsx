@@ -1,12 +1,13 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import type { User } from '@supabase/supabase-js'
 import type { Profile, Folder } from '@/lib/validations'
 import DashboardLayout from '@/components/DashboardLayout'
-import OnboardingTutorial from '@/components/OnboardingTutorial'
+import { useTutorial } from '@/contexts/TutorialContext'
+import TutorialOverlay from '@/components/TutorialOverlay'
 
 interface DashboardClientProps {
   user: User
@@ -25,20 +26,25 @@ export default function DashboardClient({ user, profile, initialFolders }: Dashb
   const [searchQuery, setSearchQuery] = useState('')
   const [sortBy, setSortBy] = useState<SortOption>('date-desc')
   const [viewMode, setViewMode] = useState<ViewMode>('grid')
-  const [showTutorial, setShowTutorial] = useState(!profile.tutorial_completed)
+  const { isActive: tutorialActive, startTutorial, checkStepTrigger, setTutorialFolderId } = useTutorial()
   const router = useRouter()
+
+  // Initialize tutorial if user hasn't completed it
+  useEffect(() => {
+    console.log('Dashboard: checking tutorial status:', { 
+      tutorial_completed: profile.tutorial_completed,
+      tutorialActive 
+    })
+    
+    if (!profile.tutorial_completed && !tutorialActive) {
+      console.log('Starting tutorial for new user')
+      startTutorial()
+    }
+  }, [profile.tutorial_completed, tutorialActive, startTutorial])
 
   const handleFolderClick = (folderId: string) => {
     setLoadingFolderId(folderId)
     router.push(`/folders/${folderId}`)
-  }
-
-  const handleTutorialComplete = () => {
-    setShowTutorial(false)
-  }
-
-  const handleTutorialSkip = () => {
-    setShowTutorial(false)
   }
 
   // Filter and sort folders based on search and sort options
@@ -88,8 +94,12 @@ export default function DashboardClient({ user, profile, initialFolders }: Dashb
         const { folder } = await response.json()
         setFolders([folder, ...folders])
         setNewFolderName('')
-        // Automatically redirect to the newly created folder
-        router.push(`/folders/${folder.id}`)
+        
+        // If tutorial is active, store the folder ID for navigation
+        if (tutorialActive) {
+          setTutorialFolderId(folder.id)
+          checkStepTrigger('folderCreated', 'folder-created')
+        }
       } else {
         console.error('Failed to create folder')
       }
@@ -119,17 +129,20 @@ export default function DashboardClient({ user, profile, initialFolders }: Dashb
               <input
                 type="text"
                 value={newFolderName}
-                onChange={(e) => setNewFolderName(e.target.value)}
-                onFocus={(e) => e.target.select()}
+                onChange={(e) => {
+                  setNewFolderName(e.target.value)
+                  checkStepTrigger('input', 'folder-name-input')
+                }}
                 placeholder="Enter folder name (e.g., 'Product Photos', 'Summer Campaign')"
-                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all duration-200"
                 data-tutorial="folder-name-input"
+                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all duration-200"
               />
             </div>
             <button
               type="submit"
               disabled={isCreating || !newFolderName.trim()}
               data-tutorial="create-button"
+              onClick={() => checkStepTrigger('click', 'create-button')}
               className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-6 py-3 rounded-xl font-medium hover:from-blue-700 hover:to-purple-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-lg shadow-blue-500/20"
             >
               {isCreating ? (
@@ -227,7 +240,6 @@ export default function DashboardClient({ user, profile, initialFolders }: Dashb
                     key={folder.id}
                     onClick={() => handleFolderClick(folder.id)}
                     disabled={loadingFolderId === folder.id}
-                    data-folder-id={folder.id}
                     className="group relative bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl p-6 hover:from-blue-50 hover:to-purple-50 transition-all duration-200 border border-gray-200 hover:border-blue-200 hover:shadow-lg hover:shadow-blue-100/50 disabled:opacity-50 disabled:cursor-not-allowed w-full text-left"
                   >
                     <div className="flex items-start justify-between mb-4">
@@ -270,7 +282,6 @@ export default function DashboardClient({ user, profile, initialFolders }: Dashb
                     key={folder.id}
                     onClick={() => handleFolderClick(folder.id)}
                     disabled={loadingFolderId === folder.id}
-                    data-folder-id={folder.id}
                     className="group flex items-center justify-between p-4 hover:bg-gray-50 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed w-full text-left"
                   >
                     <div className="flex items-center space-x-4">
@@ -354,13 +365,8 @@ export default function DashboardClient({ user, profile, initialFolders }: Dashb
         </div>
       </div>
 
-      {/* Tutorial */}
-      {showTutorial && (
-        <OnboardingTutorial
-          onCompleteAction={handleTutorialComplete}
-          onSkipAction={handleTutorialSkip}
-        />
-      )}
+      {/* Tutorial Overlay */}
+      {tutorialActive && <TutorialOverlay />}
     </DashboardLayout>
   )
 }

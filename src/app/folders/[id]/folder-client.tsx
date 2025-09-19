@@ -7,10 +7,11 @@ import Image from 'next/image'
 import type { User } from '@supabase/supabase-js'
 import type { Profile, Folder, Image as ImageType, Job } from '@/lib/validations'
 import DashboardLayout from '@/components/DashboardLayout'
-import OnboardingTutorial from '@/components/OnboardingTutorial'
 import { ToastContainer, useToast } from '@/components/Toast'
 import LoadingAdCard from '@/components/LoadingAdCard'
 import FailedAdCard from '@/components/FailedAdCard'
+import { useTutorial } from '@/contexts/TutorialContext'
+import TutorialOverlay from '@/components/TutorialOverlay'
 
 interface FolderClientProps {
   user: User
@@ -48,18 +49,10 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
   const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'name'>('newest')
   const [loadingJobs, setLoadingJobs] = useState<Array<{ id: string, customName?: string }>>([])
   const [isGenerating, setIsGenerating] = useState(false)
-  const [showTutorial, setShowTutorial] = useState(!profile.tutorial_completed)
   const { toasts, addToast, removeToast } = useToast()
+  const { isActive: tutorialActive, checkStepTrigger } = useTutorial()
   const supabase = createClient()
   const router = useRouter()
-
-  const handleTutorialComplete = () => {
-    setShowTutorial(false)
-  }
-
-  const handleTutorialSkip = () => {
-    setShowTutorial(false)
-  }
 
   // Load loading jobs from localStorage on mount
   useEffect(() => {
@@ -208,6 +201,16 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
     }
   }, [user.id, supabase, fetchJobs, fetchGeneratedAds])
 
+  // Tutorial trigger for when modal opens
+  useEffect(() => {
+    if (showGenerateModal && tutorialActive) {
+      // Add a slight delay to ensure modal is fully rendered before advancing tutorial
+      setTimeout(() => {
+        checkStepTrigger('modal-opened')
+      }, 300) // 300ms delay for modal transition
+    }
+  }, [showGenerateModal, tutorialActive, checkStepTrigger])
+
   const getImageUrl = useCallback(async (image: ImageType): Promise<string> => {
     try {
       // First try to get signed URL from uploads bucket
@@ -342,6 +345,11 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
 
       // Refresh images after successful upload
       await refetchImages()
+
+      // Trigger tutorial step AFTER successful upload completion
+      if (tutorialActive && result.uploadedImages.length > 0) {
+        checkStepTrigger('upload', 'file-upload')
+      }
       
       // Show success message with toast instead of alert
       if (result.uploadedImages.length === files.length) {
@@ -454,6 +462,14 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
         setPrompt('')
         setJobName('')
         setAspectRatio('square')
+        
+        // Trigger tutorial step AFTER successful generation start
+        if (tutorialActive) {
+          // Add a delay to ensure modal closes and then trigger tutorial to show results section
+          setTimeout(() => {
+            checkStepTrigger('generation-started')
+          }, 500) // Delay for modal close animation
+        }
         
         // Update toast to success
         removeToast(loadingToastId)
@@ -773,12 +789,6 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
   return (
     <DashboardLayout user={user} profile={profile}>
       <ToastContainer toasts={toasts} onCloseAction={removeToast} />
-      {showTutorial && (
-        <OnboardingTutorial
-          onCompleteAction={handleTutorialComplete}
-          onSkipAction={handleTutorialSkip}
-        />
-      )}
       <div className="p-6 lg:p-8">
         {/* Header */}
         <div className="mb-8">
@@ -812,7 +822,7 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
             </div>
             
             <div className="p-6">
-              <label htmlFor="file-upload" className="cursor-pointer block">
+              <label htmlFor="file-upload" className="cursor-pointer block" data-tutorial="upload-area">
                 <div className="border-2 border-dashed border-gray-300 rounded-xl p-8 hover:border-blue-400 transition-colors duration-200">
                   <div className="text-center">
                     <div className="w-16 h-16 bg-blue-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
@@ -843,6 +853,7 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
                       multiple
                       onChange={handleFileUpload}
                       disabled={isUploading}
+                      data-tutorial="file-upload"
                     />
                     <p className="text-xs text-gray-500 mt-3">PNG, JPG, WEBP up to 20MB each</p>
                     
@@ -930,7 +941,9 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
                     Clear Selection
                   </button>
                   <button
-                    onClick={() => setShowGenerateModal(true)}
+                    onClick={() => {
+                      setShowGenerateModal(true)
+                    }}
                     disabled={multipleImagesMode ? selectedImages.length === 0 : !selectedImage}
                     data-tutorial="generate-button"
                     className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 shadow-lg ${
@@ -964,6 +977,9 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
                         } else {
                           // Add to selection
                           setSelectedImages([...selectedImages, image.id]);
+                          if (tutorialActive) {
+                            checkStepTrigger('select', 'image-selection')
+                          }
                         }
                       } else {
                         // Single image mode: replace selection
@@ -971,6 +987,9 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
                           setSelectedImage('');
                         } else {
                           setSelectedImage(image.id);
+                          if (tutorialActive) {
+                            checkStepTrigger('select', 'image-selection')
+                          }
                         }
                       }
                     }}
@@ -988,7 +1007,7 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
 
         {/* Generated Ads section */}
         {generatedAds.length > 0 && (
-          <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
+          <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden" data-tutorial="generated-ads-section">
             <div className="p-6 border-b border-gray-200">
               <div className="flex items-center justify-between mb-4">
                 <div>
@@ -1183,7 +1202,7 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
 
         {/* Loading ads section - show when generating but no ads yet, or when there are failed jobs */}
         {(loadingJobs.length > 0 || jobs.some(job => job.status === 'failed')) && generatedAds.length === 0 && (
-          <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
+          <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden" data-tutorial="generated-ads-section">
             <div className="p-6 border-b border-gray-200">
               <div>
                 <h2 className="text-lg font-semibold text-gray-900">Generated Ads</h2>
@@ -1371,10 +1390,17 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
                   <input
                     type="text"
                     value={jobName}
-                    onChange={(e) => setJobName(e.target.value)}
+                    onChange={(e) => {
+                      setJobName(e.target.value)
+                      // Trigger tutorial step when user types at least 3 characters in ad name
+                      if (tutorialActive && e.target.value.trim().length >= 3) {
+                        checkStepTrigger('input', 'ad-name-input')
+                      }
+                    }}
                     required
                     className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
                     placeholder="e.g., Product Launch Ad, Summer Campaign..."
+                    data-tutorial="ad-name-input"
                   />
                 </div>
 
@@ -1385,10 +1411,17 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
                   </label>
                   <textarea
                     value={prompt}
-                    onChange={(e) => setPrompt(e.target.value)}
+                    onChange={(e) => {
+                      setPrompt(e.target.value)
+                      // Trigger tutorial step when user types at least 10 characters in prompt
+                      if (tutorialActive && e.target.value.trim().length >= 10) {
+                        checkStepTrigger('input', 'prompt-input')
+                      }
+                    }}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
                     rows={3}
                     placeholder="Describe the ad you want to create..."
+                    data-tutorial="prompt-input"
                   />
                 </div>
 
@@ -1474,6 +1507,7 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
                     onClick={handleGenerateAd}
                     disabled={!prompt.trim() || (multipleImagesMode ? selectedImages.length === 0 : !selectedImage) || isGenerating}
                     className="px-6 py-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg hover:from-blue-700 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-lg shadow-blue-500/20"
+                    data-tutorial="generate-final-button"
                   >
                     {isGenerating ? (
                       <div className="flex items-center space-x-2">
@@ -1579,6 +1613,9 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
           </div>
         </div>
       )}
+
+      {/* Tutorial Overlay */}
+      {tutorialActive && <TutorialOverlay />}
     </DashboardLayout>
   )
 }
@@ -1641,6 +1678,7 @@ function ImageCard({
           : 'border-gray-200 hover:border-gray-300'
       }`}
       onClick={onToggleSelect}
+      data-tutorial="image-card"
     >
       <div className="relative aspect-square bg-gray-100 rounded-t-xl overflow-hidden">
         {isLoading && (

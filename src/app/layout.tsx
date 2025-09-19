@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Poppins } from "next/font/google";
 import Script from "next/script";
 import CookieBanner from "@/components/CookieBanner";
+import { TutorialProvider } from "@/contexts/TutorialContext";
 import "./globals.css";
 
 const poppins = Poppins({
@@ -65,8 +66,10 @@ export default function RootLayout({
         </noscript>
       </head>
       <body className={`${poppins.variable} antialiased`}>
-        {children}
-        <CookieBanner />
+        <TutorialProvider>
+          {children}
+          <CookieBanner />
+        </TutorialProvider>
       </body>
     </html>
   );

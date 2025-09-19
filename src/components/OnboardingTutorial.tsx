@@ -19,71 +19,41 @@ interface OnboardingTutorialProps {
 }
 
 export default function OnboardingTutorial({ onCompleteAction, onSkipAction }: OnboardingTutorialProps) {
-  const [currentStep, setCurrentStep] = useState(() => {
-    // Initialize from localStorage or start at 0
-    if (typeof window !== 'undefined') {
-      const savedStep = localStorage.getItem('onboarding-tutorial-step')
-      return savedStep ? parseInt(savedStep, 10) : 0
-    }
-    return 0
-  })
+  const [currentStep, setCurrentStep] = useState(0)
   const [isVisible, setIsVisible] = useState(true)
-  const [showActionNeeded, setShowActionNeeded] = useState(false)
   const supabase = createClient()
-
-  // Save current step to localStorage whenever it changes
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('onboarding-tutorial-step', currentStep.toString())
-    }
-  }, [currentStep])
 
   const tutorialSteps: TutorialStep[] = [
     {
       id: 'welcome',
       title: 'Welcome to Image2Ad! 🎉',
-      description: 'Let\'s get you started with creating your first professional ad. This quick tutorial will show you the simple steps.',
+      description: 'Let\'s get you started with creating your first professional ad. This quick tutorial will show you the 3 simple steps.',
       position: 'center'
     },
     {
-      id: 'enter-folder-name',
-      title: 'Step 1: Enter Folder Name',
-      description: 'Type a name for your first folder in the input field above (try "My First Project" or any name you like).',
-      targetSelector: 'input[placeholder*="folder name"]',
-      position: 'bottom',
-      triggerNext: () => {
-        const input = document.querySelector('input[placeholder*="folder name"]') as HTMLInputElement;
-        return input && input.value.trim().length > 0;
-      }
-    },
-    {
       id: 'create-folder',
-      title: 'Step 2: Create Your Folder',
-      description: 'Perfect! Now click "Create Folder" and we\'ll automatically open your new folder so you can start uploading images right away.',
+      title: 'Step 1: Create Your First Folder',
+      description: 'Folders help you organize your projects. Click the "Create" button to make your first folder.',
       targetSelector: '[data-tutorial="create-button"]',
-      position: 'bottom',
-      triggerNext: () => {
-        const folderElements = document.querySelectorAll('[data-folder-id]');
-        return folderElements.length > 0;
-      }
+      position: 'bottom'
     },
     {
       id: 'upload-images',
-      title: 'Step 3: Upload Your Images',
-      description: 'Excellent! Your folder is now open and ready. Drag and drop your product images or click to browse. You can upload JPG, PNG, or WEBP files up to 20MB each.',
+      title: 'Step 2: Upload Your Images',
+      description: 'Drag and drop your product images here, or click to browse. You can upload JPG, PNG, or WEBP files up to 20MB each.',
       targetSelector: '[data-tutorial="upload-area"]',
       position: 'top'
     },
     {
       id: 'select-images',
-      title: 'Step 4: Select Images for Your Ad',
+      title: 'Step 3: Select Images for Your Ad',
       description: 'Click on images to select them. You can try our new multi-image beta feature with the toggle above!',
       targetSelector: '[data-tutorial="image-grid"]',
       position: 'top'
     },
     {
       id: 'generate-ad',
-      title: 'Step 5: Generate Your Ad',
+      title: 'Step 4: Generate Your Ad',
       description: 'Click "Generate Ad" to create professional marketing content from your images. Give your ad a name and describe what you want!',
       targetSelector: '[data-tutorial="generate-button"]',
       position: 'top'
@@ -99,17 +69,8 @@ export default function OnboardingTutorial({ onCompleteAction, onSkipAction }: O
   const currentStepData = tutorialSteps[currentStep]
 
   const handleNext = () => {
-    // Check if current step has a trigger condition
-    if (currentStepData.triggerNext && !currentStepData.triggerNext()) {
-      // Show a message that they need to complete the action first
-      setShowActionNeeded(true)
-      setTimeout(() => setShowActionNeeded(false), 3000) // Hide after 3 seconds
-      return
-    }
-
     if (currentStep < tutorialSteps.length - 1) {
       setCurrentStep(currentStep + 1)
-      setShowActionNeeded(false)
     } else {
       handleComplete()
     }
@@ -134,11 +95,6 @@ export default function OnboardingTutorial({ onCompleteAction, onSkipAction }: O
       }
     } catch (error) {
       console.error('Error completing tutorial:', error)
-    }
-
-    // Clear tutorial progress from localStorage
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem('onboarding-tutorial-step')
     }
 
     setIsVisible(false)
@@ -256,13 +212,6 @@ export default function OnboardingTutorial({ onCompleteAction, onSkipAction }: O
             <p className="text-sm text-gray-600 leading-relaxed">
               {currentStepData.description}
             </p>
-            {showActionNeeded && currentStepData.triggerNext && (
-              <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-lg">
-                <p className="text-sm text-amber-800">
-                  👆 Please complete this step first before continuing!
-                </p>
-              </div>
-            )}
           </div>
 
           {/* Navigation */}
