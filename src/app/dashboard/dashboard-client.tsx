@@ -223,6 +223,7 @@ export default function DashboardClient({ user, profile, initialFolders }: Dashb
                     key={folder.id}
                     onClick={() => handleFolderClick(folder.id)}
                     disabled={loadingFolderId === folder.id}
+                    data-folder-id={folder.id}
                     className="group relative bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl p-6 hover:from-blue-50 hover:to-purple-50 transition-all duration-200 border border-gray-200 hover:border-blue-200 hover:shadow-lg hover:shadow-blue-100/50 disabled:opacity-50 disabled:cursor-not-allowed w-full text-left"
                   >
                     <div className="flex items-start justify-between mb-4">
@@ -265,6 +266,7 @@ export default function DashboardClient({ user, profile, initialFolders }: Dashb
                     key={folder.id}
                     onClick={() => handleFolderClick(folder.id)}
                     disabled={loadingFolderId === folder.id}
+                    data-folder-id={folder.id}
                     className="group flex items-center justify-between p-4 hover:bg-gray-50 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed w-full text-left"
                   >
                     <div className="flex items-center space-x-4">

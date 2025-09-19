@@ -21,6 +21,7 @@ interface OnboardingTutorialProps {
 export default function OnboardingTutorial({ onCompleteAction, onSkipAction }: OnboardingTutorialProps) {
   const [currentStep, setCurrentStep] = useState(0)
   const [isVisible, setIsVisible] = useState(true)
+  const [showActionNeeded, setShowActionNeeded] = useState(false)
   const supabase = createClient()
 
   const tutorialSteps: TutorialStep[] = [
@@ -33,14 +34,19 @@ export default function OnboardingTutorial({ onCompleteAction, onSkipAction }: O
     {
       id: 'create-folder',
       title: 'Step 1: Create Your First Folder',
-      description: 'Folders help you organize your projects. Click the "Create" button to make your first folder.',
-      targetSelector: '[data-tutorial="create-button"]',
-      position: 'bottom'
+      description: 'Enter a name for your folder in the input field (try "My First Project"), then click the blue "Create Folder" button.',
+      targetSelector: 'input[placeholder*="folder name"]',
+      position: 'bottom',
+      triggerNext: () => {
+        // Check if user has created a folder by checking if there are any folders
+        const folderElements = document.querySelectorAll('[data-folder-id]')
+        return folderElements.length > 0
+      }
     },
     {
       id: 'upload-images',
       title: 'Step 2: Upload Your Images',
-      description: 'Drag and drop your product images here, or click to browse. You can upload JPG, PNG, or WEBP files up to 20MB each.',
+      description: 'Great! Now click on your folder to open it, then drag and drop your product images or click to browse. You can upload JPG, PNG, or WEBP files up to 20MB each.',
       targetSelector: '[data-tutorial="upload-area"]',
       position: 'top'
     },
@@ -69,8 +75,17 @@ export default function OnboardingTutorial({ onCompleteAction, onSkipAction }: O
   const currentStepData = tutorialSteps[currentStep]
 
   const handleNext = () => {
+    // Check if current step has a trigger condition
+    if (currentStepData.triggerNext && !currentStepData.triggerNext()) {
+      // Show a message that they need to complete the action first
+      setShowActionNeeded(true)
+      setTimeout(() => setShowActionNeeded(false), 3000) // Hide after 3 seconds
+      return
+    }
+
     if (currentStep < tutorialSteps.length - 1) {
       setCurrentStep(currentStep + 1)
+      setShowActionNeeded(false)
     } else {
       handleComplete()
     }
@@ -212,6 +227,13 @@ export default function OnboardingTutorial({ onCompleteAction, onSkipAction }: O
             <p className="text-sm text-gray-600 leading-relaxed">
               {currentStepData.description}
             </p>
+            {showActionNeeded && currentStepData.triggerNext && (
+              <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                <p className="text-sm text-amber-800">
+                  👆 Please complete this step first before continuing!
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Navigation */}

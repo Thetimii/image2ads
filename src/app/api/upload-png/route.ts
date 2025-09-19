@@ -43,9 +43,13 @@ export async function POST(request: NextRequest) {
 
     for (const file of files) {
       try {
+        console.log(`Processing file: ${file.name}, type: ${file.type}, size: ${file.size}`)
+        
         // Convert file to PNG using Sharp directly
         const arrayBuffer = await file.arrayBuffer()
         const buffer = Buffer.from(arrayBuffer)
+        
+        console.log(`Buffer created, size: ${buffer.length}`)
         
         // Convert to PNG with Sharp - this should handle JPG, PNG, WEBP, etc.
         const pngBuffer = await sharp(buffer)
@@ -55,11 +59,15 @@ export async function POST(request: NextRequest) {
           })
           .toBuffer()
 
+        console.log(`PNG conversion successful, size: ${pngBuffer.length}`)
+
         // Generate unique filename
         const timestamp = Date.now()
         const randomId = Math.random().toString(36).substring(2)
         const pngFileName = `${timestamp}-${randomId}.png`
         const filePath = `${user.id}/${folderId}/${pngFileName}`
+
+        console.log(`Uploading to path: ${filePath}`)
 
         // Upload to Supabase Storage
         const { error: uploadError } = await supabase.storage
@@ -73,6 +81,8 @@ export async function POST(request: NextRequest) {
           console.error('Upload error:', uploadError)
           throw new Error(`Failed to upload PNG: ${uploadError.message}`)
         }
+
+        console.log(`Upload successful for ${file.name}`)
 
         const result = {
           fileName: pngFileName,
@@ -110,6 +120,7 @@ export async function POST(request: NextRequest) {
 
       } catch (error) {
         console.error(`Error processing file ${file.name}:`, error)
+        console.error('Error stack:', error instanceof Error ? error.stack : 'No stack available')
         failedFiles.push({
           fileName: file.name,
           error: error instanceof Error ? error.message : 'Unknown error'
@@ -129,8 +140,12 @@ export async function POST(request: NextRequest) {
 
   } catch (error) {
     console.error('Upload PNG error:', error)
+    console.error('Error stack:', error instanceof Error ? error.stack : 'No stack available')
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { 
+        error: 'Internal server error',
+        details: error instanceof Error ? error.message : 'Unknown error'
+      },
       { status: 500 }
     )
   }
