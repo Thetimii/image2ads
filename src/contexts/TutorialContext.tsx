@@ -4,6 +4,24 @@ import { createContext, useContext, useState, useEffect, ReactNode } from 'react
 import { useRouter, usePathname } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 
+// Hook to detect mobile devices
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(false)
+  
+  useEffect(() => {
+    const checkIsMobile = () => {
+      setIsMobile(window.innerWidth < 768) // md breakpoint
+    }
+    
+    checkIsMobile()
+    window.addEventListener('resize', checkIsMobile)
+    
+    return () => window.removeEventListener('resize', checkIsMobile)
+  }, [])
+  
+  return isMobile
+}
+
 interface TutorialProviderProps {
   children: React.ReactNode
   userTutorialCompleted?: boolean
@@ -56,6 +74,7 @@ export function TutorialProvider({ children, userTutorialCompleted = false }: Tu
   const router = useRouter()
   const pathname = usePathname()
   const supabase = createClient()
+  const isMobile = useIsMobile()
 
   const steps: TutorialStep[] = [
     {
@@ -216,6 +235,12 @@ export function TutorialProvider({ children, userTutorialCompleted = false }: Tu
   }, [currentStep, tutorialFolderId, isActive])
 
   const startTutorial = () => {
+    // Don't start tutorial on mobile devices
+    if (isMobile) {
+      console.log('Tutorial disabled on mobile devices')
+      return
+    }
+    
     console.log('Starting tutorial...')
     setIsActive(true)
     setCurrentStep(0)
@@ -352,7 +377,7 @@ export function TutorialProvider({ children, userTutorialCompleted = false }: Tu
 
   return (
     <TutorialContext.Provider value={{
-      isActive,
+      isActive: isActive && !isMobile, // Disable tutorial on mobile
       currentStep,
       currentStepData,
       steps,

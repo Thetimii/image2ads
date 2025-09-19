@@ -334,7 +334,7 @@ export default function TutorialOverlay() {
   if (!isActive || !currentStepData || !mounted) return null
 
   const overlayContent = (
-    <>
+    <div className="hidden md:block">
       {/* Dark overlay */}
       <div 
         className="fixed inset-0 bg-black/50 z-40"
@@ -455,7 +455,7 @@ export default function TutorialOverlay() {
           )}
         </div>
       </div>
-    </>
+    </div>
   )
 
   return createPortal(overlayContent, document.body)
