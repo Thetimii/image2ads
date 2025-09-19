@@ -45,7 +45,7 @@ export default function OnboardingTutorial({ onCompleteAction, onSkipAction }: O
     {
       id: 'create-folder',
       title: 'Step 2: Create Your Folder',
-      description: 'Perfect! Now click the blue "Create Folder" button to create your first folder.',
+      description: 'Perfect! Now click "Create Folder" and we\'ll automatically open your new folder so you can start uploading images right away.',
       targetSelector: '[data-tutorial="create-button"]',
       position: 'bottom',
       triggerNext: () => {
@@ -56,7 +56,7 @@ export default function OnboardingTutorial({ onCompleteAction, onSkipAction }: O
     {
       id: 'upload-images',
       title: 'Step 3: Upload Your Images',
-      description: 'Great! Now click on your folder to open it, then drag and drop your product images or click to browse. You can upload JPG, PNG, or WEBP files up to 20MB each.',
+      description: 'Excellent! Your folder is now open and ready. Drag and drop your product images or click to browse. You can upload JPG, PNG, or WEBP files up to 20MB each.',
       targetSelector: '[data-tutorial="upload-area"]',
       position: 'top'
     },
