@@ -28,38 +28,48 @@ export default function OnboardingTutorial({ onCompleteAction, onSkipAction }: O
     {
       id: 'welcome',
       title: 'Welcome to Image2Ad! 🎉',
-      description: 'Let\'s get you started with creating your first professional ad. This quick tutorial will show you the 3 simple steps.',
+      description: 'Let\'s get you started with creating your first professional ad. This quick tutorial will show you the simple steps.',
       position: 'center'
     },
     {
-      id: 'create-folder',
-      title: 'Step 1: Create Your First Folder',
-      description: 'Enter a name for your folder in the input field (try "My First Project"), then click the blue "Create Folder" button.',
+      id: 'enter-folder-name',
+      title: 'Step 1: Enter Folder Name',
+      description: 'Type a name for your first folder in the input field above (try "My First Project" or any name you like).',
       targetSelector: 'input[placeholder*="folder name"]',
       position: 'bottom',
       triggerNext: () => {
-        // Check if user has created a folder by checking if there are any folders
-        const folderElements = document.querySelectorAll('[data-folder-id]')
-        return folderElements.length > 0
+        const input = document.querySelector('input[placeholder*="folder name"]') as HTMLInputElement;
+        return input && input.value.trim().length > 0;
+      }
+    },
+    {
+      id: 'create-folder',
+      title: 'Step 2: Create Your Folder',
+      description: 'Perfect! Now click the blue "Create Folder" button to create your first folder.',
+      targetSelector: '[data-tutorial="create-button"]',
+      position: 'bottom',
+      triggerNext: () => {
+        const folderElements = document.querySelectorAll('[data-folder-id]');
+        return folderElements.length > 0;
       }
     },
     {
       id: 'upload-images',
-      title: 'Step 2: Upload Your Images',
+      title: 'Step 3: Upload Your Images',
       description: 'Great! Now click on your folder to open it, then drag and drop your product images or click to browse. You can upload JPG, PNG, or WEBP files up to 20MB each.',
       targetSelector: '[data-tutorial="upload-area"]',
       position: 'top'
     },
     {
       id: 'select-images',
-      title: 'Step 3: Select Images for Your Ad',
+      title: 'Step 4: Select Images for Your Ad',
       description: 'Click on images to select them. You can try our new multi-image beta feature with the toggle above!',
       targetSelector: '[data-tutorial="image-grid"]',
       position: 'top'
     },
     {
       id: 'generate-ad',
-      title: 'Step 4: Generate Your Ad',
+      title: 'Step 5: Generate Your Ad',
       description: 'Click "Generate Ad" to create professional marketing content from your images. Give your ad a name and describe what you want!',
       targetSelector: '[data-tutorial="generate-button"]',
       position: 'top'

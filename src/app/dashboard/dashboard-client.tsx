@@ -120,6 +120,7 @@ export default function DashboardClient({ user, profile, initialFolders }: Dashb
                 onChange={(e) => setNewFolderName(e.target.value)}
                 placeholder="Enter folder name (e.g., 'Product Photos', 'Summer Campaign')"
                 className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all duration-200"
+                data-tutorial="folder-name-input"
               />
             </div>
             <button
