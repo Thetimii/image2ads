@@ -302,39 +302,111 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
     setUploadProgress(0)
 
     try {
-      // Create FormData for multiple file upload
-      const formData = new FormData()
-      formData.append('folderId', folder.id)
-      
-      // Add all files to FormData
-      Array.from(files).forEach((file) => {
-        formData.append('files', file)
-      })
+      // Get user for Edge function
+      const { data: { user }, error: userError } = await supabase.auth.getUser()
+      if (userError || !user) {
+        throw new Error('Authentication required')
+      }
+
+      // Upload files to Edge function one by one (faster and more reliable)
+      const uploadedImages = []
+      const failedFiles = []
+      let completedFiles = 0
 
       // Simulate progress updates for better UX
       const progressInterval = setInterval(() => {
         setUploadProgress(prev => {
-          if (prev >= 90) return prev;
-          return prev + Math.random() * 10;
+          const targetProgress = (completedFiles / files.length) * 90
+          return Math.min(targetProgress + Math.random() * 5, 90)
         });
       }, 200);
 
-      // Upload all files at once (with PNG conversion)
-      const uploadResponse = await fetch('/api/upload-png', {
-        method: 'POST',
-        body: formData,
-      })
+      for (const file of Array.from(files)) {
+        try {
+          console.log(`[UPLOAD] Processing file: ${file.name}, size: ${file.size} bytes`)
+          
+          // Convert file to array for Edge Function
+          const arrayBuffer = await file.arrayBuffer()
+          const imageData = Array.from(new Uint8Array(arrayBuffer))
+          
+          // Call the working convert-to-png Edge Function
+          const uploadResponse = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/convert-to-png`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`,
+            },
+            body: JSON.stringify({
+              imageData,
+              originalName: file.name,
+              userId: user.id,
+              folderId: folder.id,
+              role: 'product'
+            })
+          })
+
+          if (!uploadResponse.ok) {
+            const errorData = await uploadResponse.text()
+            console.error(`[UPLOAD] Edge Function failed: ${uploadResponse.status} - ${errorData}`)
+            throw new Error(`Upload failed: ${uploadResponse.status} - ${errorData}`)
+          }
+
+          const result = await uploadResponse.json()
+          
+          if (!result.success) {
+            console.error(`[UPLOAD] Conversion failed:`, result.error)
+            throw new Error(result.error || 'Conversion failed')
+          }
+
+          // Create image record in database
+          const { data: imageRecord, error: dbError } = await supabase
+            .from('images')
+            .insert({
+              user_id: user.id,
+              folder_id: folder.id,
+              file_path: result.filePath,
+              original_name: file.name,
+              file_size: result.fileSize || arrayBuffer.byteLength,
+              mime_type: result.contentType || 'application/octet-stream',
+              metadata: {
+                role: result.role || 'product',
+                assets: result.assets || {}
+              }
+            })
+            .select()
+            .single()
+
+          if (dbError) {
+            console.error(`[UPLOAD] Database error:`, dbError)
+            throw new Error('Failed to save image record')
+          }
+
+          console.log(`[UPLOAD] File processed successfully: ${result.filePath}`)
+          uploadedImages.push({
+            id: imageRecord.id,
+            fileName: result.fileName,
+            filePath: result.filePath,
+            originalName: file.name,
+            role: result.role || 'product',
+            assets: result.assets || {}
+          })
+
+        } catch (error) {
+          console.error(`[UPLOAD] Error processing file ${file.name}:`, error)
+          failedFiles.push({
+            fileName: file.name,
+            error: error instanceof Error ? error.message : 'Unknown error'
+          })
+        }
+        
+        completedFiles++
+      }
 
       clearInterval(progressInterval);
 
-      if (!uploadResponse.ok) {
-        throw new Error('Failed to upload images')
-      }
-
-      const result = await uploadResponse.json()
-      
-      if (!result.success) {
-        throw new Error(result.error || 'Upload failed')
+      // Check if any files uploaded successfully
+      if (uploadedImages.length === 0 && failedFiles.length > 0) {
+        throw new Error(`All files failed to upload. First error: ${failedFiles[0]?.error}`)
       }
 
       // Update progress to 100%
@@ -347,32 +419,32 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
       await refetchImages()
 
       // Trigger tutorial step AFTER successful upload completion
-      if (tutorialActive && result.uploadedImages.length > 0) {
+      if (tutorialActive && uploadedImages.length > 0) {
         checkStepTrigger('upload', 'file-upload')
       }
       
       // Show success message with toast instead of alert
-      if (result.uploadedImages.length === files.length) {
+      if (uploadedImages.length === files.length) {
         addToast({
-          message: `Successfully uploaded ${result.uploadedImages.length} image${result.uploadedImages.length > 1 ? 's' : ''}!`,
+          message: `Successfully uploaded ${uploadedImages.length} image${uploadedImages.length > 1 ? 's' : ''}!`,
           type: 'success'
         })
-      } else if (result.uploadedImages.length > 0) {
+      } else if (uploadedImages.length > 0) {
         addToast({
-          message: `Uploaded ${result.uploadedImages.length} of ${files.length} images. ${result.failedFiles?.length || 0} failed.`,
+          message: `Uploaded ${uploadedImages.length} of ${files.length} images. ${failedFiles?.length || 0} failed.`,
           type: 'info'
         })
         // Show details about failed files if any
-        if (result.failedFiles && result.failedFiles.length > 0) {
-          console.error('Failed file details:', result.failedFiles)
+        if (failedFiles && failedFiles.length > 0) {
+          console.error('Failed file details:', failedFiles)
         }
       } else {
         addToast({
           message: 'All files failed to upload. Please check file formats and try again.',
           type: 'error'
         })
-        if (result.failedFiles && result.failedFiles.length > 0) {
-          console.error('Failed file details:', result.failedFiles)
+        if (failedFiles && failedFiles.length > 0) {
+          console.error('Failed file details:', failedFiles)
         }
       }
 
