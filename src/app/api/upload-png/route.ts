@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import sharp from 'sharp'
+
+// Configure route for 20MB uploads and longer timeouts
+export const maxDuration = 60 // 60 seconds for large uploads
 
 export async function POST(request: NextRequest) {
   try {
@@ -17,6 +19,7 @@ export async function POST(request: NextRequest) {
     const formData = await request.formData()
     const folderId = formData.get('folderId') as string
     const files = formData.getAll('files') as File[]
+    const role = formData.get('role') as 'product' | 'background' || 'product'
 
     if (!folderId || files.length === 0) {
       return NextResponse.json(
@@ -37,51 +40,53 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Folder not found' }, { status: 404 })
     }
 
-    // Process files and convert to PNG
+    // Process files using the working convert-to-png Edge Function
     const uploadedImages = []
     const failedFiles = []
 
     for (const file of files) {
       try {
-        // Convert file to PNG using Sharp directly
+        console.log(`[UPLOAD] Starting processing for file: ${file.name}, size: ${file.size} bytes`)
+        
+        // Convert file to array for Edge Function
         const arrayBuffer = await file.arrayBuffer()
-        const buffer = Buffer.from(arrayBuffer)
+        const imageData = Array.from(new Uint8Array(arrayBuffer))
         
-        // Convert to PNG with Sharp - this should handle JPG, PNG, WEBP, etc.
-        const pngBuffer = await sharp(buffer)
-          .png({
-            quality: 95, // High quality PNG
-            compressionLevel: 6, // Good compression
-          })
-          .toBuffer()
-
-        // Generate unique filename
-        const timestamp = Date.now()
-        const randomId = Math.random().toString(36).substring(2)
-        const pngFileName = `${timestamp}-${randomId}.png`
-        const filePath = `${user.id}/${folderId}/${pngFileName}`
-
-        // Upload to Supabase Storage
-        const { error: uploadError } = await supabase.storage
-          .from('uploads')
-          .upload(filePath, pngBuffer, {
-            contentType: 'image/png',
-            upsert: true,
-          })
-
-        if (uploadError) {
-          console.error('Upload error:', uploadError)
-          throw new Error(`Failed to upload PNG: ${uploadError.message}`)
-        }
-
-        const result = {
-          fileName: pngFileName,
-          filePath: filePath,
-          fileSize: pngBuffer.length,
-          originalName: file.name,
-          convertedFormat: 'png'
+        // Call the working convert-to-png Edge Function
+        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+        if (!supabaseUrl) {
+          throw new Error('Supabase URL not configured')
         }
         
+        const convertResponse = await fetch(`${supabaseUrl}/functions/v1/convert-to-png`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
+          },
+          body: JSON.stringify({
+            imageData,
+            originalName: file.name,
+            userId: user.id,
+            folderId,
+            role,
+            maxSide: 1024
+          })
+        })
+        
+        if (!convertResponse.ok) {
+          const errorData = await convertResponse.text()
+          console.error(`[UPLOAD] Edge Function failed: ${convertResponse.status} - ${errorData}`)
+          throw new Error(`Edge Function failed: ${convertResponse.status} - ${errorData}`)
+        }
+
+        const result = await convertResponse.json()
+        
+        if (!result.success) {
+          console.error(`[UPLOAD] Conversion failed:`, result.error)
+          throw new Error(result.error || 'Conversion failed')
+        }
+
         // Create image record in database
         const { data: imageRecord, error: dbError } = await supabase
           .from('images')
@@ -90,47 +95,64 @@ export async function POST(request: NextRequest) {
             folder_id: folderId,
             file_path: result.filePath,
             original_name: file.name,
-            file_size: result.fileSize,
-            mime_type: 'image/png', // Always PNG now
+            file_size: result.fileSize || arrayBuffer.byteLength,
+            mime_type: 'image/png',
+            metadata: {
+              role: result.role,
+              assets: result.assets || {}
+            }
           })
           .select()
           .single()
 
         if (dbError) {
-          console.error('Database error:', dbError)
+          console.error(`[UPLOAD] Database error:`, dbError)
           throw new Error('Failed to save image record')
         }
 
+        console.log(`[UPLOAD] File processed successfully: ${result.filePath}`)
         uploadedImages.push({
           id: imageRecord.id,
-          fileName: result.fileName,
+          fileName: result.filePath.split('/').pop(),
           filePath: result.filePath,
           originalName: file.name,
+          role: result.role,
+          assets: result.assets || {}
         })
 
       } catch (error) {
-        console.error(`Error processing file ${file.name}:`, error)
+        console.error(`[UPLOAD] Error processing file ${file.name}:`, error)
         failedFiles.push({
           fileName: file.name,
           error: error instanceof Error ? error.message : 'Unknown error'
         })
-        // Continue with other files instead of failing completely
       }
     }
 
+    // Return results
+    if (uploadedImages.length === 0 && failedFiles.length > 0) {
+      return NextResponse.json(
+        { 
+          error: 'All files failed to upload',
+          failedFiles
+        },
+        { status: 400 }
+      )
+    }
+
     return NextResponse.json({
-      success: uploadedImages.length > 0,
+      success: true,
       uploadedImages,
-      failedFiles,
-      message: uploadedImages.length > 0 
-        ? `Successfully uploaded ${uploadedImages.length} of ${files.length} images${failedFiles.length > 0 ? `. ${failedFiles.length} failed.` : ''}`
-        : 'All files failed to upload',
+      failedFiles: failedFiles.length > 0 ? failedFiles : undefined,
+      message: `Successfully uploaded ${uploadedImages.length} files${failedFiles.length > 0 ? `, ${failedFiles.length} failed` : ''}`
     })
 
   } catch (error) {
-    console.error('Upload PNG error:', error)
+    console.error('[UPLOAD] Critical error:', error)
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { 
+        error: error instanceof Error ? error.message : 'Internal server error'
+      },
       { status: 500 }
     )
   }

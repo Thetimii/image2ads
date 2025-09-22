@@ -1,6 +1,14 @@
 // deno-lint-ignore-file no-explicit-any
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
+// Deno global declarations
+declare const Deno: {
+  env: {
+    get(key: string): string | undefined;
+  };
+  serve: (handler: (req: Request) => Response | Promise<Response>) => void;
+};
+
 const supabase = createClient(
   Deno.env.get("SUPABASE_URL") ?? "",
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
@@ -57,9 +65,18 @@ function safeName(name: string, mime: AllowedMime) {
   return name.includes(".") ? name : `${name}.${ext}`;
 }
 async function downloadFromKnownBuckets(filePath: string) {
+  console.log(`[run-job] Attempting to download: ${filePath}`);
+  
   for (const bucket of ["uploads", "results"] as const) {
+    console.log(`[run-job] Checking bucket: ${bucket}`);
     const dl = await supabase.storage.from(bucket).download(filePath);
+    
+    if (dl.error) {
+      console.log(`[run-job] Error in ${bucket}:`, dl.error.message);
+    }
+    
     if (dl.data && !dl.error) {
+      console.log(`[run-job] Found file in ${bucket}, size: ${dl.data.size} bytes`);
       const blob = dl.data;
       const bytes = new Uint8Array(await blob.arrayBuffer());
       const ct = (blob.type || "").toLowerCase();
@@ -68,9 +85,14 @@ async function downloadFromKnownBuckets(filePath: string) {
         ct.startsWith("image/jpeg") ? "image/jpeg" :
         ct.startsWith("image/webp") ? "image/webp" :
         sniffMime(bytes);
-      if (mime && bytes.byteLength > 0) return { bytes, mime };
+      if (mime && bytes.byteLength > 0) {
+        console.log(`[run-job] Successfully loaded ${bytes.byteLength} bytes as ${mime}`);
+        return { bytes, mime };
+      }
     }
   }
+  
+  console.error(`[run-job] File not found in any bucket: ${filePath}`);
   throw new Error(`Object not found in uploads/results for: ${filePath}`);
 }
 
@@ -101,7 +123,8 @@ async function openaiGenerateFromRefs({
 
     for (const f of pngFiles) {
       const name = f.filename.endsWith(".png") ? f.filename : `${f.filename}.png`;
-      form.append("image[]", new File([f.bytes], name, { type: "image/png" }));
+      const buffer = f.bytes.slice().buffer; // Convert to regular ArrayBuffer
+      form.append("image[]", new File([buffer], name, { type: "image/png" }));
     }
 
     const ctrl = new AbortController();
