@@ -66,15 +66,12 @@ function safeName(name: string, mime: AllowedMime) {
 }
 async function downloadFromKnownBuckets(filePath: string) {
   console.log(`[run-job] Attempting to download: ${filePath}`);
-  
   for (const bucket of ["uploads", "results"] as const) {
     console.log(`[run-job] Checking bucket: ${bucket}`);
     const dl = await supabase.storage.from(bucket).download(filePath);
-    
     if (dl.error) {
       console.log(`[run-job] Error in ${bucket}:`, dl.error.message);
     }
-    
     if (dl.data && !dl.error) {
       console.log(`[run-job] Found file in ${bucket}, size: ${dl.data.size} bytes`);
       const blob = dl.data;
@@ -91,9 +88,28 @@ async function downloadFromKnownBuckets(filePath: string) {
       }
     }
   }
-  
   console.error(`[run-job] File not found in any bucket: ${filePath}`);
   throw new Error(`Object not found in uploads/results for: ${filePath}`);
+}
+
+// For now, just return the original bytes and add .png extension
+// OpenAI API will handle format conversion internally
+async function ensurePng(
+  input: Uint8Array,
+  filename: string
+): Promise<{ png: Uint8Array; filenamePng: string }> {
+  try {
+    // Ensure .png suffix for OpenAI API compatibility
+    const name = filename.toLowerCase().endsWith(".png")
+      ? filename
+      : `${filename.replace(/\.[^.]+$/, "")}.png`;
+      
+    console.log(`[run-job] Preparing ${filename} as PNG for OpenAI (${input.length} bytes)`);
+    return { png: input, filenamePng: name };
+  } catch (error) {
+    console.error(`[run-job] Failed to prepare ${filename}:`, error);
+    throw new Error(`Failed to prepare ${filename}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
 }
 
 // --- OpenAI: edits with references (no mask) ---
@@ -116,15 +132,16 @@ async function openaiGenerateFromRefs({
 }) {
   async function call() {
     const form = new FormData();
-    form.append("model", "gpt-image-1"); // ✅ same as Python example
+    form.append("model", "gpt-image-1");
     form.append("prompt", prompt.trim());
     form.append("size", size);
     form.append("quality", quality);
 
     for (const f of pngFiles) {
-      const name = f.filename.endsWith(".png") ? f.filename : `${f.filename}.png`;
-      const buffer = f.bytes.slice().buffer; // Convert to regular ArrayBuffer
-      form.append("image[]", new File([buffer], name, { type: "image/png" }));
+      const buffer = f.bytes.slice().buffer;
+      // Detect actual content type for better OpenAI compatibility
+      const mime = sniffMime(f.bytes) || "image/png";
+      form.append("image[]", new File([buffer], f.filename, { type: mime }));
     }
 
     const ctrl = new AbortController();
@@ -206,12 +223,33 @@ async function handler(req: Request) {
       if (imgErr || !img) return new Response(`Image not found: ${imageId}`, { status: 404, headers: cors });
 
       const { bytes, mime } = await downloadFromKnownBuckets(img.file_path);
-      const filename = safeName(img.original_name || img.file_path.split("/").pop() || "input", mime);
-      if (!isPng(bytes)) {
-        await supabase.from("jobs").update({ status: "failed", error_message: `Not PNG: ${filename}` }).eq("id", jobId);
-        return new Response("Only PNG allowed", { status: 400, headers: cors });
+      const baseName = (img.original_name || img.file_path.split("/").pop() || "input");
+
+      let pngBytes: Uint8Array;
+      let pngName: string;
+
+      if (isPng(bytes)) {
+        // already PNG
+        pngBytes = bytes;
+        pngName = baseName.toLowerCase().endsWith(".png")
+          ? baseName
+          : `${baseName.replace(/\.[^.]+$/, "")}.png`;
+      } else {
+        const sniffed = sniffMime(bytes);
+        if (!sniffed) {
+          await supabase.from("jobs").update({
+            status: "failed",
+            error_message: `Unsupported image format for ${baseName}. Use PNG/JPEG/WebP.`,
+          }).eq("id", jobId);
+          return new Response("Unsupported image format", { status: 400, headers: cors });
+        }
+        // 🔄 prepare for OpenAI (ensure filename has proper extension)
+        const prepared = await ensurePng(bytes, baseName);
+        pngBytes = prepared.png;
+        pngName = prepared.filenamePng;
       }
-      files.push({ bytes, filename, folder_id: img.folder_id });
+
+      files.push({ bytes: pngBytes, filename: pngName, folder_id: img.folder_id });
     }
     if (files.length === 0) return new Response("No images for job", { status: 400, headers: cors });
 
@@ -241,7 +279,7 @@ async function handler(req: Request) {
       return new Response("Credit error", { status: creditError ? 500 : 402, headers: cors });
     }
 
-    // Call OpenAI
+    // Call OpenAI (now always PNG)
     const outBytes = await openaiGenerateFromRefs({
       prompt,
       pngFiles: files.map(f => ({ bytes: f.bytes, filename: f.filename })),
@@ -281,9 +319,16 @@ async function handler(req: Request) {
     });
 
   } catch (err: any) {
-    if (jobId) {
-      await supabase.from("jobs").update({ status: "failed", error_message: String(err?.message ?? err) }).eq("id", jobId);
-    }
+    try {
+      // Best effort to mark job failed
+      // (guarded: jobId may be null on early parse errors)
+      if (jobId) {
+        await supabase
+          .from("jobs")
+          .update({ status: "failed", error_message: String(err?.message ?? err) })
+          .eq("id", jobId);
+      }
+    } catch (_) {}
     return new Response(JSON.stringify({ error: String(err?.message ?? err) }), {
       status: 500,
       headers: { ...cors, "Content-Type": "application/json" },

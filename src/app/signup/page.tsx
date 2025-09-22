@@ -58,6 +58,20 @@ export default function SignUpPage() {
       
       if (error) throw error
       
+      // 🔥 Fire Meta Pixel CompleteRegistration event
+      if (typeof window !== 'undefined' && (window as any).fbq) {
+        const cookieConsent = localStorage.getItem('cookieConsent');
+        if (cookieConsent === 'accepted') {
+          (window as any).fbq('track', 'CompleteRegistration', {
+            status: true,
+            content_name: 'Email Signup',
+            value: 0,
+            currency: 'USD'
+          });
+          console.log('Meta Pixel: CompleteRegistration event fired for email signup');
+        }
+      }
+      
       setLoadingMessage('Setting up your dashboard...')
       setIsRedirecting(true)
       
@@ -91,6 +105,20 @@ export default function SignUpPage() {
         },
       })
       if (error) throw error
+      
+      // 🔥 Fire Meta Pixel CompleteRegistration event for Google signup
+      if (typeof window !== 'undefined' && (window as any).fbq) {
+        const cookieConsent = localStorage.getItem('cookieConsent');
+        if (cookieConsent === 'accepted') {
+          (window as any).fbq('track', 'CompleteRegistration', {
+            status: true,
+            content_name: 'Google OAuth Signup',
+            value: 0,
+            currency: 'USD'
+          });
+          console.log('Meta Pixel: CompleteRegistration event fired for Google signup');
+        }
+      }
     } catch (error: unknown) {
       setMessage((error as Error).message || 'An error occurred')
       setIsLoading(false)
