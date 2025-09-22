@@ -37,7 +37,29 @@ const CookieBanner = () => {
     
     // Get current user
     const getUser = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const { data: { user }, error } = await supabase.auth.getUser();
+      
+      if (error) {
+        console.log('No authenticated user found for cookie preferences');
+        // Still check localStorage for non-authenticated users
+        const cookieConsent = localStorage.getItem('cookieConsent');
+        const savedPreferences = localStorage.getItem('cookiePreferences');
+        
+        if (!cookieConsent) {
+          // Show banner after a short delay for better UX
+          const timer = setTimeout(() => {
+            setShowBanner(true);
+          }, 1000);
+          return () => clearTimeout(timer);
+        } else if (savedPreferences) {
+          // Apply saved preferences from localStorage
+          const parsedPreferences = JSON.parse(savedPreferences);
+          setPreferences(parsedPreferences);
+          applyPreferences(parsedPreferences);
+        }
+        return;
+      }
+      
       setCurrentUser(user);
       
       // Check for saved preferences in database if user is logged in
@@ -58,6 +80,17 @@ const CookieBanner = () => {
           setPreferences(savedPrefs);
           applyPreferences(savedPrefs);
           return; // Don't show banner if user has saved preferences
+        } else {
+          // User is logged in but no preferences in database
+          // Check if they have localStorage preferences to sync
+          const savedPreferences = localStorage.getItem('cookiePreferences');
+          if (savedPreferences) {
+            const parsedPreferences = JSON.parse(savedPreferences);
+            console.log('Syncing localStorage preferences to database for logged in user');
+            setPreferences(parsedPreferences);
+            applyPreferences(parsedPreferences); // This will save to database
+            return;
+          }
         }
       }
       
@@ -79,7 +112,29 @@ const CookieBanner = () => {
       }
     };
     
+    // Listen for auth state changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'SIGNED_IN' && session?.user) {
+        console.log('User signed in, checking for cookie preferences to sync');
+        setCurrentUser(session.user);
+        
+        // Check if user has localStorage preferences to sync to database
+        const savedPreferences = localStorage.getItem('cookiePreferences');
+        if (savedPreferences) {
+          const parsedPreferences = JSON.parse(savedPreferences);
+          console.log('Syncing localStorage preferences to database after signin');
+          await applyPreferences(parsedPreferences);
+        }
+      } else if (event === 'SIGNED_OUT') {
+        setCurrentUser(null);
+      }
+    });
+    
     getUser();
+    
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
   const applyPreferences = async (prefs: CookiePreferences) => {
