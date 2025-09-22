@@ -71,10 +71,42 @@ export function TutorialProvider({ children, userTutorialCompleted = false }: Tu
   const [isActive, setIsActive] = useState(false)
   const [currentStep, setCurrentStep] = useState(0)
   const [tutorialFolderId, setTutorialFolderId] = useState<string | null>(null)
+  const [userTutorialStatus, setUserTutorialStatus] = useState<boolean | null>(null)
   const router = useRouter()
   const pathname = usePathname()
   const supabase = createClient()
   const isMobile = useIsMobile()
+
+  // Check user's tutorial status from database
+  useEffect(() => {
+    const checkTutorialStatus = async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser()
+        if (user) {
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('tutorial_completed')
+            .eq('id', user.id)
+            .single()
+          
+          console.log('Tutorial status from database:', profile?.tutorial_completed)
+          const isCompleted = profile?.tutorial_completed || false
+          setUserTutorialStatus(isCompleted)
+          
+          // If tutorial is completed, clear any saved state and make sure it's not active
+          if (isCompleted) {
+            localStorage.removeItem('image2ad-tutorial-state')
+            setIsActive(false)
+            console.log('Tutorial completed - cleared state')
+          }
+        }
+      } catch (error) {
+        console.error('Error checking tutorial status:', error)
+      }
+    }
+    
+    checkTutorialStatus()
+  }, [])
 
   const steps: TutorialStep[] = [
     {
@@ -241,6 +273,12 @@ export function TutorialProvider({ children, userTutorialCompleted = false }: Tu
       return
     }
     
+    // Don't start if user has already completed tutorial
+    if (userTutorialStatus === true) {
+      console.log('Tutorial already completed, not starting')
+      return
+    }
+    
     console.log('Starting tutorial...')
     setIsActive(true)
     setCurrentStep(0)
@@ -297,6 +335,8 @@ export function TutorialProvider({ children, userTutorialCompleted = false }: Tu
         console.error('Error marking tutorial as completed:', error)
       } else {
         console.log('Tutorial marked as completed successfully')
+        // Update local state
+        setUserTutorialStatus(true)
       }
     } catch (error) {
       console.error('Error completing tutorial:', error)
@@ -377,7 +417,7 @@ export function TutorialProvider({ children, userTutorialCompleted = false }: Tu
 
   return (
     <TutorialContext.Provider value={{
-      isActive: isActive && !isMobile, // Disable tutorial on mobile
+      isActive: isActive && !isMobile && userTutorialStatus !== true, // Don't show if completed
       currentStep,
       currentStepData,
       steps,

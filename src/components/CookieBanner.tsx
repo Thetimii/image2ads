@@ -42,14 +42,19 @@ const CookieBanner = () => {
       
       // Check for saved preferences in database if user is logged in
       if (user) {
-        const { data: profile } = await supabase
+        const { data: profile, error } = await supabase
           .from('profiles')
           .select('cookie_preferences')
           .eq('id', user.id)
           .single();
           
+        if (error) {
+          console.log('Error loading cookie preferences from database:', error);
+        }
+          
         if (profile?.cookie_preferences) {
-          const savedPrefs = profile.cookie_preferences;
+          const savedPrefs = profile.cookie_preferences as CookiePreferences;
+          console.log('Loaded cookie preferences from database:', savedPrefs);
           setPreferences(savedPrefs);
           applyPreferences(savedPrefs);
           return; // Don't show banner if user has saved preferences
@@ -80,6 +85,8 @@ const CookieBanner = () => {
   const applyPreferences = async (prefs: CookiePreferences) => {
     if (typeof window === 'undefined') return;
 
+    console.log('Applying cookie preferences:', prefs);
+
     // Analytics cookies
     if (prefs.analytics && window.gtag) {
       window.gtag('consent', 'update', {
@@ -101,19 +108,25 @@ const CookieBanner = () => {
 
     // Store in localStorage for immediate access
     localStorage.setItem('cookiePreferences', JSON.stringify(prefs));
+    console.log('Saved cookie preferences to localStorage:', prefs);
     
     // Store in database if user is logged in
     if (currentUser) {
       try {
-        await supabase
+        const { error } = await supabase
           .from('profiles')
-          .upsert({
-            id: currentUser.id,
-            email: currentUser.email,
+          .update({
             cookie_preferences: prefs
-          });
+          })
+          .eq('id', currentUser.id);
+          
+        if (error) {
+          console.error('Error saving cookie preferences to database:', error);
+        } else {
+          console.log('Successfully saved cookie preferences to database:', prefs);
+        }
       } catch (error) {
-        console.log('Could not save cookie preferences to database:', error);
+        console.error('Could not save cookie preferences to database:', error);
       }
     }
   };
@@ -145,7 +158,14 @@ const CookieBanner = () => {
   };
 
   const handleSavePreferences = () => {
-    localStorage.setItem('cookieConsent', 'customized');
+    // Save the user's actual selections, not defaults
+    const consentType = preferences.analytics && preferences.marketing && preferences.functional 
+      ? 'accepted' 
+      : (!preferences.analytics && !preferences.marketing && !preferences.functional)
+      ? 'declined'
+      : 'customized';
+    
+    localStorage.setItem('cookieConsent', consentType);
     applyPreferences(preferences);
     setShowBanner(false);
   };

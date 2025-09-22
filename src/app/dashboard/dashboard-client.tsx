@@ -36,9 +36,13 @@ export default function DashboardClient({ user, profile, initialFolders }: Dashb
       tutorialActive 
     })
     
+    // Only try to start tutorial if user hasn't completed it
     if (!profile.tutorial_completed && !tutorialActive) {
       console.log('Starting tutorial for new user')
-      startTutorial()
+      // Add a small delay to ensure TutorialProvider has loaded user status
+      setTimeout(() => {
+        startTutorial()
+      }, 100)
     }
   }, [profile.tutorial_completed, tutorialActive, startTutorial])
 
