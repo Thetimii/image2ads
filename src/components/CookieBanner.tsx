@@ -110,24 +110,34 @@ const CookieBanner = () => {
     localStorage.setItem('cookiePreferences', JSON.stringify(prefs));
     console.log('Saved cookie preferences to localStorage:', prefs);
     
-    // Store in database if user is logged in
-    if (currentUser) {
-      try {
+    // Store in database if user is logged in - get fresh user data
+    try {
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      
+      if (userError) {
+        console.log('Error getting user for cookie preferences:', userError);
+        return;
+      }
+      
+      if (user) {
+        console.log('Saving cookie preferences for user:', user.id);
         const { error } = await supabase
           .from('profiles')
           .update({
             cookie_preferences: prefs
           })
-          .eq('id', currentUser.id);
+          .eq('id', user.id);
           
         if (error) {
           console.error('Error saving cookie preferences to database:', error);
         } else {
           console.log('Successfully saved cookie preferences to database:', prefs);
         }
-      } catch (error) {
-        console.error('Could not save cookie preferences to database:', error);
+      } else {
+        console.log('No user logged in, skipping database save');
       }
+    } catch (error) {
+      console.error('Could not save cookie preferences to database:', error);
     }
   };
 
@@ -159,12 +169,14 @@ const CookieBanner = () => {
 
   const handleSavePreferences = () => {
     // Save the user's actual selections, not defaults
+    console.log('Saving preferences - current state:', preferences);
     const consentType = preferences.analytics && preferences.marketing && preferences.functional 
       ? 'accepted' 
       : (!preferences.analytics && !preferences.marketing && !preferences.functional)
       ? 'declined'
       : 'customized';
     
+    console.log('Detected consent type:', consentType);
     localStorage.setItem('cookieConsent', consentType);
     applyPreferences(preferences);
     setShowBanner(false);
@@ -172,10 +184,13 @@ const CookieBanner = () => {
 
   const togglePreference = (key: keyof CookiePreferences) => {
     if (key === 'necessary') return; // Necessary cookies can't be disabled
-    setPreferences(prev => ({
-      ...prev,
-      [key]: !prev[key]
-    }));
+    const newPreferences = {
+      ...preferences,
+      [key]: !preferences[key]
+    };
+    console.log(`Toggling ${key}:`, preferences[key], '->', !preferences[key]);
+    console.log('New preferences state:', newPreferences);
+    setPreferences(newPreferences);
   };
 
   // Don't render on server side to avoid hydration issues
