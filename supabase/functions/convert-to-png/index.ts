@@ -1,15 +1,8 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
 
-// Deno global declarations
-declare const Deno: {
-  env: {
-    get(key: string): string | undefined;
-  };
-};
-
 const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Origin": "*", // you can restrict later
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 }
@@ -42,8 +35,6 @@ async function readBodyAny(req: Request): Promise<{
   originalName?: string
   userId?: string
   folderId?: string
-  role?: string
-  maxSide?: number
 }> {
   const contentType = req.headers.get("content-type") || ""
 
@@ -53,8 +44,6 @@ async function readBodyAny(req: Request): Promise<{
     const file = form.get("file")
     const userId = form.get("userId")?.toString()
     const folderId = form.get("folderId")?.toString()
-    const role = form.get("role")?.toString()
-    const maxSide = parseInt(form.get("maxSide")?.toString() || "1024")
     const originalName = form.get("originalName")?.toString() || (file as File | null)?.name
 
     if (!(file instanceof File)) throw new Error("Expected form field 'file'")
@@ -66,8 +55,6 @@ async function readBodyAny(req: Request): Promise<{
       originalName,
       userId,
       folderId,
-      role,
-      maxSide,
     }
   }
 
@@ -80,8 +67,6 @@ async function readBodyAny(req: Request): Promise<{
     const userId = url.searchParams.get("userId") ?? undefined
     const folderId = url.searchParams.get("folderId") ?? undefined
     const originalName = url.searchParams.get("originalName") ?? undefined
-    const role = url.searchParams.get("role") ?? undefined
-    const maxSide = parseInt(url.searchParams.get("maxSide") || "1024")
 
     const ab = await req.arrayBuffer()
     return {
@@ -90,8 +75,6 @@ async function readBodyAny(req: Request): Promise<{
       originalName,
       userId,
       folderId,
-      role,
-      maxSide,
     }
   }
 
@@ -107,12 +90,10 @@ async function readBodyAny(req: Request): Promise<{
     originalName: json.originalName,
     userId: json.userId,
     folderId: json.folderId,
-    role: json.role,
-    maxSide: json.maxSide || 1024,
   }
 }
 
-serve(async (req: Request) => {
+serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders })
   }
@@ -129,19 +110,11 @@ serve(async (req: Request) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
     )
 
-    const { bytes, contentType, originalName, userId, folderId, role } = await readBodyAny(req)
+    const { bytes, contentType, originalName, userId, folderId } = await readBodyAny(req)
 
     if (!userId || !folderId) {
       return new Response(JSON.stringify({ error: "Missing userId or folderId" }), {
         status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      })
-    }
-
-    // Check max file size (20MB)
-    if (bytes.length > 20 * 1024 * 1024) {
-      return new Response(JSON.stringify({ error: "File too large. Maximum 20MB allowed." }), {
-        status: 413,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       })
     }
@@ -159,6 +132,7 @@ serve(async (req: Request) => {
     const { error } = await supabase.storage.from("uploads").upload(filePath, bytes, {
       contentType: contentType || "application/octet-stream",
       upsert: true,
+      // cacheControl: "3600", // optional
     })
     if (error) {
       return new Response(JSON.stringify({ error: "Failed to upload", details: error.message }), {
@@ -175,8 +149,6 @@ serve(async (req: Request) => {
         fileSize: bytes.length,
         originalName: originalName ?? null,
         contentType: contentType ?? null,
-        role: role || 'product',
-        assets: {},
         note: "Uploaded without conversion.",
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }

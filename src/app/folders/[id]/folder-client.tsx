@@ -302,61 +302,88 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
     setUploadProgress(0)
 
     try {
-      // Get user for Edge function
+      // Get user for authentication
       const { data: { user }, error: userError } = await supabase.auth.getUser()
       if (userError || !user) {
         throw new Error('Authentication required')
       }
 
-      // Upload files to Edge function one by one (faster and more reliable)
+      // Upload files directly to storage (no Edge Function CPU limits)
       const uploadedImages = []
       const failedFiles = []
       let completedFiles = 0
-
-      // Simulate progress updates for better UX
-      const progressInterval = setInterval(() => {
-        setUploadProgress(prev => {
-          const targetProgress = (completedFiles / files.length) * 90
-          return Math.min(targetProgress + Math.random() * 5, 90)
-        });
-      }, 200);
 
       for (const file of Array.from(files)) {
         try {
           console.log(`[UPLOAD] Processing file: ${file.name}, size: ${file.size} bytes`)
           
-          // Convert file to array for Edge Function
-          const arrayBuffer = await file.arrayBuffer()
-          const imageData = Array.from(new Uint8Array(arrayBuffer))
+          // Check file size limit (20MB)
+          if (file.size > 20 * 1024 * 1024) {
+            throw new Error(`File too large: ${(file.size / (1024 * 1024)).toFixed(1)}MB. Maximum 20MB allowed.`)
+          }
+
+          // Generate unique filename
+          const timestamp = Date.now()
+          const randomId = Math.random().toString(36).substring(2)
+          const ext = file.name.split('.').pop()?.toLowerCase() || 'bin'
+          const fileName = `${timestamp}-${randomId}.${ext}`
           
-          // Call the working convert-to-png Edge Function
-          const uploadResponse = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/convert-to-png`, {
+          // Get signed upload URL
+          const signedUrlResponse = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/create-signed-upload-url`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
               'Authorization': `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`,
             },
             body: JSON.stringify({
-              imageData,
-              originalName: file.name,
               userId: user.id,
               folderId: folder.id,
-              role: 'product'
+              fileName: fileName,
+              contentType: file.type || 'application/octet-stream'
             })
           })
 
-          if (!uploadResponse.ok) {
-            const errorData = await uploadResponse.text()
-            console.error(`[UPLOAD] Edge Function failed: ${uploadResponse.status} - ${errorData}`)
-            throw new Error(`Upload failed: ${uploadResponse.status} - ${errorData}`)
+          if (!signedUrlResponse.ok) {
+            const errorData = await signedUrlResponse.text()
+            throw new Error(`Failed to get upload URL: ${errorData}`)
           }
 
-          const result = await uploadResponse.json()
-          
-          if (!result.success) {
-            console.error(`[UPLOAD] Conversion failed:`, result.error)
-            throw new Error(result.error || 'Conversion failed')
-          }
+          const { url: signedUrl, path: filePath, headers: uploadHeaders } = await signedUrlResponse.json()
+
+          // Upload directly to storage with progress tracking
+          await new Promise<void>((resolve, reject) => {
+            const xhr = new XMLHttpRequest()
+            
+            // Track upload progress
+            xhr.upload.onprogress = (e) => {
+              if (e.lengthComputable) {
+                const fileProgress = Math.round((e.loaded / e.total) * 100)
+                const overallProgress = ((completedFiles + (fileProgress / 100)) / files.length) * 100
+                setUploadProgress(Math.min(overallProgress, 99))
+              }
+            }
+
+            xhr.onload = () => {
+              if (xhr.status >= 200 && xhr.status < 300) {
+                resolve()
+              } else {
+                reject(new Error(`Upload failed with status ${xhr.status}`))
+              }
+            }
+
+            xhr.onerror = () => reject(new Error('Upload failed'))
+            xhr.ontimeout = () => reject(new Error('Upload timed out'))
+
+            xhr.open('PUT', signedUrl)
+            xhr.timeout = 120000 // 2 minutes timeout
+            
+            // Set headers from signed URL response
+            Object.entries(uploadHeaders || {}).forEach(([key, value]) => {
+              xhr.setRequestHeader(key, value as string)
+            })
+
+            xhr.send(file)
+          })
 
           // Create image record in database
           const { data: imageRecord, error: dbError } = await supabase
@@ -364,13 +391,13 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
             .insert({
               user_id: user.id,
               folder_id: folder.id,
-              file_path: result.filePath,
+              file_path: filePath,
               original_name: file.name,
-              file_size: result.fileSize || arrayBuffer.byteLength,
-              mime_type: result.contentType || 'application/octet-stream',
+              file_size: file.size,
+              mime_type: file.type || 'application/octet-stream',
               metadata: {
-                role: result.role || 'product',
-                assets: result.assets || {}
+                role: 'product',
+                assets: {}
               }
             })
             .select()
@@ -381,14 +408,14 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
             throw new Error('Failed to save image record')
           }
 
-          console.log(`[UPLOAD] File processed successfully: ${result.filePath}`)
+          console.log(`[UPLOAD] File uploaded successfully: ${filePath}`)
           uploadedImages.push({
             id: imageRecord.id,
-            fileName: result.fileName,
-            filePath: result.filePath,
+            fileName: fileName,
+            filePath: filePath,
             originalName: file.name,
-            role: result.role || 'product',
-            assets: result.assets || {}
+            role: 'product',
+            assets: {}
           })
 
         } catch (error) {
@@ -401,8 +428,6 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
         
         completedFiles++
       }
-
-      clearInterval(progressInterval);
 
       // Check if any files uploaded successfully
       if (uploadedImages.length === 0 && failedFiles.length > 0) {
