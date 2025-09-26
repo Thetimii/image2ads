@@ -6,8 +6,8 @@ import { useRouter } from 'next/navigation'
 import type { User } from '@supabase/supabase-js'
 import type { Profile, Folder } from '@/lib/validations'
 import DashboardLayout from '@/components/DashboardLayout'
-import { useTutorial } from '@/contexts/TutorialContext'
-import TutorialOverlay from '@/components/TutorialOverlay'
+import DemoWorkflow from '@/components/DemoWorkflow'
+import { createClient } from '@/lib/supabase/client'
 
 interface DashboardClientProps {
   user: User
@@ -26,29 +26,64 @@ export default function DashboardClient({ user, profile, initialFolders }: Dashb
   const [searchQuery, setSearchQuery] = useState('')
   const [sortBy, setSortBy] = useState<SortOption>('date-desc')
   const [viewMode, setViewMode] = useState<ViewMode>('grid')
-  const { isActive: tutorialActive, startTutorial, checkStepTrigger, setTutorialFolderId } = useTutorial()
+  const [showDemo, setShowDemo] = useState(false)
   const router = useRouter()
+  const supabase = createClient()
 
-  // Initialize tutorial if user hasn't completed it
+  // Show demo for new users who haven't completed tutorial
   useEffect(() => {
-    console.log('Dashboard: checking tutorial status:', { 
+    console.log('Dashboard: checking demo status:', { 
       tutorial_completed: profile.tutorial_completed,
-      tutorialActive 
+      folders_count: folders.length
     })
     
-    // Only try to start tutorial if user hasn't completed it
-    if (!profile.tutorial_completed && !tutorialActive) {
-      console.log('Starting tutorial for new user')
-      // Add a small delay to ensure TutorialProvider has loaded user status
-      setTimeout(() => {
-        startTutorial()
-      }, 100)
+    // Show demo if user hasn't completed tutorial and has no folders
+    if (!profile.tutorial_completed && folders.length === 0) {
+      console.log('Showing demo for new user')
+      setShowDemo(true)
     }
-  }, [profile.tutorial_completed, tutorialActive, startTutorial])
+  }, [profile.tutorial_completed, folders.length])
 
   const handleFolderClick = (folderId: string) => {
     setLoadingFolderId(folderId)
     router.push(`/folders/${folderId}`)
+  }
+
+  const handleDemoComplete = async () => {
+    try {
+      // Mark tutorial as completed in database
+      const { error } = await supabase
+        .from('profiles')
+        .update({ tutorial_completed: true })
+        .eq('id', user.id)
+
+      if (error) {
+        console.error('Error marking tutorial as completed:', error)
+      }
+
+      // Create first folder for user
+      const { data: folder, error: folderError } = await supabase
+        .from('folders')
+        .insert({
+          name: 'My First Project',
+          user_id: user.id,
+        })
+        .select()
+        .single()
+
+      if (folderError) {
+        console.error('Error creating first folder:', folderError)
+        return
+      }
+
+      // Update local state
+      setFolders(prev => [folder, ...prev])
+      
+      // Navigate to the new folder
+      router.push(`/folders/${folder.id}`)
+    } catch (error) {
+      console.error('Error completing demo:', error)
+    }
   }
 
   // Filter and sort folders based on search and sort options
@@ -100,10 +135,7 @@ export default function DashboardClient({ user, profile, initialFolders }: Dashb
         setNewFolderName('')
         
         // If tutorial is active, store the folder ID for navigation
-        if (tutorialActive) {
-          setTutorialFolderId(folder.id)
-          checkStepTrigger('folderCreated', 'folder-created')
-        }
+        // Folder created successfully
       } else {
         console.error('Failed to create folder')
       }
@@ -115,7 +147,7 @@ export default function DashboardClient({ user, profile, initialFolders }: Dashb
   }
 
   return (
-    <DashboardLayout user={user} profile={profile}>
+    <DashboardLayout user={user} profile={profile} onDemoOpen={() => setShowDemo(true)}>
       <div className="p-6 lg:p-8">
         {/* Header */}
         <div className="mb-8">
@@ -133,10 +165,7 @@ export default function DashboardClient({ user, profile, initialFolders }: Dashb
               <input
                 type="text"
                 value={newFolderName}
-                onChange={(e) => {
-                  setNewFolderName(e.target.value)
-                  checkStepTrigger('input', 'folder-name-input')
-                }}
+                onChange={(e) => setNewFolderName(e.target.value)}
                 placeholder="Enter folder name (e.g., 'Product Photos', 'Summer Campaign')"
                 data-tutorial="folder-name-input"
                 className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all duration-200"
@@ -146,7 +175,7 @@ export default function DashboardClient({ user, profile, initialFolders }: Dashb
               type="submit"
               disabled={isCreating || !newFolderName.trim()}
               data-tutorial="create-button"
-              onClick={() => checkStepTrigger('click', 'create-button')}
+
               className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-6 py-3 rounded-xl font-medium hover:from-blue-700 hover:to-purple-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-lg shadow-blue-500/20"
             >
               {isCreating ? (
@@ -165,11 +194,13 @@ export default function DashboardClient({ user, profile, initialFolders }: Dashb
         <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
           <div className="p-6 border-b border-gray-200">
             <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-              <div>
-                <h2 className="text-lg font-semibold text-gray-900">Your Folders</h2>
-                <p className="text-sm text-gray-600 mt-1">
-                  {folders.length} {folders.length === 1 ? 'folder' : 'folders'} • Organize your images and create stunning ads
-                </p>
+              <div className="flex items-center justify-between w-full lg:w-auto">
+                <div>
+                  <h2 className="text-lg font-semibold text-gray-900">Your Folders</h2>
+                  <p className="text-sm text-gray-600 mt-1">
+                    {folders.length} {folders.length === 1 ? 'folder' : 'folders'} • Organize your images and create stunning ads
+                  </p>
+                </div>
               </div>
               
               {folders.length > 0 && (
@@ -337,10 +368,17 @@ export default function DashboardClient({ user, profile, initialFolders }: Dashb
               <p className="text-gray-500 mb-6 max-w-sm mx-auto">
                 Create your first folder to start organizing your images and generating professional ads.
               </p>
-              <div className="flex justify-center space-x-4">
+              <div className="flex justify-center flex-col sm:flex-row gap-3">
+                <button
+                  onClick={() => setShowDemo(true)}
+                  className="bg-gradient-to-r from-green-500 to-blue-500 hover:from-green-600 hover:to-blue-600 text-white px-8 py-3 rounded-lg font-medium transition-all duration-200 shadow-lg hover:shadow-xl flex items-center justify-center gap-2 text-base"
+                >
+                  <span>✨</span>
+                  Try Demo
+                </button>
                 <button
                   onClick={() => document.querySelector('input')?.focus()}
-                  className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-6 py-2 rounded-lg font-medium hover:from-blue-700 hover:to-purple-700 transition-all duration-200"
+                  className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-6 py-3 rounded-lg font-medium hover:from-blue-700 hover:to-purple-700 transition-all duration-200 text-base"
                 >
                   Create First Folder
                 </button>
@@ -370,7 +408,11 @@ export default function DashboardClient({ user, profile, initialFolders }: Dashb
       </div>
 
       {/* Tutorial Overlay */}
-      {tutorialActive && <TutorialOverlay />}
+      <DemoWorkflow 
+        isOpen={showDemo} 
+        onClose={() => setShowDemo(false)}
+        onComplete={handleDemoComplete}
+      />
     </DashboardLayout>
   )
 }

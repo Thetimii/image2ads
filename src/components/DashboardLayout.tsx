@@ -12,6 +12,7 @@ interface DashboardLayoutProps {
   user: User
   profile: Profile
   children: ReactNode
+  onDemoOpen?: () => void
 }
 
 const navigation = [
@@ -56,7 +57,7 @@ const bottomNavigation = [
   },
 ]
 
-export default function DashboardLayout({ user, profile, children }: DashboardLayoutProps) {
+export default function DashboardLayout({ user, profile, children, onDemoOpen }: DashboardLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [isSafari, setIsSafari] = useState(false)
   const [loadingPath, setLoadingPath] = useState<string | null>(null)
@@ -202,6 +203,19 @@ export default function DashboardLayout({ user, profile, children }: DashboardLa
               </button>
             ))}
           </nav>
+
+          {/* Try Demo Button */}
+          {onDemoOpen && (
+            <div className="px-4 py-2">
+              <button
+                onClick={onDemoOpen}
+                className="w-full bg-gradient-to-r from-green-500 to-blue-500 hover:from-green-600 hover:to-blue-600 text-white px-4 py-3 rounded-xl font-medium transition-all duration-200 shadow-lg hover:shadow-xl flex items-center justify-center gap-2 text-sm"
+              >
+                <span>✨</span>
+                Try Demo
+              </button>
+            </div>
+          )}
 
           {/* Bottom navigation - Always fixed at bottom */}
           <div className="px-4 py-4 border-t border-gray-200 space-y-1 flex-shrink-0 mt-auto">
