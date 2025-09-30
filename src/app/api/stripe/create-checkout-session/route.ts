@@ -21,10 +21,14 @@ export async function POST(request: NextRequest) {
       .eq('id', user.id)
       .single()
 
-    if (profileError) {
+    // Handle case where profile doesn't exist yet (new users)
+    if (profileError && profileError.code !== 'PGRST116') {
       console.error('Error fetching user profile:', profileError)
-      return NextResponse.json({ error: 'User profile not found' }, { status: 404 })
+      return NextResponse.json({ error: 'Database error' }, { status: 500 })
     }
+
+    // For new users without profiles, profile will be null
+    const stripeCustomerId = profile?.stripe_customer_id || null
 
     // Parse and validate request body
     const body = await request.json()
@@ -46,7 +50,7 @@ export async function POST(request: NextRequest) {
       successUrl,
       cancelUrl,
       customerEmail: user.email || undefined, // Pass user's email to prefill if no existing customer
-      stripeCustomerId: profile.stripe_customer_id || undefined, // Use existing customer ID if available
+      stripeCustomerId: stripeCustomerId || undefined, // Use existing customer ID if available
     })
 
     return NextResponse.json({ 
