@@ -61,18 +61,30 @@ export default function BillingClient({ user, profile }: BillingClientProps) {
   const handleSubscribe = async (plan: StripePlan) => {
     setIsLoading(plan)
     try {
-      const planData = STRIPE_PLANS[plan]
-      
-      // Construct payment link with prefilled email
-      const paymentUrl = new URL(planData.paymentLink)
-      if (user.email) {
-        paymentUrl.searchParams.set('prefilled_email', user.email)
+      // Create checkout session via API
+      const response = await fetch('/api/stripe/create-checkout-session', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          plan,
+          successUrl: `${window.location.origin}/billing?success=true`,
+          cancelUrl: `${window.location.origin}/billing?cancelled=true`,
+        }),
+      })
+
+      if (response.ok) {
+        const { url } = await response.json()
+        window.location.href = url
+      } else {
+        const errorData = await response.json()
+        console.error('Failed to create checkout session:', errorData.error)
+        alert('Failed to start checkout. Please try again.')
       }
-      
-      // Redirect to payment link
-      window.location.href = paymentUrl.toString()
     } catch (error) {
-      console.error('Error redirecting to payment link:', error)
+      console.error('Error creating checkout session:', error)
+      alert('Failed to start checkout. Please try again.')
     } finally {
       setIsLoading(null)
     }

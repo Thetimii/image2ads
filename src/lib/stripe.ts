@@ -28,12 +28,14 @@ export async function createCheckoutSession({
   successUrl,
   cancelUrl,
   customerEmail,
+  stripeCustomerId,
 }: {
   userId: string;
   plan: StripePlan;
   successUrl: string;
   cancelUrl: string;
   customerEmail?: string;
+  stripeCustomerId?: string;
 }) {
   const planData = STRIPE_PLANS[plan];
 
@@ -41,7 +43,8 @@ export async function createCheckoutSession({
     throw new Error(`Price ID not configured for plan: ${plan}`);
   }
 
-  const session = await stripe.checkout.sessions.create({
+  // Prepare checkout session options
+  const sessionOptions: Stripe.Checkout.SessionCreateParams = {
     mode: "subscription",
     payment_method_types: ["card"],
     allow_promotion_codes: true,
@@ -53,12 +56,21 @@ export async function createCheckoutSession({
     ],
     success_url: successUrl,
     cancel_url: cancelUrl,
-    customer_email: customerEmail, // Prefill and lock the email
     metadata: {
       user_id: userId,
       plan: plan,
     },
-  });
+  };
+
+  // If user has existing Stripe customer ID, use it
+  if (stripeCustomerId) {
+    sessionOptions.customer = stripeCustomerId;
+  } else {
+    // If no existing customer, prefill email for new customer creation
+    sessionOptions.customer_email = customerEmail;
+  }
+
+  const session = await stripe.checkout.sessions.create(sessionOptions);
 
   return session;
 }
