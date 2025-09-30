@@ -43,6 +43,14 @@ export async function POST(request: NextRequest) {
 
     const { plan, successUrl, cancelUrl } = validation.data
 
+    console.log('Creating checkout session with:', {
+      userId: user.id,
+      plan,
+      hasStripeCustomerId: !!stripeCustomerId,
+      stripeCustomerId: stripeCustomerId,
+      userEmail: user.email
+    })
+
     // Create Stripe checkout session
     const session = await createCheckoutSession({
       userId: user.id,
@@ -59,9 +67,15 @@ export async function POST(request: NextRequest) {
     })
 
   } catch (error) {
-    console.error('Checkout session creation error:', error)
+    console.error('Checkout session creation error details:', {
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+    })
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { 
+        error: 'Internal server error',
+        details: error instanceof Error ? error.message : String(error)
+      },
       { status: 500 }
     )
   }

@@ -37,7 +37,20 @@ export async function createCheckoutSession({
   customerEmail?: string;
   stripeCustomerId?: string;
 }) {
+  console.log('createCheckoutSession called with:', {
+    userId,
+    plan,
+    hasStripeCustomerId: !!stripeCustomerId,
+    hasCustomerEmail: !!customerEmail
+  });
+
   const planData = STRIPE_PLANS[plan];
+
+  console.log('Plan data:', {
+    planName: planData.name,
+    priceId: planData.priceId,
+    price: planData.price
+  });
 
   if (!planData.priceId) {
     throw new Error(`Price ID not configured for plan: ${plan}`);
@@ -64,15 +77,29 @@ export async function createCheckoutSession({
 
   // If user has existing Stripe customer ID, use it
   if (stripeCustomerId) {
+    console.log('Using existing Stripe customer:', stripeCustomerId);
     sessionOptions.customer = stripeCustomerId;
   } else {
     // If no existing customer, prefill email for new customer creation
+    console.log('Creating new customer with email:', customerEmail);
     sessionOptions.customer_email = customerEmail;
   }
 
-  const session = await stripe.checkout.sessions.create(sessionOptions);
+  console.log('Final session options:', {
+    mode: sessionOptions.mode,
+    hasCustomer: !!sessionOptions.customer,
+    hasCustomerEmail: !!sessionOptions.customer_email,
+    priceId: sessionOptions.line_items?.[0]?.price
+  });
 
-  return session;
+  try {
+    const session = await stripe.checkout.sessions.create(sessionOptions);
+    console.log('Stripe session created successfully:', session.id);
+    return session;
+  } catch (stripeError) {
+    console.error('Stripe session creation failed:', stripeError);
+    throw stripeError;
+  }
 }
 
 export async function createPortalSession({
