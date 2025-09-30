@@ -57,16 +57,16 @@ serve(async (request: Request) => {
 
           // Map plan to credits
           const creditsMap: Record<string, number> = {
-            starter: 200,
-            pro: 600,
-            business: 2000,
+            starter: 70,
+            pro: 200,
+            business: 500,
           };
 
           const planName = session.metadata?.plan || "starter";
           const credits = creditsMap[planName] || 200;
 
           // Update user profile
-          const { error: profileError } = await supabase
+          const { error: profileError } = await supabaseAdmin
             .from("profiles")
             .update({
               stripe_customer_id: session.customer as string,
@@ -100,7 +100,7 @@ serve(async (request: Request) => {
       case "customer.subscription.updated": {
         const subscription = event.data.object as Stripe.Subscription;
 
-        const { error } = await supabase
+        const { error } = await supabaseAdmin
           .from("profiles")
           .update({
             subscription_status: subscription.status,
@@ -117,7 +117,7 @@ serve(async (request: Request) => {
       case "customer.subscription.deleted": {
         const subscription = event.data.object as Stripe.Subscription;
 
-        const { error } = await supabase
+        const { error } = await supabaseAdmin
           .from("profiles")
           .update({
             subscription_id: null,
@@ -153,7 +153,7 @@ serve(async (request: Request) => {
         console.log(`Customer updated: ${customer.id}`);
 
         // Update customer info in our database if needed
-        const { error } = await supabase
+        const { error } = await supabaseAdmin
           .from("profiles")
           .update({
             email: customer.email,
@@ -171,7 +171,7 @@ serve(async (request: Request) => {
         console.log(`Customer deleted: ${customer.id}`);
 
         // Clear Stripe data from user profile
-        const { error } = await supabase
+        const { error } = await supabaseAdmin
           .from("profiles")
           .update({
             stripe_customer_id: null,
@@ -191,7 +191,7 @@ serve(async (request: Request) => {
         console.log(`Subscription created: ${subscription.id}`);
 
         // Update subscription info
-        const { error } = await supabase
+        const { error } = await supabaseAdmin
           .from("profiles")
           .update({
             subscription_id: subscription.id,
@@ -210,42 +210,48 @@ serve(async (request: Request) => {
         console.log(`Payment succeeded for invoice: ${invoice.id}`);
 
         if (invoice.subscription) {
-          // Recurring payment - add monthly credits
-          const subscription = await stripe.subscriptions.retrieve(
-            invoice.subscription as string
-          );
+          // Only process recurring payments, not the initial payment
+          // The initial payment is already handled by checkout.session.completed
+          if (invoice.billing_reason === "subscription_cycle") {
+            // Recurring payment - add monthly credits
+            const subscription = await stripe.subscriptions.retrieve(
+              invoice.subscription as string
+            );
 
-          // Get plan from subscription metadata or items
-          const planItem = subscription.items.data[0];
-          let credits = 200; // default starter credits
+            // Get plan from subscription metadata or items
+            const planItem = subscription.items.data[0];
+            let credits = 70; // default starter credits
 
-          // Map price IDs to credits
-          if (planItem.price.id === Deno.env.get("STRIPE_PRO_PRICE_ID")) {
-            credits = 600;
-          } else if (
-            planItem.price.id === Deno.env.get("STRIPE_BUSINESS_PRICE_ID")
-          ) {
-            credits = 2000;
-          }
-
-          // Find user by customer ID and add credits
-          const { data: profile } = await supabase
-            .from("profiles")
-            .select("id")
-            .eq("stripe_customer_id", invoice.customer as string)
-            .single();
-
-          if (profile) {
-            const { error } = await supabaseAdmin.rpc("add_credits", {
-              user_uuid: profile.id,
-              credit_amount: credits,
-            });
-
-            if (error) {
-              console.error("Error adding recurring credits:", error);
-            } else {
-              console.log(`Added ${credits} credits for recurring payment`);
+            // Map price IDs to credits
+            if (planItem.price.id === Deno.env.get("STRIPE_PRO_PRICE_ID")) {
+              credits = 200;
+            } else if (
+              planItem.price.id === Deno.env.get("STRIPE_BUSINESS_PRICE_ID")
+            ) {
+              credits = 500;
             }
+
+            // Find user by customer ID and add credits
+            const { data: profile } = await supabaseAdmin
+              .from("profiles")
+              .select("id")
+              .eq("stripe_customer_id", invoice.customer as string)
+              .single();
+
+            if (profile) {
+              const { error } = await supabaseAdmin.rpc("add_credits", {
+                user_uuid: profile.id,
+                credit_amount: credits,
+              });
+
+              if (error) {
+                console.error("Error adding recurring credits:", error);
+              } else {
+                console.log(`Added ${credits} credits for recurring payment`);
+              }
+            }
+          } else {
+            console.log(`Skipping initial invoice with billing_reason: ${invoice.billing_reason}`);
           }
         }
         break;
@@ -257,7 +263,7 @@ serve(async (request: Request) => {
 
         // Update subscription status to past_due
         if (invoice.subscription) {
-          const { error } = await supabase
+          const { error } = await supabaseAdmin
             .from("profiles")
             .update({
               subscription_status: "past_due",

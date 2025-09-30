@@ -203,6 +203,31 @@ export async function POST(req: NextRequest) {
             }
           }
 
+          // Cancel any other active subscriptions for this customer (plan changes)
+          const allSubscriptions = await stripe.subscriptions.list({
+            customer: customerId,
+            status: 'active',
+          });
+
+          // Cancel all other subscriptions except the current one
+          const currentSubscriptionId = subscription.id;
+          const subscriptionsToCancel = allSubscriptions.data.filter(
+            sub => sub.id !== currentSubscriptionId
+          );
+
+          if (subscriptionsToCancel.length > 0) {
+            console.log(`Found ${subscriptionsToCancel.length} other active subscriptions to cancel`);
+            
+            for (const subToCancel of subscriptionsToCancel) {
+              try {
+                await stripe.subscriptions.cancel(subToCancel.id);
+                console.log(`Canceled old subscription: ${subToCancel.id}`);
+              } catch (error) {
+                console.error(`Error canceling subscription ${subToCancel.id}:`, error);
+              }
+            }
+          }
+
           // Add credits based on product ID
           if (creditsToAdd > 0) {
             await addCreditsToCustomer(customerId, creditsToAdd);
