@@ -132,25 +132,22 @@ export async function POST(req: NextRequest) {
             break;
           }
 
-          // Get product ID from the subscription line items
+          // Get plan info from the subscription line items using price ID
           const planItem = subscription.items.data[0];
-          let productId = null;
           let creditsToAdd = 0;
           let planName = null;
 
-          if (planItem?.price?.product) {
-            // Get the product to determine the plan
-            const product = await stripe.products.retrieve(planItem.price.product as string);
+          if (planItem?.price?.id) {
+            // Use price ID to determine plan directly
+            creditsToAdd = getCreditsByPriceId(planItem.price.id);
             
-            // Use product metadata or name to determine plan
-            productId = product.metadata?.plan_id || product.name?.toLowerCase();
-            
-            if (productId) {
-              const planInfo = getPlanByProductId(productId);
-              if (planInfo) {
-                creditsToAdd = planInfo.credits;
-                planName = planInfo.planName;
-              }
+            // Determine plan name based on price ID
+            if (planItem.price.id === process.env.STRIPE_STARTER_PRICE_ID) {
+              planName = 'starter';
+            } else if (planItem.price.id === process.env.STRIPE_PRO_PRICE_ID) {
+              planName = 'pro';
+            } else if (planItem.price.id === process.env.STRIPE_BUSINESS_PRICE_ID) {
+              planName = 'business';
             }
           }
 
@@ -162,13 +159,13 @@ export async function POST(req: NextRequest) {
             .single();
 
           if (existingProfile) {
-            // Update existing profile with product ID instead of subscription ID
+            // Update existing profile with plan name instead of subscription ID
             const { error: profileError } = await supabaseAdmin
               .from("profiles")
               .update({
                 email: customer.email,
                 subscription_status: subscription.status,
-                subscription_id: productId || subscription.id, // Use product ID or fallback to subscription ID
+                subscription_id: planName || subscription.id, // Use plan name or fallback to subscription ID
               })
               .eq("stripe_customer_id", customerId);
 
@@ -190,7 +187,7 @@ export async function POST(req: NextRequest) {
                 .update({
                   stripe_customer_id: customerId,
                   subscription_status: subscription.status,
-                  subscription_id: productId || subscription.id, // Use product ID or fallback to subscription ID
+                  subscription_id: planName || subscription.id, // Use plan name or fallback to subscription ID
                 })
                 .eq("id", profileByEmail.id);
 
@@ -309,32 +306,31 @@ export async function POST(req: NextRequest) {
       case "customer.subscription.updated": {
         const subscription = event.data.object as Stripe.Subscription;
 
-        // Get product ID from the subscription line items
+        // Get plan info from the subscription line items using price ID
         const planItem = subscription.items.data[0];
-        let productId = null;
         let creditsToAdd = 0;
+        let planName = null;
 
-        if (planItem?.price?.product) {
-          // Get the product to determine the plan
-          const product = await stripe.products.retrieve(planItem.price.product as string);
+        if (planItem?.price?.id) {
+          // Use price ID to determine plan directly
+          creditsToAdd = getCreditsByPriceId(planItem.price.id);
           
-          // Use product metadata or name to determine plan
-          productId = product.metadata?.plan_id || product.name?.toLowerCase();
-          
-          if (productId) {
-            const planInfo = getPlanByProductId(productId);
-            if (planInfo) {
-              creditsToAdd = planInfo.credits;
-            }
+          // Determine plan name based on price ID
+          if (planItem.price.id === process.env.STRIPE_STARTER_PRICE_ID) {
+            planName = 'starter';
+          } else if (planItem.price.id === process.env.STRIPE_PRO_PRICE_ID) {
+            planName = 'pro';
+          } else if (planItem.price.id === process.env.STRIPE_BUSINESS_PRICE_ID) {
+            planName = 'business';
           }
         }
 
-        // Update subscription status with product ID
+        // Update subscription status with plan name
         const { error } = await supabaseAdmin
           .from("profiles")
           .update({
             subscription_status: subscription.status,
-            subscription_id: productId || subscription.id, // Use product ID or fallback to subscription ID
+            subscription_id: planName || subscription.id, // Use plan name or fallback to subscription ID
           })
           .eq("stripe_customer_id", subscription.customer);
 
@@ -342,8 +338,9 @@ export async function POST(req: NextRequest) {
           console.error("Error updating subscription:", error);
         }
 
-        // Add credits for active subscriptions (creation or plan changes)
-        if (subscription.status === "active" && creditsToAdd > 0) {
+        // Only add credits for subscription updates (plan changes), not creation
+        // Creation credits are handled by checkout.session.completed
+        if (event.type === "customer.subscription.updated" && subscription.status === "active" && creditsToAdd > 0) {
           const result = await addCreditsToCustomer(
             subscription.customer as string,
             creditsToAdd
@@ -352,12 +349,10 @@ export async function POST(req: NextRequest) {
           if (result.error) {
             console.error("Error adding subscription credits:", result.error);
           } else {
-            const eventType =
-              event.type === "customer.subscription.created"
-                ? "new subscription"
-                : "plan change";
-            console.log(`Added ${creditsToAdd} credits for ${eventType} (product: ${productId})`);
+            console.log(`Added ${creditsToAdd} credits for plan change (plan: ${planName})`);
           }
+        } else if (event.type === "customer.subscription.created") {
+          console.log(`Subscription created, credits handled by checkout.session.completed`);
         }
         break;
       }
