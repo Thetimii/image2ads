@@ -519,18 +519,18 @@ export default function ChatInterface({ user, profile }: ChatInterfaceProps) {
 
             {/* Text Input */}
             <div className="p-4">
-              <div className="flex items-end space-x-3">
+              <div className="flex items-start space-x-3">
                 {/* Image Upload Button */}
                 <button
                   onClick={() => fileInputRef.current?.click()}
                   disabled={isUploading}
-                  className="flex-shrink-0 w-10 h-10 bg-gray-100 hover:bg-gray-200 rounded-xl flex items-center justify-center transition-colors disabled:opacity-50"
+                  className="flex-shrink-0 w-12 h-12 bg-gray-100 hover:bg-gray-200 rounded-xl flex items-center justify-center transition-colors disabled:opacity-50 mt-1"
                 >
                   {isUploading ? (
                     <div className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
                   ) : (
                     <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 002 2v12a2 2 0 002 2z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 002 2v12a2 2 0 002 2z" />
                     </svg>
                   )}
                 </button>
@@ -541,7 +541,7 @@ export default function ChatInterface({ user, profile }: ChatInterfaceProps) {
                     value={prompt}
                     onChange={(e) => setPrompt(e.target.value)}
                     placeholder="Describe the ad you want to create... (e.g., 'A summer sale banner with bright colors' or 'Professional product showcase for a tech gadget')"
-                    className="w-full min-h-[60px] max-h-32 px-4 py-3 border-0 resize-none focus:outline-none text-gray-900 placeholder-gray-500"
+                    className="w-full min-h-[60px] max-h-32 px-4 py-3 border-0 resize-none focus:outline-none text-gray-900 placeholder-gray-500 rounded-xl bg-gray-50"
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' && !e.shiftKey) {
                         e.preventDefault()
@@ -557,7 +557,7 @@ export default function ChatInterface({ user, profile }: ChatInterfaceProps) {
                 <button
                   onClick={handleGenerate}
                   disabled={!prompt.trim() || isGenerating}
-                  className={`flex-shrink-0 w-10 h-10 rounded-xl flex items-center justify-center transition-all ${
+                  className={`flex-shrink-0 w-12 h-12 rounded-xl flex items-center justify-center transition-all mt-1 ${
                     prompt.trim() && !isGenerating
                       ? 'bg-blue-600 hover:bg-blue-700 text-white'
                       : 'bg-gray-100 text-gray-400 cursor-not-allowed'
