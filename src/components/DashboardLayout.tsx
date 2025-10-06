@@ -204,8 +204,8 @@ export default function DashboardLayout({ user, profile, children, onDemoOpen }:
             ))}
           </nav>
 
-          {/* Try Demo Button */}
-          {onDemoOpen && (
+          {/* Try Demo Button - Commented out for now */}
+          {/* {onDemoOpen && (
             <div className="px-4 py-2">
               <button
                 onClick={onDemoOpen}
@@ -215,7 +215,7 @@ export default function DashboardLayout({ user, profile, children, onDemoOpen }:
                 Try Demo
               </button>
             </div>
-          )}
+          )} */}
 
           {/* Bottom navigation - Always fixed at bottom */}
           <div className="px-4 py-4 border-t border-gray-200 space-y-1 flex-shrink-0 mt-auto">

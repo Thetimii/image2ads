@@ -54,12 +54,12 @@ export default function DashboardClient({ user, profile, initialFolders }: Dashb
     <DashboardLayout user={user} profile={profile} onDemoOpen={() => setShowDemo(true)}>
       <ChatInterface user={user} profile={profile} />
 
-      {/* Tutorial Overlay */}
-      <DemoWorkflow 
+      {/* Tutorial Overlay - Commented out for now */}
+      {/* <DemoWorkflow 
         isOpen={showDemo} 
         onClose={() => setShowDemo(false)}
         onComplete={handleDemoComplete}
-      />
+      /> */}
     </DashboardLayout>
   )
 }
