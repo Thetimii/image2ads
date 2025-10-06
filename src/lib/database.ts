@@ -209,6 +209,7 @@ export async function createJob({
   model = "gemini",
   creditsUsed = 1,
   customName,
+  stylePreset = "photorealistic",
 }: {
   userId: string;
   imageIds: string[];
@@ -216,19 +217,48 @@ export async function createJob({
   model?: string;
   creditsUsed?: number;
   customName?: string;
+  stylePreset?: string;
 }): Promise<Job | null> {
   const supabase = await createClient();
+
+  // Handle text-only generation (no images)
+  let imageId = imageIds[0];
+  
+  if (!imageId && imageIds.length === 0) {
+    // Create a placeholder image record for text-only generation
+    const { data: placeholderImage, error: placeholderError } = await supabase
+      .from("images")
+      .insert({
+        user_id: userId,
+        folder_id: null, // No folder for placeholder
+        file_path: "text-only-placeholder",
+        original_name: "Text-only generation",
+        file_size: 0,
+        mime_type: "text/plain",
+        metadata: { is_placeholder: true, type: "text-only" }
+      })
+      .select()
+      .single();
+
+    if (placeholderError) {
+      console.error("Error creating placeholder image:", placeholderError);
+      return null;
+    }
+    
+    imageId = placeholderImage.id;
+  }
 
   const { data, error } = await supabase
     .from("jobs")
     .insert({
       user_id: userId,
-      image_id: imageIds[0], // Use first image for backward compatibility
+      image_id: imageId, // Use first image or placeholder for text-only
       image_ids: imageIds,
       prompt: prompt,
       model: model,
       credits_used: creditsUsed,
       custom_name: customName,
+      style_preset: stylePreset,
       status: "pending",
     })
     .select()

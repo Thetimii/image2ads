@@ -1,14 +1,5 @@
 // deno-lint-ignore-file no-explicit-any
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
-// Deno global declarations
-declare const Deno: {
-  env: {
-    get(key: string): string | undefined;
-  };
-  serve: (handler: (req: Request) => Response | Promise<Response>) => void;
-};
-
 const supabase = createClient(
   Deno.env.get("SUPABASE_URL") ?? "",
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
@@ -19,7 +10,7 @@ const ALLOWED_ORIGINS = new Set([
   "https://image2ad.com",
   "https://www.image2ad.com",
   "http://localhost:3000",
-  "http://localhost:5173",
+  "http://localhost:5173"
 ]);
 function corsHeadersFor(req: Request) {
   const origin = req.headers.get("origin") ?? "";
@@ -32,162 +23,145 @@ function corsHeadersFor(req: Request) {
     "Access-Control-Allow-Methods": "POST, OPTIONS",
     "Access-Control-Allow-Headers": acrh,
     "Access-Control-Expose-Headers": "content-type",
-    "Vary": "Origin, Access-Control-Request-Headers",
+    "Vary": "Origin, Access-Control-Request-Headers"
   };
 }
 
-// --- Helpers ---
-type AllowedMime = "image/png" | "image/jpeg" | "image/webp";
-function sniffMime(bytes: Uint8Array): AllowedMime | null {
-  if (
-    bytes.length > 8 &&
-    bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4E && bytes[3] === 0x47 &&
-    bytes[4] === 0x0D && bytes[5] === 0x0A && bytes[6] === 0x1A && bytes[7] === 0x0A
-  ) return "image/png";
-  if (bytes.length > 3 && bytes[0] === 0xFF && bytes[1] === 0xD8 && bytes[2] === 0xFF)
-    return "image/jpeg";
-  if (
-    bytes.length > 12 &&
-    bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46 &&
-    bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50
-  ) return "image/webp";
+// --- MIME + helpers ---
+function sniffMime(bytes: Uint8Array): string | null {
+  if (bytes.length > 8 && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4E) return "image/png";
+  if (bytes.length > 3 && bytes[0] === 0xFF && bytes[1] === 0xD8) return "image/jpeg";
+  if (bytes.length > 12 && bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46) return "image/webp";
   return null;
 }
 function isPng(bytes: Uint8Array) {
-  return (
-    bytes.length > 8 &&
-    bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4E && bytes[3] === 0x47 &&
-    bytes[4] === 0x0D && bytes[5] === 0x0A && bytes[6] === 0x1A && bytes[7] === 0x0A
-  );
+  return bytes.length > 8 && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4E;
 }
-function safeName(name: string, mime: AllowedMime) {
-  const ext = mime === "image/png" ? "png" : mime === "image/webp" ? "webp" : "jpg";
-  return name.includes(".") ? name : `${name}.${ext}`;
+async function ensurePng(input: Uint8Array, filename: string) {
+  const name = filename.toLowerCase().endsWith(".png")
+    ? filename
+    : filename.replace(/\.[^.]+$/, "") + ".png";
+  return { png: input, filenamePng: name };
 }
+
+// --- Download helper ---
 async function downloadFromKnownBuckets(filePath: string) {
-  console.log(`[run-job] Attempting to download: ${filePath}`);
   for (const bucket of ["uploads", "results"] as const) {
-    console.log(`[run-job] Checking bucket: ${bucket}`);
     const dl = await supabase.storage.from(bucket).download(filePath);
-    if (dl.error) {
-      console.log(`[run-job] Error in ${bucket}:`, dl.error.message);
-    }
     if (dl.data && !dl.error) {
-      console.log(`[run-job] Found file in ${bucket}, size: ${dl.data.size} bytes`);
       const blob = dl.data;
       const bytes = new Uint8Array(await blob.arrayBuffer());
-      const ct = (blob.type || "").toLowerCase();
-      let mime: AllowedMime | null =
-        ct.startsWith("image/png") ? "image/png" :
-        ct.startsWith("image/jpeg") ? "image/jpeg" :
-        ct.startsWith("image/webp") ? "image/webp" :
-        sniffMime(bytes);
-      if (mime && bytes.byteLength > 0) {
-        console.log(`[run-job] Successfully loaded ${bytes.byteLength} bytes as ${mime}`);
-        return { bytes, mime };
-      }
+      const mime = sniffMime(bytes) || "image/png";
+      return { bytes, mime };
     }
   }
-  console.error(`[run-job] File not found in any bucket: ${filePath}`);
-  throw new Error(`Object not found in uploads/results for: ${filePath}`);
+  throw new Error("Object not found in uploads/results for: " + filePath);
 }
 
-// For now, just return the original bytes and add .png extension
-// OpenAI API will handle format conversion internally
-async function ensurePng(
-  input: Uint8Array,
-  filename: string
-): Promise<{ png: Uint8Array; filenamePng: string }> {
-  try {
-    // Ensure .png suffix for OpenAI API compatibility
-    const name = filename.toLowerCase().endsWith(".png")
-      ? filename
-      : `${filename.replace(/\.[^.]+$/, "")}.png`;
-      
-    console.log(`[run-job] Preparing ${filename} as PNG for OpenAI (${input.length} bytes)`);
-    return { png: input, filenamePng: name };
-  } catch (error) {
-    console.error(`[run-job] Failed to prepare ${filename}:`, error);
-    throw new Error(`Failed to prepare ${filename}: ${error instanceof Error ? error.message : 'Unknown error'}`);
-  }
-}
-
-// --- OpenAI: edits with references (no mask) ---
-async function openaiGenerateFromRefs({
+// --- GPT-Image-1 generation (text or refs) ---
+async function openaiGenerate({
   prompt,
   pngFiles,
   size = "1024x1024",
   quality = "medium",
   apiKey,
-  timeoutMs = 60000,
-  retryOnce = true,
+  timeoutMs = 60000
 }: {
   prompt: string;
-  pngFiles: Array<{ bytes: Uint8Array; filename: string }>;
+  pngFiles?: Array<{ bytes: Uint8Array; filename: string }>;
   size?: "1024x1024" | "1536x1024" | "1024x1536";
-  quality?: "low" | "medium" | "high";
+  quality?: "low" | "medium" | "high" | "auto";
   apiKey: string;
   timeoutMs?: number;
-  retryOnce?: boolean;
 }) {
-  async function call() {
-    const form = new FormData();
-    form.append("model", "gpt-image-1");
-    form.append("prompt", prompt.trim());
-    form.append("size", size);
-    form.append("quality", quality);
-
-    for (const f of pngFiles) {
-      const buffer = f.bytes.slice().buffer;
-      // Detect actual content type for better OpenAI compatibility
-      const mime = sniffMime(f.bytes) || "image/png";
-      form.append("image[]", new File([buffer], f.filename, { type: mime }));
-    }
-
-    const ctrl = new AbortController();
-    const t = setTimeout(() => ctrl.abort("openai-timeout"), timeoutMs);
-    try {
-      console.log("[run-job] OpenAI call (edits, refs)");
-      const resp = await fetch("https://api.openai.com/v1/images/edits", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${apiKey}` },
-        body: form,
-        signal: ctrl.signal,
-      });
-      const text = await resp.text();
-      console.log("[run-job] OpenAI resp", { status: resp.status });
-      if (!resp.ok) throw new Error(text);
-
-      const b64 = JSON.parse(text)?.data?.[0]?.b64_json;
-      if (!b64) throw new Error("No image data in response");
-
-      return Uint8Array.from(atob(b64), c => c.charCodeAt(0));
-    } finally {
-      clearTimeout(t);
-    }
-  }
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort("timeout"), timeoutMs);
 
   try {
-    return await call();
-  } catch (e: any) {
-    if (retryOnce) {
-      console.warn("[run-job] OpenAI retrying…", e.message);
-      return await call();
+    // ✅ 1. Choose correct endpoint
+    const hasRefs = pngFiles && pngFiles.length > 0;
+    const endpoint = hasRefs
+      ? "https://api.openai.com/v1/images/edits"
+      : "https://api.openai.com/v1/images/generations";
+
+    console.log(`[run-job] Using ${hasRefs ? 'edits' : 'generations'} endpoint for ${hasRefs ? 'reference-based' : 'text-only'} generation`);
+
+    // ✅ 2. Build request
+    let body: FormData | string;
+    let headers: Record<string, string> = { Authorization: `Bearer ${apiKey}` };
+
+    if (hasRefs) {
+      // --- With reference images (use multipart/form-data)
+      const form = new FormData();
+      form.append("model", "gpt-image-1");
+      form.append("prompt", prompt.trim());
+      form.append("size", size);
+      form.append("quality", quality);
+      // For edits endpoint, use only the first image as 'image' (not 'image[]')
+      const firstFile = pngFiles[0];
+      const mime = sniffMime(firstFile.bytes) || "image/png";
+      const buffer = firstFile.bytes.slice().buffer;
+      form.append("image", new File([buffer], firstFile.filename, { type: mime }));
+      body = form;
+    } else {
+      // --- Text-only mode (use JSON)
+      body = JSON.stringify({
+        model: "gpt-image-1",
+        prompt: prompt.trim(),
+        size,
+        quality,
+        n: 1
+      });
+      headers["Content-Type"] = "application/json";
     }
-    throw e;
+
+    // ✅ 3. Call API
+    const resp = await fetch(endpoint, {
+      method: "POST",
+      headers,
+      body,
+      signal: ctrl.signal
+    });
+
+    const text = await resp.text();
+    if (!resp.ok) throw new Error(text);
+    const b64 = JSON.parse(text)?.data?.[0]?.b64_json;
+    if (!b64) throw new Error("No image data in response");
+    return Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+  } finally {
+    clearTimeout(t);
   }
 }
 
-// --- Prompt wrapper ---
-function buildPrompt(clientPrompt: string) {
-  const prefix = `
-Generate a photorealistic commercial image from the reference photos.
+// --- Prompt enhancer ---
+function buildPrompt(clientPrompt: string, isRef = false) {
+  const realism = `
+Generate a hyperrealistic, commercial-grade product image.
+Use physically accurate lighting, materials, and reflections.
+Preserve the original shape, proportions, and material finish of all reference products.
+Do not stylize or redraw objects — reproduce them as they appear in the reference images.
+  `.trim();
 
-Absolute requirements for TEXT:
-- All existing labels/logos must be reproduced exactly.
-- Text must be crystal-clear, sharp, and perfectly legible.
-- No misspellings, distortions, or extra words.
-`.trim();
+  const preservation = `
+LABELS, TEXT & LOGOS PRESERVATION RULES:
+- Exactly replicate all visible labels, printed text, and logos from the reference images.
+- Copy all characters, spacing, and font shapes precisely — pixel perfect.
+- Do not retype, regenerate, or reinterpret brand names or text.
+- Keep the same orientation, color, and position of the text and logo.
+- If multiple references exist, combine them naturally while keeping each logo identical.
+  `.trim();
+
+  const safe = `
+IMAGE QUALITY:
+- Photorealistic depth of field and shadows.
+- Maintain clean edges, no distortion, and no text warping.
+- Avoid adding extra text, watermarking, or new symbols.
+  `.trim();
+
+  // Combine depending on whether it's ref-based or text-only
+  const prefix = isRef
+    ? `${realism}\n\n${preservation}\n\n${safe}`
+    : `${realism}\n\n${safe}`;
 
   return `${prefix}\n\n${clientPrompt.trim()}`;
 }
@@ -196,9 +170,11 @@ Absolute requirements for TEXT:
 async function handler(req: Request) {
   const cors = corsHeadersFor(req);
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
-  if (req.method !== "POST") return new Response("Method not allowed", { status: 405, headers: cors });
+  if (req.method !== "POST")
+    return new Response("Method not allowed", { status: 405, headers: cors });
 
   let jobId: string | null = null;
+
   try {
     const body = await req.json();
     jobId = body?.jobId ?? null;
@@ -207,131 +183,91 @@ async function handler(req: Request) {
     const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
     if (!OPENAI_API_KEY) throw new Error("OPENAI_API_KEY not set");
 
-    const { data: job, error: jobErr } = await supabase.from("jobs").select("*").eq("id", jobId).single();
-    if (jobErr || !job) return new Response("Job not found", { status: 404, headers: cors });
+    const { data: job, error: jobErr } = await supabase
+      .from("jobs")
+      .select("*")
+      .eq("id", jobId)
+      .single();
+    if (jobErr || !job)
+      return new Response("Job not found", { status: 404, headers: cors });
 
-    console.log("[run-job] Job loaded", job);
+    const imageIds = Array.isArray(job.image_ids) ? job.image_ids : [];
+    const isTextOnly = job.has_images === false || imageIds.length === 0;
 
-    // Load reference images
     const files: Array<{ bytes: Uint8Array; filename: string; folder_id: string | null }> = [];
-    for (const imageId of job.image_ids as string[]) {
-      const { data: img, error: imgErr } = await supabase
-        .from("images")
-        .select("file_path, folder_id, original_name")
-        .eq("id", imageId)
-        .single();
-      if (imgErr || !img) return new Response(`Image not found: ${imageId}`, { status: 404, headers: cors });
-
-      const { bytes, mime } = await downloadFromKnownBuckets(img.file_path);
-      const baseName = (img.original_name || img.file_path.split("/").pop() || "input");
-
-      let pngBytes: Uint8Array;
-      let pngName: string;
-
-      if (isPng(bytes)) {
-        // already PNG
-        pngBytes = bytes;
-        pngName = baseName.toLowerCase().endsWith(".png")
-          ? baseName
-          : `${baseName.replace(/\.[^.]+$/, "")}.png`;
-      } else {
-        const sniffed = sniffMime(bytes);
-        if (!sniffed) {
-          await supabase.from("jobs").update({
-            status: "failed",
-            error_message: `Unsupported image format for ${baseName}. Use PNG/JPEG/WebP.`,
-          }).eq("id", jobId);
-          return new Response("Unsupported image format", { status: 400, headers: cors });
-        }
-        // 🔄 prepare for OpenAI (ensure filename has proper extension)
-        const prepared = await ensurePng(bytes, baseName);
-        pngBytes = prepared.png;
-        pngName = prepared.filenamePng;
+    if (!isTextOnly) {
+      for (const imageId of imageIds) {
+        const { data: img } = await supabase
+          .from("images")
+          .select("file_path, folder_id, original_name")
+          .eq("id", imageId)
+          .single();
+        const { bytes } = await downloadFromKnownBuckets(img.file_path);
+        const { png, filenamePng } = await ensurePng(bytes, img.original_name);
+        files.push({ bytes: png, filename: filenamePng, folder_id: img.folder_id });
       }
-
-      files.push({ bytes: pngBytes, filename: pngName, folder_id: img.folder_id });
     }
-    if (files.length === 0) return new Response("No images for job", { status: 400, headers: cors });
 
-    const prompt: string = buildPrompt(job.prompt || "Create a clean studio ad shot of the product.");
+    const prompt = buildPrompt(job.prompt || "Create a clean studio ad shot of the product.", !isTextOnly);
 
-    const model = job.model || "openai-medium-square";
     let size: "1024x1024" | "1536x1024" | "1024x1536" = "1024x1024";
-    let quality: "low" | "medium" | "high" = "medium";
-    if (model.includes("-low-")) quality = "low";
-    else if (model.includes("-medium-")) quality = "medium";
-    else if (model.includes("-high-")) quality = "high";
-    if (model.includes("-landscape")) size = "1536x1024";
-    else if (model.includes("-portrait")) size = "1024x1536";
+    if (job.model?.includes("-landscape")) size = "1536x1024";
+    else if (job.model?.includes("-portrait")) size = "1024x1536";
 
     await supabase.from("jobs").update({ status: "processing" }).eq("id", jobId);
 
-    // Deduct credits
     const { data: creditResult, error: creditError } = await supabase.rpc("consume_credit", {
       user_uuid: job.user_id,
-      credit_amount: 1,
+      credit_amount: 1
     });
-    if (creditError || !creditResult) {
-      await supabase.from("jobs").update({
-        status: "error",
-        error_message: creditError ? "Credit deduction failed" : "Insufficient credits",
-      }).eq("id", jobId);
-      return new Response("Credit error", { status: creditError ? 500 : 402, headers: cors });
-    }
+    if (creditError || !creditResult)
+      return new Response("Credit error", {
+        status: creditError ? 500 : 402,
+        headers: cors
+      });
 
-    // Call OpenAI (now always PNG)
-    const outBytes = await openaiGenerateFromRefs({
+    const outBytes = await openaiGenerate({
       prompt,
-      pngFiles: files.map(f => ({ bytes: f.bytes, filename: f.filename })),
+      pngFiles: isTextOnly ? [] : files,
       size,
-      quality,
-      apiKey: OPENAI_API_KEY,
+      quality: "medium",
+      apiKey: OPENAI_API_KEY
     });
 
-    // Save to Supabase
     const userId = job.user_id as string;
-    const targetFolderId = files[0].folder_id ?? "root";
-    const key = `${userId}/${targetFolderId}/${jobId}-${Date.now()}.png`;
+    const folderId = isTextOnly ? "uploads" : files[0]?.folder_id ?? "uploads";
+    const key = userId + "/" + folderId + "/" + jobId + "-" + Date.now() + ".png";
+
     const up = await supabase.storage.from("results").upload(key, outBytes, {
       contentType: "image/png",
-      upsert: true,
+      upsert: true
     });
     if (up.error) throw new Error(up.error.message);
 
     await supabase.from("jobs").update({ status: "completed", result_url: key }).eq("id", jobId);
 
-    // ✅ Restore metadata block
-    if (job.custom_name) {
-      const fileName = key.split("/").pop() || key;
-      const { error: metadataError } = await supabase
-        .from("generated_ads_metadata")
-        .upsert({
-          file_name: fileName,
-          custom_name: job.custom_name,
-          user_id: userId,
-          folder_id: targetFolderId,
-        });
-      if (metadataError) console.error("[run-job] Metadata entry failed", metadataError);
-    }
-
-    return new Response(JSON.stringify({ success: true, jobId, result_path: key }), {
-      headers: { ...cors, "Content-Type": "application/json" },
+    // Always save metadata with the prompt as the name
+    const fileName = key.split("/").pop() || key;
+    const displayName = job.custom_name || job.prompt || "Generated Image";
+    await supabase.from("generated_ads_metadata").upsert({
+      file_name: fileName,
+      custom_name: displayName,
+      user_id: userId,
+      folder_id: null  // Use null for folder_id to match library expectations
     });
 
+    return new Response(JSON.stringify({ success: true, jobId, result_path: key }), {
+      headers: { ...cors, "Content-Type": "application/json" }
+    });
   } catch (err: any) {
-    try {
-      // Best effort to mark job failed
-      // (guarded: jobId may be null on early parse errors)
-      if (jobId) {
-        await supabase
-          .from("jobs")
-          .update({ status: "failed", error_message: String(err?.message ?? err) })
-          .eq("id", jobId);
-      }
-    } catch (_) {}
+    if (jobId)
+      await supabase
+        .from("jobs")
+        .update({ status: "failed", error_message: String(err?.message ?? err) })
+        .eq("id", jobId);
     return new Response(JSON.stringify({ error: String(err?.message ?? err) }), {
       status: 500,
-      headers: { ...cors, "Content-Type": "application/json" },
+      headers: { ...cors, "Content-Type": "application/json" }
     });
   }
 }

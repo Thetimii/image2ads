@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Image from 'next/image'
 import type { User } from '@supabase/supabase-js'
 import type { Profile, Folder, Image as ImageType, Job } from '@/lib/validations'
@@ -53,6 +53,34 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
   const { isActive: tutorialActive, checkStepTrigger } = useTutorial()
   const supabase = createClient()
   const router = useRouter()
+  const searchParams = useSearchParams()
+
+  // Handle auto-preview from URL parameter
+  useEffect(() => {
+    const previewId = searchParams.get('preview')
+    if (previewId && generatedAds.length > 0) {
+      // Find the generated ad by ID
+      const adToPreview = generatedAds.find(ad => {
+        // Check both direct ID match and job ID extraction from filename
+        const jobIdFromFilename = ad.id.match(/^(.+)-\d+$/)?.[1]
+        return ad.id === previewId || jobIdFromFilename === previewId
+      })
+      
+      if (adToPreview) {
+        // Convert path to public URL if needed
+        const imageUrl = adToPreview.url.startsWith('http') 
+          ? adToPreview.url 
+          : supabase.storage.from('results').getPublicUrl(adToPreview.url).data.publicUrl
+        
+        setSelectedImage(imageUrl)
+        
+        // Clear the preview parameter from URL
+        const newUrl = new URL(window.location.href)
+        newUrl.searchParams.delete('preview')
+        window.history.replaceState({}, '', newUrl.toString())
+      }
+    }
+  }, [searchParams, generatedAds, supabase])
 
   // Load loading jobs from localStorage on mount
   useEffect(() => {
