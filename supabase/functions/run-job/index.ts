@@ -78,13 +78,24 @@ async function openaiGenerate({
   const t = setTimeout(() => ctrl.abort("timeout"), timeoutMs);
 
   try {
-    // ✅ 1. Choose correct endpoint
+    // ✅ 1. Choose correct endpoint based on what we have
     const hasRefs = pngFiles && pngFiles.length > 0;
-    const endpoint = hasRefs
-      ? "https://api.openai.com/v1/images/edits"
-      : "https://api.openai.com/v1/images/generations";
+    const hasPrompt = prompt && prompt.trim().length > 0;
 
-    console.log(`[run-job] Using ${hasRefs ? 'edits' : 'generations'} endpoint for ${hasRefs ? 'reference-based' : 'text-only'} generation`);
+    // Hybrid = has both image and text
+    let mode = "TEXT-ONLY";
+    let endpoint = "https://api.openai.com/v1/images/generations";
+
+    if (hasRefs && hasPrompt) {
+      mode = "HYBRID (image + text)";
+      endpoint = "https://api.openai.com/v1/images/edits";
+    } else if (hasRefs && !hasPrompt) {
+      mode = "IMAGE-ONLY (visual re-render)";
+      endpoint = "https://api.openai.com/v1/images/edits";
+    }
+
+    console.log(`[run-job] Generation mode: ${mode}`);
+    console.log(`[run-job] Sending to ${endpoint} | hasRefs=${hasRefs} | hasPrompt=${hasPrompt}`);
 
     // ✅ 2. Build request
     let body: FormData | string;
@@ -94,9 +105,14 @@ async function openaiGenerate({
       // --- With reference images (use multipart/form-data)
       const form = new FormData();
       form.append("model", "gpt-image-1");
-      form.append("prompt", prompt.trim());
       form.append("size", size);
       form.append("quality", quality);
+
+      // append prompt if present (for hybrid mode)
+      if (hasPrompt) {
+        form.append("prompt", prompt.trim());
+      }
+
       // For edits endpoint, use only the first image as 'image' (not 'image[]')
       const firstFile = pngFiles[0];
       const mime = sniffMime(firstFile.bytes) || "image/png";
@@ -192,11 +208,48 @@ async function handler(req: Request) {
       return new Response("Job not found", { status: 404, headers: cors });
 
     const imageIds = Array.isArray(job.image_ids) ? job.image_ids : [];
-    const isTextOnly = job.has_images === false || imageIds.length === 0;
+    console.log(`[run-job] Job analysis:`, {
+      jobId: job.id,
+      has_images: job.has_images,
+      image_ids_length: imageIds.length,
+      image_ids: imageIds
+    });
 
+    // Filter out placeholder images (text-only generation creates these)
+    const realImageIds = [];
+    for (const imageId of imageIds) {
+      const { data: img, error: imgErr } = await supabase
+        .from("images")
+        .select("file_path, folder_id, original_name, metadata")
+        .eq("id", imageId)
+        .single();
+      
+      if (imgErr) {
+        console.log(`[run-job] Error fetching image ${imageId}:`, imgErr);
+        continue;
+      }
+      
+      console.log(`[run-job] Checking image ${imageId}:`, {
+        file_path: img.file_path,
+        original_name: img.original_name,
+        is_placeholder: img.metadata?.is_placeholder
+      });
+      
+      // Skip placeholder images created for text-only generation
+      if (img.file_path === "text-only-placeholder" || img.metadata?.is_placeholder) {
+        console.log(`[run-job] Skipping placeholder image:`, img);
+        continue;
+      }
+      
+      realImageIds.push(imageId);
+    }
+    
+    console.log(`[run-job] Real image IDs after filtering:`, realImageIds);
+
+    // Load reference images if any exist
     const files: Array<{ bytes: Uint8Array; filename: string; folder_id: string | null }> = [];
-    if (!isTextOnly) {
-      for (const imageId of imageIds) {
+    for (const imageId of realImageIds) {
+      try {
         const { data: img } = await supabase
           .from("images")
           .select("file_path, folder_id, original_name")
@@ -205,10 +258,14 @@ async function handler(req: Request) {
         const { bytes } = await downloadFromKnownBuckets(img.file_path);
         const { png, filenamePng } = await ensurePng(bytes, img.original_name);
         files.push({ bytes: png, filename: filenamePng, folder_id: img.folder_id });
+        console.log(`[run-job] Loaded reference image: ${filenamePng}`);
+      } catch (err) {
+        console.error(`[run-job] Failed to load image ${imageId}:`, err);
       }
     }
 
-    const prompt = buildPrompt(job.prompt || "Create a clean studio ad shot of the product.", !isTextOnly);
+    const hasReferenceImages = files.length > 0;
+    const prompt = buildPrompt(job.prompt || "Create a clean studio ad shot of the product.", hasReferenceImages);
 
     let size: "1024x1024" | "1536x1024" | "1024x1536" = "1024x1024";
     if (job.model?.includes("-landscape")) size = "1536x1024";
@@ -226,16 +283,21 @@ async function handler(req: Request) {
         headers: cors
       });
 
+    console.log(`[run-job] Starting generation with ${files.length} files and prompt length ${prompt.length}`);
+    
     const outBytes = await openaiGenerate({
       prompt,
-      pngFiles: isTextOnly ? [] : files,
+      pngFiles: files, // Let openaiGenerate handle the logic
       size,
       quality: "medium",
-      apiKey: OPENAI_API_KEY
+      apiKey: OPENAI_API_KEY,
+      timeoutMs: 90000 // 90 seconds timeout
     });
+    
+    console.log(`[run-job] Generation completed, result size: ${outBytes.length} bytes`);
 
     const userId = job.user_id as string;
-    const folderId = isTextOnly ? "uploads" : files[0]?.folder_id ?? "uploads";
+    const folderId = files.length > 0 ? files[0]?.folder_id ?? "uploads" : "uploads";
     const key = userId + "/" + folderId + "/" + jobId + "-" + Date.now() + ".png";
 
     const up = await supabase.storage.from("results").upload(key, outBytes, {

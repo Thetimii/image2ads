@@ -260,6 +260,7 @@ export async function createJob({
       custom_name: customName,
       style_preset: stylePreset,
       status: "pending",
+      has_images: imageIds.length > 0, // Set has_images based on whether we have actual reference images
     })
     .select()
     .single();

@@ -142,26 +142,36 @@ export async function POST(request: NextRequest) {
       hasServiceRoleKey: !!process.env.SUPABASE_SERVICE_ROLE_KEY
     });
 
-    fetch(edgeFunctionUrl, {
+    const edgeResponse = await fetch(edgeFunctionUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
       },
       body: JSON.stringify({ jobId: job.id }),
-    })
-    .then(response => {
-      console.log('Edge function response:', response.status, response.statusText);
-      return response.text();
-    })
-    .then(text => {
-      console.log('Edge function body:', text);
-    })
-    .catch((e) => {
-      console.error("Failed to trigger edge function:", e);
     });
 
-    return NextResponse.json({ jobId: job.id }, { status: 201 });
+    console.log('Edge function response:', edgeResponse.status, edgeResponse.statusText);
+    
+    if (!edgeResponse.ok) {
+      const errorText = await edgeResponse.text();
+      console.error('Edge function error:', errorText);
+      throw new Error(`Edge function failed: ${errorText}`);
+    }
+
+    const edgeResult = await edgeResponse.json();
+    console.log('Edge function result:', edgeResult);
+
+    if (edgeResult.success && edgeResult.result_path) {
+      // Return success with result path for immediate redirect
+      return NextResponse.json({ 
+        success: true,
+        jobId: job.id, 
+        result_path: edgeResult.result_path 
+      }, { status: 200 });
+    } else {
+      throw new Error(edgeResult.error || 'Generation failed');
+    }
   } catch (error) {
     console.error("Chat generation error:", error);
     return NextResponse.json(

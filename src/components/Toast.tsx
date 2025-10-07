@@ -14,12 +14,108 @@ interface ToastComponentProps extends ToastProps {
 }
 
 function ToastComponent({ id, message, type, duration = 5000, onClose }: ToastComponentProps) {
+  const [swipeOffset, setSwipeOffset] = useState(0)
+  const [isDragging, setIsDragging] = useState(false)
+  const [startX, setStartX] = useState(0)
+
   useEffect(() => {
     if (type !== 'loading') {
       const timer = setTimeout(() => onClose(id), duration)
       return () => clearTimeout(timer)
     }
   }, [id, duration, onClose, type])
+
+  // Touch event handlers for swipe-to-dismiss
+  const handleTouchStart = (e: React.TouchEvent) => {
+    setIsDragging(true)
+    setStartX(e.touches[0].clientX)
+  }
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!isDragging) return
+    
+    const currentX = e.touches[0].clientX
+    const diff = currentX - startX
+    
+    // Only allow rightward swipes (positive diff)
+    if (diff > 0) {
+      setSwipeOffset(diff)
+    }
+  }
+
+  const handleTouchEnd = () => {
+    setIsDragging(false)
+    
+    // If swiped more than 100px, dismiss the toast
+    if (swipeOffset > 100) {
+      onClose(id)
+    } else {
+      // Animate back to original position
+      setSwipeOffset(0)
+    }
+  }
+
+  // Mouse event handlers for desktop testing
+  const handleMouseDown = (e: React.MouseEvent) => {
+    setIsDragging(true)
+    setStartX(e.clientX)
+  }
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!isDragging) return
+    
+    const currentX = e.clientX
+    const diff = currentX - startX
+    
+    // Only allow rightward swipes (positive diff)
+    if (diff > 0) {
+      setSwipeOffset(diff)
+    }
+  }
+
+  const handleMouseUp = () => {
+    setIsDragging(false)
+    
+    // If swiped more than 100px, dismiss the toast
+    if (swipeOffset > 100) {
+      onClose(id)
+    } else {
+      // Animate back to original position
+      setSwipeOffset(0)
+    }
+  }
+
+  // Add mouse move and up listeners to document when dragging
+  useEffect(() => {
+    if (isDragging) {
+      const handleDocumentMouseMove = (e: MouseEvent) => {
+        const currentX = e.clientX
+        const diff = currentX - startX
+        
+        if (diff > 0) {
+          setSwipeOffset(diff)
+        }
+      }
+
+      const handleDocumentMouseUp = () => {
+        setIsDragging(false)
+        
+        if (swipeOffset > 100) {
+          onClose(id)
+        } else {
+          setSwipeOffset(0)
+        }
+      }
+
+      document.addEventListener('mousemove', handleDocumentMouseMove)
+      document.addEventListener('mouseup', handleDocumentMouseUp)
+
+      return () => {
+        document.removeEventListener('mousemove', handleDocumentMouseMove)
+        document.removeEventListener('mouseup', handleDocumentMouseUp)
+      }
+    }
+  }, [isDragging, startX, swipeOffset, id, onClose])
 
   const getIcon = () => {
     switch (type) {
@@ -65,14 +161,34 @@ function ToastComponent({ id, message, type, duration = 5000, onClose }: ToastCo
   }
 
   return (
-    <div className={`flex items-center p-4 border rounded-lg shadow-lg backdrop-blur-sm ${getColors()} animate-in slide-in-from-right duration-300`}>
+    <div 
+      className={`flex items-center p-4 border rounded-lg shadow-lg backdrop-blur-sm ${getColors()} animate-in slide-in-from-right duration-300 select-none cursor-grab active:cursor-grabbing`}
+      style={{
+        transform: `translateX(${swipeOffset}px)`,
+        opacity: Math.max(0.3, 1 - swipeOffset / 200),
+        transition: isDragging ? 'none' : 'transform 0.3s ease-out, opacity 0.3s ease-out'
+      }}
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+      onMouseDown={handleMouseDown}
+      onMouseMove={isDragging ? handleMouseMove : undefined}
+      onMouseUp={handleMouseUp}
+    >
       <div className="flex-shrink-0">
         {getIcon()}
       </div>
       <div className="ml-3 flex-1">
         <p className="text-sm font-medium">{message}</p>
       </div>
-      {type !== 'loading' && (
+      {swipeOffset > 50 && (
+        <div className="ml-3 flex-shrink-0 text-gray-400">
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+          </svg>
+        </div>
+      )}
+      {type !== 'loading' && swipeOffset <= 50 && (
         <button
           onClick={() => onClose(id)}
           className="ml-3 flex-shrink-0 text-gray-400 hover:text-gray-600 transition-colors"

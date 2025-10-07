@@ -58,6 +58,44 @@ export default function ChatInterface({ user, profile }: ChatInterfaceProps) {
     return () => window.removeEventListener('resize', checkMobile)
   }, [])
 
+  // Check for pending jobs on mount (in case of page refresh)
+  useEffect(() => {
+    const checkPendingJobs = async () => {
+      try {
+        const { data: pendingJobs, error } = await supabase
+          .from('jobs')
+          .select('id, prompt, status, created_at')
+          .eq('user_id', user.id)
+          .in('status', ['pending', 'processing'])
+          .order('created_at', { ascending: false })
+          .limit(1)
+
+        if (error || !pendingJobs || pendingJobs.length === 0) return
+
+        const latestPendingJob = pendingJobs[0]
+        const jobAge = Date.now() - new Date(latestPendingJob.created_at).getTime()
+        
+        // Only show loading for jobs less than 5 minutes old
+        if (jobAge < 5 * 60 * 1000) {
+          console.log('[ChatInterface] Found pending job on refresh:', latestPendingJob)
+          
+          const toastId = addToast({
+            message: 'Continuing your ad generation... This usually takes 30-60 seconds.',
+            type: 'loading'
+          })
+          setLoadingToastId(toastId)
+
+          // Subscribe to this existing job
+          subscribeToJobUpdates(latestPendingJob.id, latestPendingJob.prompt, 'uploads')
+        }
+      } catch (error) {
+        console.error('[ChatInterface] Error checking pending jobs:', error)
+      }
+    }
+
+    checkPendingJobs()
+  }, [user.id, supabase, addToast])
+
 
 
   // Handle file upload
@@ -157,7 +195,12 @@ export default function ChatInterface({ user, profile }: ChatInterfaceProps) {
       return
     }
 
-    setIsGenerating(true)
+    // Show loading toast immediately (but don't disable the chat interface)
+    const toastId = addToast({
+      message: 'Creating your ad... This usually takes 30-60 seconds.',
+      type: 'loading'
+    })
+    setLoadingToastId(toastId)
 
     try {
       // Use null folder for all chat generations (no folder structure)
@@ -166,46 +209,74 @@ export default function ChatInterface({ user, profile }: ChatInterfaceProps) {
 
       // Upload images if any exist
       if (images.length > 0) {
+        console.log(`[ChatInterface] Starting upload of ${images.length} images`)
+        
         for (const image of images) {
-          if (!image.file) continue
+          if (!image.file) {
+            console.log(`[ChatInterface] Skipping image ${image.id} - no file object`)
+            continue
+          }
 
-          // Resize and upload the image
-          const resized = await resizeImageFile(image.file, {
-            maxSide: 1024,
-            quality: 0.8,
-            format: 'jpeg',
-            maxOutputSize: 2_500_000
-          })
+          console.log(`[ChatInterface] Processing image: ${image.file.name}`)
 
-          // Upload to storage
-          const fileName = `${user.id}/uploads/${Date.now()}_${image.file.name}`
-          const { data: uploadData, error: uploadError } = await supabase.storage
-            .from('uploads')
-            .upload(fileName, resized.arrayBuffer, {
-              contentType: 'image/jpeg',
-              upsert: false
+          try {
+            // Resize and upload the image
+            const resized = await resizeImageFile(image.file, {
+              maxSide: 1024,
+              quality: 0.8,
+              format: 'jpeg',
+              maxOutputSize: 2_500_000
             })
 
-          if (uploadError) throw uploadError
+            console.log(`[ChatInterface] Resized image: ${resized.arrayBuffer.byteLength} bytes`)
 
-          // Save to database
-          const { data: imageData, error: imageError } = await supabase
-            .from('images')
-            .insert({
-              user_id: user.id,
-              folder_id: folderId,
-              file_path: uploadData.path,
-              original_name: image.file.name,
-              file_size: resized.arrayBuffer.byteLength,
-              mime_type: 'image/jpeg'
-            })
-            .select()
-            .single()
+            // Upload to storage
+            const fileName = `${user.id}/uploads/${Date.now()}_${image.file.name}`
+            console.log(`[ChatInterface] Uploading to storage: ${fileName}`)
+            
+            const { data: uploadData, error: uploadError } = await supabase.storage
+              .from('uploads')
+              .upload(fileName, resized.arrayBuffer, {
+                contentType: 'image/jpeg',
+                upsert: false
+              })
 
-          if (imageError) throw imageError
+            if (uploadError) {
+              console.error(`[ChatInterface] Storage upload error:`, uploadError)
+              throw uploadError
+            }
 
-          imageIds.push(imageData.id)
+            console.log(`[ChatInterface] Storage upload successful: ${uploadData.path}`)
+
+            // Save to database
+            const { data: imageData, error: imageError } = await supabase
+              .from('images')
+              .insert({
+                user_id: user.id,
+                folder_id: folderId,
+                file_path: uploadData.path,
+                original_name: image.file.name,
+                file_size: resized.arrayBuffer.byteLength,
+                mime_type: 'image/jpeg'
+              })
+              .select()
+              .single()
+
+            if (imageError) {
+              console.error(`[ChatInterface] Database insert error:`, imageError)
+              throw imageError
+            }
+
+            console.log(`[ChatInterface] Database insert successful: ${imageData.id}`)
+            imageIds.push(imageData.id)
+            
+          } catch (imageProcessError) {
+            console.error(`[ChatInterface] Error processing image ${image.file.name}:`, imageProcessError)
+            throw imageProcessError
+          }
         }
+        
+        console.log(`[ChatInterface] All images processed. Final imageIds:`, imageIds)
       }
 
       // Generate the ad
@@ -217,6 +288,22 @@ export default function ChatInterface({ user, profile }: ChatInterfaceProps) {
         folderId: folderId,
         hasImages: images.length > 0
       })
+
+      // Add smooth swoop animation to show submission
+      const textarea = document.querySelector('textarea') as HTMLTextAreaElement
+      if (textarea) {
+        textarea.style.transition = 'transform 0.3s ease-out, opacity 0.3s ease-out'
+        textarea.style.transform = 'translateY(-10px)'
+        textarea.style.opacity = '0.5'
+        
+        // Clear after animation
+        setTimeout(() => {
+          setPrompt('')
+          setImages([])
+          textarea.style.transform = 'translateY(0)'
+          textarea.style.opacity = '1'
+        }, 300)
+      }
       
       const generateResponse = await fetch('/api/generate-ad', {
         method: 'POST',
@@ -248,24 +335,41 @@ export default function ChatInterface({ user, profile }: ChatInterfaceProps) {
         throw new Error(errorData.error || 'Failed to generate ad')
       }
 
-      const { jobId } = await generateResponse.json()
+      const result = await generateResponse.json()
       
-      // Show loading toast
-      const toastId = addToast({
-        message: 'Creating your ad... This usually takes 30-60 seconds.',
-        type: 'loading'
-      })
-      setLoadingToastId(toastId)
-      
-      // Clear the form
-      setPrompt('')
-      setImages([])
-      
-      // Start polling for result with original prompt
-      pollForResult(jobId, prompt.trim(), folderId || 'uploads')
+      if (result.success && result.result_path) {
+        // Generation completed immediately! Update loading toast to success
+        if (loadingToastId) {
+          updateToast(loadingToastId, {
+            message: 'Ad created successfully! Redirecting to your library...',
+            type: 'success'
+          })
+          setTimeout(() => {
+            if (loadingToastId) removeToast(loadingToastId)
+          }, 1500)
+        }
+        
+        // Redirect to library immediately
+        setTimeout(() => {
+          window.location.href = `/dashboard/library`
+        }, 1500)
+        
+      } else {
+        // Fallback to real-time subscription if needed
+        const { jobId } = result
+        
+        // Start real-time subscription for result with original prompt
+        subscribeToJobUpdates(jobId, prompt.trim(), folderId || 'uploads')
+      }
 
     } catch (error) {
-      console.error('Generation error:', error)
+      console.error('[ChatInterface] Generation error details:', {
+        error,
+        message: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined,
+        imagesLength: images.length,
+        promptLength: prompt.length
+      })
       
       // Clean up loading toast if it exists
       if (loadingToastId) {
@@ -274,101 +378,107 @@ export default function ChatInterface({ user, profile }: ChatInterfaceProps) {
       }
       
       addToast({
-        message: 'Failed to generate ad. Please try again.',
+        message: `Failed to generate ad: ${error instanceof Error ? error.message : 'Unknown error'}`,
         type: 'error'
       })
-    } finally {
-      setIsGenerating(false)
     }
   }
 
-  // Poll for generation result and redirect when complete
-  const pollForResult = async (jobId: string, originalPrompt: string, folderId: string) => {
-    const maxAttempts = 60 // 5 minutes max
-    let attempts = 0
-
-    const poll = async () => {
-      try {
-        console.log(`[ChatInterface] Polling job ${jobId}, attempt ${attempts + 1}`)
-        const response = await fetch(`/api/jobs/${jobId}`)
-        if (!response.ok) {
-          console.error(`[ChatInterface] Job polling failed:`, response.status, response.statusText)
-          return
-        }
-
-        const job = await response.json()
-        console.log(`[ChatInterface] Job status:`, job.status, job)
-        
-        if (job.status === 'completed' && job.result_url) {
-          // Stop generating state
-          setIsGenerating(false)
+  // Subscribe to job status changes using Supabase real-time
+  const subscribeToJobUpdates = (jobId: string, originalPrompt: string, folderId: string) => {
+    console.log(`[ChatInterface] Subscribing to job updates for ${jobId}`)
+    
+    const channel = supabase
+      .channel(`job-${jobId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'jobs',
+          filter: `id=eq.${jobId}`
+        },
+        (payload) => {
+          console.log('[ChatInterface] Job update received:', payload)
+          const job = payload.new
           
-          // Update loading toast to success
-          if (loadingToastId) {
-            updateToast(loadingToastId, {
-              message: 'Ad created successfully! Redirecting to your library...',
-              type: 'success'
-            })
+          if (job.status === 'completed' && job.result_url) {
+            console.log('[ChatInterface] Job completed successfully!')
+            
+            // Update loading toast to success
+            if (loadingToastId) {
+              updateToast(loadingToastId, {
+                message: 'Ad created successfully! Redirecting to your library...',
+                type: 'success'
+              })
+              setTimeout(() => {
+                if (loadingToastId) removeToast(loadingToastId)
+              }, 1500)
+            }
+            
+            // Navigate to library to see the generated image
             setTimeout(() => {
-              if (loadingToastId) removeToast(loadingToastId)
+              window.location.href = `/dashboard/library`
             }, 1500)
-          }
-          
-          // Navigate to library to see the generated image
-          setTimeout(() => {
-            window.location.href = `/dashboard/library`
-          }, 1500)
-          return
-        }
-
-        if (job.status === 'failed') {
-          console.error('Generation failed:', job.error_message)
-          setIsGenerating(false)
-          
-          // Update loading toast to error
-          if (loadingToastId) {
-            updateToast(loadingToastId, {
-              message: 'Generation failed. Please try again.',
-              type: 'error'
-            })
-            setLoadingToastId(null)
-          } else {
-            addToast({
-              message: 'Generation failed. Please try again.',
-              type: 'error'
-            })
-          }
-          return
-        }
-
-        // Continue polling if still pending or processing
-        if ((job.status === 'pending' || job.status === 'processing') && attempts < maxAttempts) {
-          attempts++
-          setTimeout(poll, 5000) // Poll every 5 seconds
-        } else if (attempts >= maxAttempts) {
-          setIsGenerating(false)
-          
-          // Update loading toast to timeout error
-          if (loadingToastId) {
-            updateToast(loadingToastId, {
-              message: 'Generation timed out. Please check your library.',
-              type: 'error'
-            })
-            setLoadingToastId(null)
-          } else {
-            addToast({
-              message: 'Generation timed out. Please check your library.',
-              type: 'error'
-            })
+            
+            // Unsubscribe from channel
+            channel.unsubscribe()
+            
+          } else if (job.status === 'failed') {
+            console.error('[ChatInterface] Generation failed:', job.error_message)
+            
+            // Update loading toast to error
+            if (loadingToastId) {
+              updateToast(loadingToastId, {
+                message: 'Generation failed. Please try again.',
+                type: 'error'
+              })
+              setLoadingToastId(null)
+            } else {
+              addToast({
+                message: 'Generation failed. Please try again.',
+                type: 'error'
+              })
+            }
+            
+            // Unsubscribe from channel
+            channel.unsubscribe()
           }
         }
-      } catch (error) {
-        console.error('Polling error:', error)
-        setIsGenerating(false)
+      )
+      .subscribe((status) => {
+        console.log('[ChatInterface] Subscription status:', status)
+      })
+    
+    // Set up a timeout as fallback (5 minutes)
+    const timeoutId = setTimeout(() => {
+      console.log('[ChatInterface] Job subscription timeout reached')
+      
+      if (loadingToastId) {
+        updateToast(loadingToastId, {
+          message: 'Generation timed out. Please check your library.',
+          type: 'error'
+        })
+        setLoadingToastId(null)
+      } else {
+        addToast({
+          message: 'Generation timed out. Please check your library.',
+          type: 'error'
+        })
       }
+      
+      // Unsubscribe from channel
+      channel.unsubscribe()
+    }, 5 * 60 * 1000) // 5 minutes
+    
+    // Clean up timeout when component unmounts or job completes
+    const originalUnsubscribe = channel.unsubscribe
+    channel.unsubscribe = () => {
+      clearTimeout(timeoutId)
+      return originalUnsubscribe.call(channel)
     }
-
-    poll()
+    
+    return channel
   }
 
   return (
