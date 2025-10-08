@@ -271,23 +271,18 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
         console.log(`[ChatGenerator] Starting image upload...`)
         console.log(`[ChatGenerator] File details:`, { name: localFile.name, size: localFile.size, type: localFile.type })
         
-        // Create unique filename to avoid conflicts
+        // Simple filename - no special characters
         const timestamp = Date.now()
-        const randomId = Math.random().toString(36).substring(2, 8)
-        const fileName = `${user.id}/${timestamp}-${randomId}-${localFile.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`
+        const fileName = `${user.id}/${timestamp}-image.png`
         console.log(`[ChatGenerator] Upload filename: ${fileName}`)
-        console.log(`[ChatGenerator] Starting upload to uploads bucket...`)
+        console.log(`[ChatGenerator] File size: ${localFile.size} bytes`)
+        console.log(`[ChatGenerator] Starting upload...`)
         
-        // Add timeout to upload to prevent hanging
-        const uploadPromise = supabase.storage.from('uploads').upload(fileName, localFile, {
-          upsert: true // Allow overwriting if file exists
-        })
+        const { data: uploadData, error: uploadErr } = await supabase.storage
+          .from('uploads')
+          .upload(fileName, localFile)
         
-        const timeoutPromise = new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Upload timeout after 30 seconds')), 30000)
-        )
-        
-        const { data: uploadData, error: uploadErr } = await Promise.race([uploadPromise, timeoutPromise]) as any
+        console.log(`[ChatGenerator] Upload result:`, { data: uploadData, error: uploadErr })
         
         if (uploadErr) {
           console.error(`[ChatGenerator] Upload error:`, uploadErr)
@@ -406,6 +401,15 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
 
             const mediaUrl = signedUrl?.signedUrl || ''
             console.log(`[ChatGenerator] Final media URL: ${mediaUrl}`)
+            console.log(`[ChatGenerator] signedUrl data:`, signedUrl)
+            console.log(`[ChatGenerator] About to update message with:`, {
+              status: 'complete',
+              content: meta.resultType === 'image' ? 'Image generated ✅' : 'Video generated ✅',
+              mediaUrl,
+              mediaType: meta.resultType,
+              messageId: assistantPlaceholder.id,
+              activeTab: gen.activeTab
+            })
 
             gen.updateMessage(gen.activeTab, assistantPlaceholder.id, {
               status: 'complete',
@@ -413,6 +417,8 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
               mediaUrl,
               mediaType: meta.resultType
             })
+            
+            console.log(`[ChatGenerator] Message update called successfully`)
             
             // Make sure to reset generating state
             gen.setIsGenerating(false)
@@ -581,8 +587,22 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
             </div>
           </div>
         )}
-        {history.map(m => (
-          <div key={m.id} className={`flex w-full ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+        {history.map(m => {
+          // Debug logging for each message
+          if (m.role === 'assistant' && m.status === 'complete') {
+            console.log(`[ChatGenerator] Rendering message:`, {
+              id: m.id,
+              status: m.status,
+              content: m.content,
+              mediaUrl: m.mediaUrl,
+              mediaType: m.mediaType,
+              hasMediaUrl: !!m.mediaUrl,
+              isImage: m.mediaType === 'image'
+            })
+          }
+          
+          return (
+            <div key={m.id} className={`flex w-full ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
             <div className={`${m.role === 'user' ? 'bg-purple-600 text-white rounded-2xl rounded-br-sm' : 'bg-white border border-gray-200 rounded-2xl rounded-bl-sm'} px-4 py-3 shadow-sm text-sm max-w-[65%]`}>
               <div className="whitespace-pre-wrap leading-relaxed">
                 {m.content}
@@ -691,7 +711,8 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
               )}
             </div>
           </div>
-        ))}
+          )
+        })}
         <div ref={bottomRef} />
       </div>
 
