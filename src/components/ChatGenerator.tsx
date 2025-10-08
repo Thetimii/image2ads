@@ -171,7 +171,6 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
       }
       
       isLoadingJobs.current = true
-      hasLoadedOnce.current = true
       const startTime = performance.now()
       try {
         console.log('Loading jobs from database...')
@@ -192,6 +191,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
 
         if (!jobs || jobs.length === 0) {
           console.log('No jobs found')
+          hasLoadedOnce.current = true // Only set this on success
           return
         }
 
@@ -298,6 +298,9 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
         })
 
         console.log(`⏱️ Total load time: ${(performance.now() - startTime).toFixed(0)}ms`)
+        
+        // Mark as loaded successfully
+        hasLoadedOnce.current = true
 
       } catch (error) {
         console.error('Error in loadAndPollJobs:', error)
