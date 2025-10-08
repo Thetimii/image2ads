@@ -388,9 +388,13 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
             console.log(`[ChatGenerator] Generation completed! Result URL: ${statusData.result_url}`)
             
             // Generation completed successfully - get signed URL for private bucket
+            console.log(`[ChatGenerator] Attempting to create signed URL for: ${statusData.result_url}`)
             const { data: signedData, error: signedError } = await supabase.storage
               .from('results')
               .createSignedUrl(statusData.result_url, 3600) // 1 hour expiry
+
+            console.log(`[ChatGenerator] Signed URL data:`, signedData)
+            console.log(`[ChatGenerator] Signed URL error:`, signedError)
 
             if (signedError) {
               console.error(`[ChatGenerator] Signed URL creation failed:`, signedError)
@@ -398,6 +402,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
             }
 
             let mediaUrl = signedError ? statusData.result_url : signedData?.signedUrl
+            console.log(`[ChatGenerator] Media URL after signed URL attempt: ${mediaUrl}`)
             
             // If signed URL creation failed, try to get public URL from results bucket
             if (!mediaUrl || signedError) {
@@ -409,6 +414,12 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
 
             console.log(`[ChatGenerator] Final media URL: ${mediaUrl}`)
             console.log(`[ChatGenerator] Media type: ${meta.resultType}`)
+            console.log(`[ChatGenerator] About to update message with:`, {
+              status: 'complete',
+              content: meta.resultType === 'image' ? 'Image generated ✅' : 'Video generated ✅',
+              mediaUrl,
+              mediaType: meta.resultType
+            })
 
             gen.updateMessage(gen.activeTab, assistantPlaceholder.id, {
               status: 'complete',
@@ -416,6 +427,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
               mediaUrl,
               mediaType: meta.resultType
             })
+            console.log(`[ChatGenerator] Message updated successfully for ${gen.activeTab}`)
             return
           }
 
