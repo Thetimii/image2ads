@@ -107,8 +107,7 @@ const EXAMPLES: Record<string, Array<{ short: string; full: string }>> = {
 
 export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGeneratorProps) {
   const gen = useGenerator()
-  const supabaseRef = useRef(createClient())
-  const supabase = supabaseRef.current
+  const supabase = createClient() // Create fresh client each render - it reads cookies
   const [input, setInput] = useState('')
   const bottomRef = useRef<HTMLDivElement | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
