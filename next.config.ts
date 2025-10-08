@@ -20,6 +20,10 @@ const nextConfig: NextConfig = {
     unoptimized: false,
   },
   outputFileTracingRoot: path.join(__dirname),
+  // Generate new build ID on every build to prevent caching issues
+  generateBuildId: async () => {
+    return `build-${Date.now()}`
+  },
 };
 
 export default nextConfig;

@@ -978,7 +978,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
                 {m.content}
               </div>
               {m.status === 'pending' && (
-                <div className="mt-3 w-full aspect-[3/2] max-h-[300px] rounded-lg bg-gradient-to-br from-purple-50 via-pink-50 to-purple-50 relative overflow-hidden border border-purple-200/50">
+                <div className="mt-3 w-full min-w-[280px] sm:min-w-[400px] aspect-[3/2] max-w-[500px] max-h-[350px] rounded-lg bg-gradient-to-br from-purple-50 via-pink-50 to-purple-50 relative overflow-hidden border border-purple-200/50">
                   {/* Animated shimmer */}
                   <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/50 to-transparent animate-[shimmer_2s_infinite] -translate-x-full" />
                   
