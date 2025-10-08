@@ -1,6 +1,7 @@
 "use client";
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useSupabaseUser } from '@/hooks/useSupabaseUser';
 import { createClient } from '@/lib/supabase/client';
 
 // Extend Window interface for Facebook Pixel
@@ -19,10 +20,10 @@ interface CookiePreferences {
 }
 
 const CookieBanner = () => {
+  const { user } = useSupabaseUser(); // Single source of truth!
   const [showBanner, setShowBanner] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
   const [mounted, setMounted] = useState(false);
-  const [currentUser, setCurrentUser] = useState<any>(null);
   const [preferences, setPreferences] = useState<CookiePreferences>({
     necessary: true, // Always required
     analytics: false,
@@ -35,19 +36,14 @@ const CookieBanner = () => {
   useEffect(() => {
     setMounted(true);
     
-    // Get current user
-    const getUser = async () => {
-      const { data: { user }, error } = await supabase.auth.getUser();
+    // Check localStorage and database for preferences
+    const checkPreferences = () => {
+      const cookieConsent = localStorage.getItem('cookieConsent');
+      const savedPreferences = localStorage.getItem('cookiePreferences');
       
-      if (error) {
-        console.log('No authenticated user found for cookie preferences');
-        // Still check localStorage for non-authenticated users
-        const cookieConsent = localStorage.getItem('cookieConsent');
-        const savedPreferences = localStorage.getItem('cookiePreferences');
-        
-        if (!cookieConsent) {
-          // Show banner after a short delay for better UX
-          const timer = setTimeout(() => {
+      if (!cookieConsent) {
+        // Show banner after a short delay for better UX
+        const timer = setTimeout(() => {
             setShowBanner(true);
           }, 1000);
           return () => clearTimeout(timer);

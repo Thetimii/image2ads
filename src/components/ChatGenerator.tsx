@@ -166,7 +166,7 @@ export default function ChatGenerator({ user: propsUser, profile, onLockedFeatur
     activePolling.current.clear() // Clear active polling to prevent stale loops
     hasLoadedJobs.current = false // Reset job loading flag for new user
     console.log('🔄 User changed, reset hasLoadedJobs flag and cleared polling')
-  }, [user.id])
+  }, [user?.id])
 
   // ✅ Load and poll jobs once, after client mount & valid user
   useEffect(() => {
@@ -862,6 +862,8 @@ export default function ChatGenerator({ user: propsUser, profile, onLockedFeatur
 
   // Realtime subscription: listen for job status changes so UI updates immediately even if polling misses or user refreshes
   useEffect(() => {
+    if (!user?.id) return; // Guard against null user
+    
     const channel = supabase.channel('jobs-realtime')
       .on('postgres_changes', {
         event: 'UPDATE',
@@ -933,7 +935,7 @@ export default function ChatGenerator({ user: propsUser, profile, onLockedFeatur
         console.error('Error unsubscribing realtime channel:', error)
       }
     }
-  }, [user.id]) // Only depend on user.id, supabase is now stable
+  }, [user?.id]) // Only depend on user?.id, supabase is now stable
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
