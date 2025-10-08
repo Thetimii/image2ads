@@ -115,8 +115,9 @@ const EXAMPLES: Record<string, Array<{ short: string; full: string }>> = {
   ]
 }
 
-export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGeneratorProps) {
+export default function ChatGenerator({ user: propsUser, profile, onLockedFeature }: ChatGeneratorProps) {
   const gen = useGenerator()
+  const { user } = useSupabaseUser() // USE THE HOOK - single source of truth!
   const supabase = createClient() // Create fresh client each render - it reads cookies
   const [input, setInput] = useState('')
   const bottomRef = useRef<HTMLDivElement | null>(null)
@@ -943,6 +944,18 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
 
   // Prevent SSR mismatch by waiting for client-side mount
   if (!isMounted) return null
+
+  // Wait for user to load from hook
+  if (!user) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="text-center">
+          <div className="w-8 h-8 border-4 border-purple-200 border-t-purple-600 rounded-full animate-spin mx-auto mb-3"></div>
+          <p className="text-sm text-gray-500">Loading session...</p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="flex flex-col h-full">
