@@ -118,8 +118,6 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
   const [isSubmitting, setIsSubmitting] = useState(false)
   const activeTimeouts = useRef<Set<NodeJS.Timeout>>(new Set())
   const activePolling = useRef<Set<string>>(new Set()) // Track active polling jobs
-  const isLoadingJobs = useRef(false) // Prevent concurrent job loads
-  const hasLoadedOnce = useRef(false) // Track if we've loaded jobs at least once
   const [isMounted, setIsMounted] = useState(false) // Client-side only flag
 
   const meta = TAB_META[gen.activeTab]
@@ -157,23 +155,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
 
   // Load and poll jobs from database - this is the source of truth
   useEffect(() => {
-    // Reset the loaded flag when user changes
-    hasLoadedOnce.current = false
-    
     const loadAndPollJobs = async () => {
-      // Prevent concurrent loads
-      if (isLoadingJobs.current) {
-        console.log('⏭️ Skipping job load - already loading')
-        return
-      }
-      
-      // Only load once per user session (prevents hot reload from loading multiple times)
-      if (hasLoadedOnce.current) {
-        console.log('⏭️ Skipping job load - already loaded once for this user')
-        return
-      }
-      
-      isLoadingJobs.current = true
       const startTime = performance.now()
       try {
         console.log('Loading jobs from database...')
@@ -199,7 +181,6 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
 
         if (!jobs || jobs.length === 0) {
           console.log('No jobs found')
-          hasLoadedOnce.current = true // Only set this on success
           return
         }
 
@@ -306,14 +287,9 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
         })
 
         console.log(`⏱️ Total load time: ${(performance.now() - startTime).toFixed(0)}ms`)
-        
-        // Mark as loaded successfully
-        hasLoadedOnce.current = true
 
       } catch (error) {
         console.error('Error in loadAndPollJobs:', error)
-      } finally {
-        isLoadingJobs.current = false
       }
     }
 
