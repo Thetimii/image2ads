@@ -1,6 +1,11 @@
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
+/**
+ * Keeps Supabase session cookies fresh and consistent between server + client.
+ * Also disables caching for authenticated dashboard routes to prevent
+ * "must hard refresh" or stale user state issues.
+ */
 export async function updateSession(request: NextRequest) {
   let response = NextResponse.next({
     request: {
@@ -12,7 +17,7 @@ export async function updateSession(request: NextRequest) {
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
   if (!supabaseUrl || !supabaseAnonKey) {
-    console.error("Middleware: Missing Supabase environment variables");
+    console.error("⚠️ Middleware: Missing Supabase env vars");
     return response;
   }
 
@@ -22,62 +27,48 @@ export async function updateSession(request: NextRequest) {
         return request.cookies.getAll();
       },
       setAll(cookiesToSet) {
-        cookiesToSet.forEach(({ name, value, options }) =>
-          request.cookies.set(name, value)
-        );
-        response = NextResponse.next({
-          request,
+        cookiesToSet.forEach(({ name, value, options }) => {
+          request.cookies.set(name, value);
+          response.cookies.set(name, value, options);
         });
-        cookiesToSet.forEach(({ name, value, options }) =>
-          response.cookies.set(name, value, options)
-        );
       },
     },
   });
 
-  // This will refresh session if expired - required for Server Components
-  // https://supabase.com/docs/guides/auth/server-side/nextjs
+  // ✅ Refresh session if expired (essential for SSR)
   await supabase.auth.getUser();
 
   return response;
 }
 
-export function middleware(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // Exempt webhook from auth - Stripe webhooks don't send Authorization headers
+  // ⚙️ Skip Stripe webhooks and public assets
   if (pathname.startsWith("/api/stripe/webhook")) {
     return NextResponse.next();
   }
 
-  // Update session for all requests
-  const response = updateSession(request);
-  
-  // 🔥 CRITICAL: Prevent caching for dashboard routes to fix "must hard refresh" issue  
-  // This ensures fresh user sessions and prevents SSR/hydration mismatches
-  if (pathname.startsWith('/dashboard')) {
-    const finalResponse = response.then(res => {
-      res.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate')
-      res.headers.set('Pragma', 'no-cache')
-      res.headers.set('Expires', '0')
-      res.headers.set('Surrogate-Control', 'no-store')
-      return res
-    })
-    return finalResponse
+  // ✅ Always refresh Supabase session
+  const response = await updateSession(request);
+
+  // 🚫 Disable caching for dashboard pages to avoid hydration mismatches
+  if (pathname.startsWith("/dashboard")) {
+    response.headers.set(
+      "Cache-Control",
+      "no-store, no-cache, must-revalidate, proxy-revalidate"
+    );
+    response.headers.set("Pragma", "no-cache");
+    response.headers.set("Expires", "0");
+    response.headers.set("Surrogate-Control", "no-store");
   }
 
   return response;
 }
 
+// ✅ Applies middleware to all routes except static assets & images
 export const config = {
   matcher: [
-    /*
-     * Match all request paths except for the ones starting with:
-     * - _next/static (static files)
-     * - _next/image (image optimization files)
-     * - favicon.ico (favicon file)
-     * Feel free to modify this pattern to include more paths.
-     */
     "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };

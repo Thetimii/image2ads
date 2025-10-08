@@ -168,11 +168,10 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
 
   // ✅ Load and poll jobs once, after client mount & valid user
   useEffect(() => {
-    if (!user?.id) return
-
-    // Wait until component is mounted
-    if (!isMounted) {
-      console.log('� Waiting for mount before loading jobs...')
+    // Combined readiness check: both user and mount state must be ready  
+    if (!user?.id || !isMounted) {
+      if (!user?.id) console.log('🚫 No user ID, skipping job load')
+      if (!isMounted) console.log('🕐 Component not mounted yet, waiting...')
       return
     }
 
@@ -183,7 +182,8 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
     }
 
     hasLoadedJobs.current = true
-    console.log('✅ Starting initial job load')
+    console.log('✅ Both conditions ready - starting immediate job load')
+    console.log('📊 Readiness status: user.id =', !!user?.id, 'isMounted =', isMounted)
 
     const loadJobs = async () => {
       setIsLoadingHistory(true)
