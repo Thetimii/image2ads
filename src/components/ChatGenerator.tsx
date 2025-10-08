@@ -275,9 +275,9 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
 
         // Batch fetch all signed URLs for completed jobs
         const urlFetchStart = performance.now()
-        const completedJobs = jobs.filter(job => job.status === 'completed' && job.result_url)
+        const completedJobs = jobs.filter((job: any) => job.status === 'completed' && job.result_url)
         console.log(`📦 Fetching ${completedJobs.length} signed URLs in parallel...`)
-        const signedUrlPromises = completedJobs.map(job => 
+        const signedUrlPromises = completedJobs.map((job: any) => 
           supabase.storage
             .from('results')
             .createSignedUrl(job.result_url, 3600)
