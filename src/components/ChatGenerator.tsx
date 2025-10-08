@@ -157,24 +157,8 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
     const loadAndPollJobs = async () => {
       const startTime = performance.now()
       try {
-        console.log('Loading jobs from database...')
-        console.log('User ID:', user.id)
-        console.log('Supabase client exists:', !!supabase)
-        
-        // Check if we have a valid session
-        const { data: { session }, error: sessionError } = await supabase.auth.getSession()
-        console.log('Session check:', { 
-          hasSession: !!session, 
-          userId: session?.user?.id, 
-          sessionError: sessionError?.message 
-        })
-        
-        if (!session) {
-          console.error('❌ No valid session found! Cannot load jobs.')
-          return
-        }
-        
-        console.log('About to query jobs table...')
+        console.log('💾 Loading jobs from database...')
+        console.log('👤 User ID:', user.id)
         
         // Get only recent jobs (last 10) to speed up initial load
         const { data: jobs, error } = await supabase
@@ -875,7 +859,8 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
 
       {/* Chat scroll area */}
       <div 
-        className="flex-1 overflow-y-auto px-8 py-6 bg-[#f7f7f8] space-y-6 relative"
+        className="flex-1 overflow-y-auto px-4 sm:px-8 py-4 sm:py-6 bg-[#f7f7f8] space-y-4 sm:space-y-6 relative overscroll-contain"
+        style={{ WebkitOverflowScrolling: 'touch' }}
         onDragOver={(e) => { e.preventDefault(); if (requiresImage) setIsDragging(true) }}
         onDragLeave={() => setIsDragging(false)}
         onDrop={(e) => {
@@ -901,22 +886,22 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
           <div className="flex items-center justify-center h-full">
             <div 
               onClick={requiresImage ? handleUploadClick : undefined}
-              className={`max-w-lg w-full text-center px-8 py-12 rounded-xl border-2 ${
+              className={`max-w-lg w-full text-center px-6 sm:px-8 py-8 sm:py-12 rounded-xl border-2 ${
                 requiresImage 
-                  ? 'border-dashed border-purple-300 bg-purple-50/30 cursor-pointer hover:bg-purple-50/50 hover:border-purple-400 transition-all' 
+                  ? 'border-dashed border-purple-300 bg-purple-50/30 cursor-pointer hover:bg-purple-50/50 hover:border-purple-400 transition-all active:scale-95' 
                   : 'border-gray-200 bg-white'
               }`}
             >
               {requiresImage ? (
                 <>
-                  <div className="flex justify-center gap-3 mb-4 text-4xl">
+                  <div className="flex justify-center gap-3 mb-3 sm:mb-4 text-3xl sm:text-4xl">
                     <span>📷</span>
                     <span>🖼️</span>
                     <span>📁</span>
                   </div>
-                  <h3 className="text-base font-semibold text-gray-800 mb-2">Upload Your Reference Image</h3>
-                  <p className="text-sm text-gray-600 leading-relaxed mb-1">
-                    Click here or drag & drop an image to start transforming.
+                  <h3 className="text-sm sm:text-base font-semibold text-gray-800 mb-2">Upload Your Reference Image</h3>
+                  <p className="text-xs sm:text-sm text-gray-600 leading-relaxed mb-1">
+                    Tap here or drag & drop an image to start transforming.
                   </p>
                   <div className="flex items-center justify-between mt-3">
                     <p className="text-xs text-gray-500">
@@ -970,39 +955,39 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
         )}
         {history.map(m => (
             <div key={m.id} className={`flex w-full ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-            <div className={`${m.role === 'user' ? 'bg-purple-600 text-white rounded-2xl rounded-br-sm' : 'bg-white border border-gray-200 rounded-2xl rounded-bl-sm'} px-4 py-3 shadow-sm text-sm max-w-[65%]`}>
-              <div className="whitespace-pre-wrap leading-relaxed">
+            <div className={`${m.role === 'user' ? 'bg-purple-600 text-white rounded-2xl rounded-br-sm' : 'bg-white border border-gray-200 rounded-2xl rounded-bl-sm'} px-3 sm:px-4 py-2 sm:py-3 shadow-sm text-xs sm:text-sm max-w-[85%] sm:max-w-[75%] md:max-w-[65%]`}>
+              <div className="whitespace-pre-wrap leading-relaxed break-words">
                 {m.content}
               </div>
               {m.status === 'pending' && (
-                <div className="mt-3 w-[320px] sm:w-[420px] h-[200px] sm:h-[280px] rounded-lg bg-gradient-to-br from-purple-50 via-pink-50 to-purple-50 relative overflow-hidden border border-purple-200/50">
+                <div className="mt-3 w-full sm:w-[320px] md:w-[420px] h-[180px] sm:h-[200px] md:h-[280px] rounded-lg bg-gradient-to-br from-purple-50 via-pink-50 to-purple-50 relative overflow-hidden border border-purple-200/50">
                   {/* Animated shimmer */}
                   <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/50 to-transparent animate-[shimmer_2s_infinite] -translate-x-full" />
                   
                   {/* Pulsing dots */}
-                  <div className="absolute top-4 left-4 flex gap-1">
-                    <div className="w-2 h-2 bg-purple-400 rounded-full animate-bounce [animation-delay:-0.3s]" />
-                    <div className="w-2 h-2 bg-pink-400 rounded-full animate-bounce [animation-delay:-0.15s]" />
-                    <div className="w-2 h-2 bg-purple-400 rounded-full animate-bounce" />
+                  <div className="absolute top-3 sm:top-4 left-3 sm:left-4 flex gap-1">
+                    <div className="w-1.5 sm:w-2 h-1.5 sm:h-2 bg-purple-400 rounded-full animate-bounce [animation-delay:-0.3s]" />
+                    <div className="w-1.5 sm:w-2 h-1.5 sm:h-2 bg-pink-400 rounded-full animate-bounce [animation-delay:-0.15s]" />
+                    <div className="w-1.5 sm:w-2 h-1.5 sm:h-2 bg-purple-400 rounded-full animate-bounce" />
                   </div>
                   
                   {/* Rotating spinner */}
-                  <div className="absolute top-4 right-4">
-                    <div className="w-4 h-4 border-2 border-purple-300 border-t-purple-600 rounded-full animate-spin" />
+                  <div className="absolute top-3 sm:top-4 right-3 sm:right-4">
+                    <div className="w-3 sm:w-4 h-3 sm:h-4 border-2 border-purple-300 border-t-purple-600 rounded-full animate-spin" />
                   </div>
                   
                   {/* Center text with typing animation */}
-                  <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
-                    <div className="text-purple-600 font-medium text-sm mb-1">
+                  <div className="absolute inset-0 flex flex-col items-center justify-center text-center px-4">
+                    <div className="text-purple-600 font-medium text-xs sm:text-sm mb-1">
                       Generating {meta.resultType}
                     </div>
-                    <div className="text-xs text-purple-500/70 animate-pulse">
+                    <div className="text-[10px] sm:text-xs text-purple-500/70 animate-pulse">
                       This may take {meta.resultType === 'video' ? '2-5 minutes' : '30-60 seconds'}
                     </div>
                   </div>
                   
                   {/* Progress bar */}
-                  <div className="absolute bottom-4 left-4 right-4 h-1 bg-purple-100 rounded-full overflow-hidden">
+                  <div className="absolute bottom-3 sm:bottom-4 left-3 sm:left-4 right-3 sm:right-4 h-1 bg-purple-100 rounded-full overflow-hidden">
                     <div className="h-full bg-gradient-to-r from-purple-500 to-pink-500 rounded-full animate-[progress_3s_ease-in-out_infinite]" />
                   </div>
                 </div>
@@ -1014,10 +999,10 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
                     alt="Generated result" 
                     width={400} 
                     height={400} 
-                    className="rounded-lg w-full max-w-[400px] shadow-sm cursor-pointer hover:shadow-lg transition-shadow" 
+                    className="rounded-lg w-full max-w-[280px] sm:max-w-[350px] md:max-w-[400px] shadow-sm cursor-pointer hover:shadow-lg transition-shadow" 
                     onClick={() => m.mediaUrl && window.open(m.mediaUrl, '_blank')}
                   />
-                  <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div className="absolute top-2 right-2 sm:opacity-0 sm:group-hover:opacity-100 sm:transition-opacity">
                     <button
                       onClick={async () => {
                         try {
@@ -1035,7 +1020,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
                           console.error('Download failed:', e)
                         }
                       }}
-                      className="bg-black/50 hover:bg-black/70 text-white p-2 rounded-full text-sm transition-colors"
+                      className="bg-black/50 hover:bg-black/70 active:bg-black/80 text-white p-1.5 sm:p-2 rounded-full text-xs sm:text-sm transition-colors"
                       title="Download image"
                     >
                       ⬇️
@@ -1048,9 +1033,9 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
                   <video 
                     src={m.mediaUrl} 
                     controls 
-                    className="rounded-lg w-full max-w-[500px] shadow-md" 
+                    className="rounded-lg w-full max-w-[280px] sm:max-w-[400px] md:max-w-[500px] shadow-md" 
                   />
-                  <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div className="absolute top-2 right-2 sm:opacity-0 sm:group-hover:opacity-100 sm:transition-opacity">
                     <button
                       onClick={async () => {
                         try {
@@ -1068,7 +1053,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
                           console.error('Download failed:', e)
                         }
                       }}
-                      className="bg-black/50 hover:bg-black/70 text-white p-2 rounded-full text-sm transition-colors"
+                      className="bg-black/50 hover:bg-black/70 active:bg-black/80 text-white p-1.5 sm:p-2 rounded-full text-xs sm:text-sm transition-colors"
                       title="Download video"
                     >
                       ⬇️
@@ -1083,14 +1068,14 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
       </div>
 
       {/* Bottom input bar */}
-      <div className="border-t border-gray-200 bg-white px-4 py-3 flex flex-col gap-2 shadow-inner">
+      <div className="border-t border-gray-200 bg-white px-3 sm:px-4 py-2 sm:py-3 flex flex-col gap-2 shadow-inner">
         {/* Examples */}
-        <div className="flex gap-2 overflow-x-scroll text-xs text-gray-600 pb-1 scrollbar-hide">
+        <div className="flex gap-2 overflow-x-auto text-xs text-gray-600 pb-1 scrollbar-hide -mx-1 px-1" style={{ WebkitOverflowScrolling: 'touch' }}>
           {EXAMPLES[gen.activeTab].map(ex => (
             <button
               key={ex.short}
               onClick={() => handleExample(ex.full)}
-              className="px-2 py-1 md:px-3 md:py-1.5 rounded-full bg-gray-100 hover:bg-gray-200 transition text-gray-600 whitespace-nowrap border border-gray-200 hover:border-gray-300 text-[10px] md:text-xs flex-shrink-0"
+              className="px-2 py-1 md:px-3 md:py-1.5 rounded-full bg-gray-100 hover:bg-gray-200 active:bg-gray-300 transition text-gray-600 whitespace-nowrap border border-gray-200 hover:border-gray-300 text-[10px] md:text-xs flex-shrink-0"
               title={ex.full}
             >
               {ex.short}
@@ -1103,7 +1088,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
             <>
               <button
                 onClick={handleUploadClick}
-                className="text-xl hover:opacity-80 cursor-pointer"
+                className="text-lg sm:text-xl hover:opacity-80 active:scale-95 cursor-pointer transition"
                 title="Upload reference image"
               >📎</button>
               <input ref={fileInputRef} onChange={handleFileChange} type="file" accept="image/*" className="hidden" />
@@ -1115,7 +1100,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
                       setLocalFile(null)
                       setLocalPreview(null)
                     }}
-                    className="absolute -top-1 -right-1 bg-red-500 hover:bg-red-600 text-white rounded-full w-4 h-4 flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition-opacity"
+                    className="absolute -top-1 -right-1 bg-red-500 hover:bg-red-600 active:bg-red-700 text-white rounded-full w-4 h-4 sm:w-5 sm:h-5 flex items-center justify-center text-xs transition"
                     title="Remove image"
                   >
                     ×
@@ -1131,29 +1116,29 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
             onKeyDown={onKeyDown}
             placeholder="Describe your idea or drop an image…"
             rows={1}
-            className="flex-1 border border-gray-300 rounded-2xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none overflow-hidden min-h-[40px] max-h-[120px]"
-            style={{ height: '40px' }}
+            className="flex-1 border border-gray-300 rounded-2xl px-3 sm:px-4 py-2 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none overflow-hidden min-h-[36px] sm:min-h-[40px] max-h-[100px] sm:max-h-[120px]"
+            style={{ height: '36px' }}
           />
           <button
             onClick={sendPrompt}
             disabled={gen.isGenerating || isSubmitting || (requiresImage && !localFile) || !input.trim()}
-            className="bg-gradient-to-r from-purple-500 to-pink-500 text-white px-5 py-2 rounded-full text-sm font-semibold hover:scale-[1.03] active:scale-[0.97] transition disabled:opacity-50 disabled:hover:scale-100 flex items-center gap-2"
+            className="bg-gradient-to-r from-purple-500 to-pink-500 text-white px-3 sm:px-5 py-2 rounded-full text-xs sm:text-sm font-semibold hover:scale-[1.03] active:scale-[0.97] transition disabled:opacity-50 disabled:hover:scale-100 flex items-center gap-1 sm:gap-2 flex-shrink-0"
           >
             <span>⚡ Generate</span>
-            <span className="bg-white/20 px-2 py-0.5 rounded-full text-xs">
-              {meta.resultType === 'video' ? '8' : '1'} credit{meta.resultType === 'video' ? 's' : ''}
+            <span className="bg-white/20 px-1.5 sm:px-2 py-0.5 rounded-full text-[10px] sm:text-xs">
+              {meta.resultType === 'video' ? '8' : '1'} cr
             </span>
           </button>
         </div>
         {/* Quick controls - only render client-side to prevent hydration mismatch */}
         {isMounted && (
-          <div className="flex justify-center gap-4 mt-1 flex-wrap text-xs text-gray-500">
-            <div className="flex gap-2 items-center">
+          <div className="flex justify-center gap-3 sm:gap-4 mt-1 flex-wrap text-xs text-gray-500">
+            <div className="flex gap-1.5 sm:gap-2 items-center">
               {aspectOptions.map(opt => (
                 <button
                   key={opt.value}
                   onClick={() => gen.setAspectRatio(opt.value)}
-                  className={`${gen.aspectRatio === opt.value ? 'bg-purple-50 border border-purple-500 text-purple-600 font-semibold' : 'border border-gray-200 hover:bg-gray-50'} rounded-md px-2 py-1 transition`}
+                  className={`${gen.aspectRatio === opt.value ? 'bg-purple-50 border border-purple-500 text-purple-600 font-semibold' : 'border border-gray-200 hover:bg-gray-50 active:bg-gray-100'} rounded-md px-2 py-1 text-[10px] sm:text-xs transition`}
                 >{opt.label}</button>
               ))}
             </div>
