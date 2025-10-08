@@ -26,7 +26,7 @@ interface ChatGeneratorProps {
   onLockedFeature?: () => void
 }
 
-// Supabase Edge Function endpoints
+// Supabase Edge Function endpoints - These are the live production endpoints
 const SUPABASE_FUNCTIONS_BASE = 'https://cqnaooicfxqtnbuwsopu.supabase.co/functions/v1'
 
 const ENDPOINT_MAP: Record<string, string> = {
@@ -37,6 +37,15 @@ const ENDPOINT_MAP: Record<string, string> = {
 }
 
 const CHECK_JOB_STATUS_ENDPOINT = `${SUPABASE_FUNCTIONS_BASE}/check-job-status`
+
+// Log endpoints on load for debugging
+console.log('🔗 Supabase Edge Function Endpoints:', {
+  'text-to-image': ENDPOINT_MAP['text-to-image'],
+  'image-to-image': ENDPOINT_MAP['image-to-image'],
+  'text-to-video': ENDPOINT_MAP['text-to-video'],
+  'image-to-video': ENDPOINT_MAP['image-to-video'],
+  'check-job-status': CHECK_JOB_STATUS_ENDPOINT
+})
 
 const TAB_META: Record<string, { title: string; subtitle: string; locked?: boolean; model: string; resultType: 'image' | 'video' }> = {
   'text-to-image': { title: '🖼️ Text to Image', subtitle: 'Generate product-ready visuals from ideas', model: 'gemini', resultType: 'image' },
@@ -352,10 +361,22 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
     const pollJob = async () => {
       try {
         console.log('[JobRecovery] pollJob tick', { jobId, tab, messageId })
+        
+        // Get fresh session token for polling
+        const { data: { session: pollSession } } = await supabase.auth.getSession()
+        if (!pollSession?.access_token) {
+          console.error('[JobRecovery] No valid session for polling')
+          activePolling.current.delete(jobId)
+          return
+        }
+        
         // Call the status endpoint so backend can advance processing (important after refresh)
         const statusResp = await fetch(`${CHECK_JOB_STATUS_ENDPOINT}?jobId=${jobId}`, {
           method: 'GET',
-          headers: { 'Authorization': `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}` }
+          headers: { 
+            'Authorization': `Bearer ${pollSession.access_token}`,
+            'Content-Type': 'application/json'
+          }
         })
 
         if (!statusResp.ok) {
@@ -618,8 +639,13 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
       console.log(`[ChatGenerator] Endpoint: ${endpoint}`)
       console.log(`[ChatGenerator] JobId: ${job.id}`)
       console.log(`[ChatGenerator] Job data:`, job)
-      console.log(`[ChatGenerator] Anon key exists:`, !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)
-      console.log(`[ChatGenerator] Anon key preview:`, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.substring(0, 20) + '...')
+      
+      // Get the user's session token for proper authorization
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session?.access_token) {
+        throw new Error('No valid session token found')
+      }
+      console.log(`[ChatGenerator] Using session token for authorization`)
       
       // Add timeout to detect hanging requests
       const controller = new AbortController()
@@ -628,12 +654,12 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
         controller.abort()
       }, 30000) // 30 second timeout
       
-      console.log(`[ChatGenerator] Making fetch request...`)
+      console.log(`[ChatGenerator] Making fetch request to: ${endpoint}`)
       const resp = await fetch(endpoint, {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`
+          'Authorization': `Bearer ${session.access_token}`
         },
         body: JSON.stringify({ jobId: job.id }),
         signal: controller.signal
@@ -649,14 +675,33 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
       console.log(`[ChatGenerator] Response status: ${resp.status}`)
       console.log(`[ChatGenerator] Response statusText: ${resp.statusText}`)
       console.log(`[ChatGenerator] Response headers:`, Object.fromEntries(resp.headers.entries()))
+      
       if (!resp.ok) {
         const errData = await resp.json().catch(() => ({}))
-        console.error(`[ChatGenerator] API Response Error for ${gen.activeTab}:`, resp.status, errData)
-        console.error(`[ChatGenerator] Response headers:`, Object.fromEntries(resp.headers.entries()))
-        throw new Error(errData.error || `HTTP ${resp.status}: Generation failed`)
+        console.error(`❌ [ChatGenerator] Edge Function Error:`)
+        console.error(`   Endpoint: ${endpoint}`)
+        console.error(`   Status: ${resp.status} ${resp.statusText}`)
+        console.error(`   Error Data:`, errData)
+        console.error(`   Job ID: ${job.id}`)
+        console.error(`   Tab: ${gen.activeTab}`)
+        
+        // User-friendly error messages based on status code
+        let userMessage = 'Generation failed'
+        if (resp.status === 401) {
+          userMessage = 'Authentication failed. Please refresh the page and try again.'
+        } else if (resp.status === 403) {
+          userMessage = 'You do not have permission to perform this action.'
+        } else if (resp.status === 429) {
+          userMessage = 'Too many requests. Please wait a moment and try again.'
+        } else if (resp.status >= 500) {
+          userMessage = 'Server error. Please try again in a moment.'
+        }
+        
+        throw new Error(errData.error || userMessage)
       }
+      
       const responseData = await resp.json()
-      console.log(`[ChatGenerator] Response from ${gen.activeTab}:`, responseData)
+      console.log(`✅ [ChatGenerator] Success response from ${gen.activeTab}:`, responseData)
       
       if (!responseData.success) {
         throw new Error(responseData.error || 'Generation failed')
@@ -671,10 +716,18 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
       // Poll for results every 3 seconds
       const pollForResult = async (): Promise<void> => {
         try {
+          // Get fresh session token for each poll
+          const { data: { session: pollSession } } = await supabase.auth.getSession()
+          if (!pollSession?.access_token) {
+            console.error('No valid session for polling')
+            return
+          }
+          
           const statusResp = await fetch(`${CHECK_JOB_STATUS_ENDPOINT}?jobId=${job.id}`, {
             method: 'GET',
             headers: {
-              'Authorization': `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`
+              'Authorization': `Bearer ${pollSession.access_token}`,
+              'Content-Type': 'application/json'
             }
           })
 
