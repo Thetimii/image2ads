@@ -36,28 +36,7 @@ const CookieBanner = () => {
   useEffect(() => {
     setMounted(true);
     
-    // Check localStorage and database for preferences
-    const checkPreferences = () => {
-      const cookieConsent = localStorage.getItem('cookieConsent');
-      const savedPreferences = localStorage.getItem('cookiePreferences');
-      
-      if (!cookieConsent) {
-        // Show banner after a short delay for better UX
-        const timer = setTimeout(() => {
-            setShowBanner(true);
-          }, 1000);
-          return () => clearTimeout(timer);
-        } else if (savedPreferences) {
-          // Apply saved preferences from localStorage
-          const parsedPreferences = JSON.parse(savedPreferences);
-          setPreferences(parsedPreferences);
-          applyPreferences(parsedPreferences);
-        }
-        return;
-      }
-      
-      setCurrentUser(user);
-      
+    const checkPreferences = async () => {
       // Check for saved preferences in database if user is logged in
       if (user) {
         const { data: profile, error } = await supabase
@@ -108,30 +87,8 @@ const CookieBanner = () => {
       }
     };
     
-    // Listen for auth state changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event === 'SIGNED_IN' && session?.user) {
-        console.log('User signed in, checking for cookie preferences to sync');
-        setCurrentUser(session.user);
-        
-        // Check if user has localStorage preferences to sync to database
-        const savedPreferences = localStorage.getItem('cookiePreferences');
-        if (savedPreferences) {
-          const parsedPreferences = JSON.parse(savedPreferences);
-          console.log('Syncing localStorage preferences to database after signin');
-          await applyPreferences(parsedPreferences);
-        }
-      } else if (event === 'SIGNED_OUT') {
-        setCurrentUser(null);
-      }
-    });
-    
-    getUser();
-    
-    return () => {
-      subscription.unsubscribe();
-    };
-  }, []);
+    checkPreferences();
+  }, [user]);
 
   const applyPreferences = async (prefs: CookiePreferences) => {
     if (typeof window === 'undefined') return;
