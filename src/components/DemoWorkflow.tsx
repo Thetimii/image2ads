@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import Image from 'next/image'
 // Using basic icons instead of lucide-react
 import { createClient } from '@/lib/supabase/client'
 
@@ -96,9 +97,11 @@ export default function DemoWorkflow({ isOpen, onClose, onComplete }: DemoWorkfl
                 className="text-center space-y-6"
               >
                 <div className="relative">
-                  <img
+                  <Image
                     src={DEMO_MOCKUP_URL}
                     alt="Demo product"
+                    width={256}
+                    height={256}
                     className="w-48 h-48 sm:w-64 sm:h-64 object-cover mx-auto rounded-xl shadow-lg"
                   />
                   <div className="absolute -top-2 -right-2 bg-green-500 text-white px-3 py-1 rounded-full text-sm font-medium">
@@ -134,9 +137,11 @@ export default function DemoWorkflow({ isOpen, onClose, onComplete }: DemoWorkfl
                   <div>
                     <h3 className="text-base font-semibold text-gray-900 mb-2">Your Selected Image</h3>
                     <div className="w-full bg-gray-50 rounded-lg p-2">
-                      <img
+                      <Image
                         src={DEMO_MOCKUP_URL}
                         alt="Selected demo product"
+                        width={400}
+                        height={300}
                         className="w-full h-auto object-contain rounded-lg shadow-sm max-h-48"
                       />
                     </div>
@@ -246,9 +251,11 @@ export default function DemoWorkflow({ isOpen, onClose, onComplete }: DemoWorkfl
                   <div className="text-center space-y-2">
                     <h4 className="text-sm font-semibold text-gray-700">Original Image</h4>
                     <div className="w-full bg-gray-50 rounded-lg p-2">
-                      <img
+                      <Image
                         src={DEMO_MOCKUP_URL}
                         alt="Original demo product"
+                        width={400}
+                        height={300}
                         className="w-full h-auto object-contain rounded-lg shadow-sm max-h-48"
                       />
                     </div>
@@ -256,9 +263,11 @@ export default function DemoWorkflow({ isOpen, onClose, onComplete }: DemoWorkfl
                   <div className="text-center space-y-2">
                     <h4 className="text-sm font-semibold text-gray-700">Generated Ad</h4>
                     <div className="w-full bg-gray-50 rounded-lg p-2 relative">
-                      <img
+                      <Image
                         src={DEMO_RESULT_URL}
                         alt="Generated demo ad"
+                        width={400}
+                        height={300}
                         className="w-full h-auto object-contain rounded-lg shadow-sm max-h-48"
                       />
                       <div className="absolute -top-1 -right-1 bg-gradient-to-r from-blue-500 to-purple-600 text-white px-2 py-1 rounded-full text-xs font-medium">
