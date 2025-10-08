@@ -160,6 +160,20 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
         console.log('Loading jobs from database...')
         console.log('User ID:', user.id)
         console.log('Supabase client exists:', !!supabase)
+        
+        // Check if we have a valid session
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+        console.log('Session check:', { 
+          hasSession: !!session, 
+          userId: session?.user?.id, 
+          sessionError: sessionError?.message 
+        })
+        
+        if (!session) {
+          console.error('❌ No valid session found! Cannot load jobs.')
+          return
+        }
+        
         console.log('About to query jobs table...')
         
         // Get only recent jobs (last 10) to speed up initial load
