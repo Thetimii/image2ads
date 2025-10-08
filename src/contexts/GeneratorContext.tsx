@@ -73,56 +73,51 @@ export function GeneratorProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<GeneratorState>(initialState)
   const pathname = usePathname()
 
-  // SECURITY FIX: Only clear localStorage on explicit signout to prevent user data leakage
-  // Don't clear automatically on every load - that destroys user session and causes loops
+  // Debug guard - helps confirm context isn't resetting unexpectedly
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      // Listen for auth state changes and clear only on signout
-      import('@/lib/supabase/client').then(({ createClient }) => {
-        const supabase = createClient()
-        
-        const { data: { subscription } } = supabase.auth.onAuthStateChange((event: string) => {
-          if (event === 'SIGNED_OUT') {
-            localStorage.removeItem('generatorHistories')
-            localStorage.removeItem('activeGeneratorTab')
-            console.log('🔥 Cleared localStorage on user signout')
-          }
-        })
+    console.log('🧠 GeneratorContext initialized. Active tab:', state.activeTab)
+  }, [])
 
-        return () => subscription.unsubscribe()
+  // SECURITY FIX: Only clear localStorage on explicit signout to prevent user data leakage
+  // Don't clear automatically on every load - that destroys user session and causes loops  
+  useEffect(() => {
+    let subscription: { unsubscribe: () => void } | null = null
+
+    const setupListener = async () => {
+      const { createClient } = await import('@/lib/supabase/client')
+      const supabase = createClient()
+      const { data } = supabase.auth.onAuthStateChange((event) => {
+        if (event === 'SIGNED_OUT') {
+          localStorage.removeItem('generatorHistories')
+          localStorage.removeItem('activeGeneratorTab')
+          console.log('🔥 Cleared localStorage on user signout')
+        }
       })
+      subscription = data.subscription
+    }
+
+    setupListener()
+
+    return () => {
+      if (subscription) {
+        subscription.unsubscribe()
+        console.log('🧹 Unsubscribed auth listener')
+      }
     }
   }, [])
 
-  // Sync activeTab with URL pathname
+  // Sync activeTab with URL pathname - prevent double render loop
   useEffect(() => {
-    const pathSegments = pathname.split('/')
-    const lastSegment = pathSegments[pathSegments.length - 1]
-    
-    let urlMode: GeneratorMode | null = null
-    
-    // Map URL segments to generator modes
-    switch (lastSegment) {
-      case 'text-to-image':
-        urlMode = 'text-to-image'
-        break
-      case 'image-to-image':
-        urlMode = 'image-to-image'
-        break
-      case 'text-to-video':
-        urlMode = 'text-to-video'
-        break
-      case 'image-to-video':
-        urlMode = 'image-to-video'
-        break
-      default:
-        urlMode = 'text-to-image' // Default fallback
-    }
-    
-    if (urlMode && state.activeTab !== urlMode) {
-      setState(prev => ({ ...prev, activeTab: urlMode! }))
-    }
-  }, [pathname, state.activeTab])
+    const lastSegment = pathname.split('/').pop() || ''
+    const urlMode = ['text-to-image','image-to-image','text-to-video','image-to-video']
+      .includes(lastSegment)
+      ? (lastSegment as GeneratorMode)
+      : 'text-to-image'
+
+    setState(prev => (
+      prev.activeTab === urlMode ? prev : { ...prev, activeTab: urlMode }
+    ))
+  }, [pathname])
 
   // Set active tab (NO localStorage to prevent user data leakage)
   const setActiveTab = (tab: GeneratorMode) => {
@@ -145,6 +140,7 @@ export function GeneratorProvider({ children }: { children: ReactNode }) {
     setState(prev => ({ ...prev, error }))
 
   const pushMessage = (tab: GeneratorMode, message: ChatMessage) => {
+    console.log('🔍 pushMessage called for tab:', tab, 'message:', message.role, message.id)
     setState(prev => {
       // Check if message already exists to prevent duplicates
       // Check by both id AND jobId + role combination to prevent job-based duplicates
@@ -157,13 +153,15 @@ export function GeneratorProvider({ children }: { children: ReactNode }) {
         return prev // Return unchanged state
       }
       
-      return {
+      const newState = {
         ...prev,
         histories: {
           ...prev.histories,
           [tab]: [...prev.histories[tab], message]
         }
       }
+      console.log('✅ Message pushed to state, new count for', tab, ':', newState.histories[tab].length)
+      return newState
     })
   }
 

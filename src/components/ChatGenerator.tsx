@@ -161,30 +161,39 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
   useEffect(() => {
     activeTimeouts.current.forEach(timeoutId => clearTimeout(timeoutId))
     activeTimeouts.current.clear()
+    activePolling.current.clear() // Clear active polling to prevent stale loops
     hasLoadedJobs.current = false // Reset job loading flag for new user
-    console.log('🔄 User changed, reset hasLoadedJobs flag')
+    console.log('🔄 User changed, reset hasLoadedJobs flag and cleared polling')
   }, [user.id])
 
-  // Load and poll jobs from database - this is the source of truth
+  // ✅ Load and poll jobs once, after client mount & valid user
   useEffect(() => {
-    // CRITICAL: Only run once per user and prevent loops
-    if (!user || hasLoadedJobs.current) {
-      console.log('🚫 Jobs loading skipped - user:', !!user, 'hasLoaded:', hasLoadedJobs.current)
+    if (!user?.id) return
+
+    // Wait until component is mounted
+    if (!isMounted) {
+      console.log('� Waiting for mount before loading jobs...')
       return
     }
-    
-    console.log('✅ Setting hasLoadedJobs.current = true and starting job load')
+
+    // Prevent duplicate loads
+    if (hasLoadedJobs.current) {
+      console.log('⚠️ Jobs already loaded — skipping duplicate fetch')
+      return
+    }
+
     hasLoadedJobs.current = true
-    
-    const loadAndPollJobs = async () => {
-      
+    console.log('✅ Starting initial job load')
+
+    const loadJobs = async () => {
+      setIsLoadingHistory(true)
       const startTime = performance.now()
+      
       try {
         console.log('💾 Loading jobs from database...')
         console.log('👤 User ID:', user.id)
         
         // CRITICAL: Check if we have a valid session before querying
-        // Even though user prop exists, the Supabase client needs a fresh session
         const { data: { session }, error: sessionError } = await supabase.auth.getSession()
         console.log('🔐 Session check:', { 
           hasSession: !!session, 
@@ -194,7 +203,6 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
         
         if (!session) {
           console.error('❌ No valid session found! Cannot load jobs.')
-          console.error('This usually means the auth cookie is missing or expired.')
           return
         }
         
@@ -213,16 +221,17 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
 
         if (error) {
           console.error('Error loading jobs:', error)
-          // Don't return early - let finally block set loading to false
-        } else if (!jobs || jobs.length === 0) {
-          console.log('No jobs found')
-          // Don't return early - let finally block set loading to false  
-        } else {
+          return
+        }
+
+        if (!jobs || jobs.length === 0) {
+          console.log('ℹ️ No jobs found')
+          return
+        }
 
         // Reverse to get chronological order
         jobs.reverse()
-
-        console.log(`Found ${jobs.length} jobs:`, jobs)
+        console.log(`✅ Loaded ${jobs.length} jobs`)
 
         // Convert jobs to chat messages and organize by type
         const jobsByType: Record<keyof typeof gen.histories, any[]> = {
@@ -331,24 +340,26 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
 
         console.log(`⏱️ Total load time: ${(performance.now() - startTime).toFixed(0)}ms`)
         
-        } // End of else block for jobs processing
-
+        // Log successful job loading into state
+        const totalMessages = Object.values(gen.histories).reduce((sum, history) => sum + history.length, 0)
+        console.log(`✅ Jobs loaded into state: ${jobs.length} jobs converted to ${totalMessages} messages`)
+        
       } catch (error) {
-        console.error('Error in loadAndPollJobs:', error)
+        console.error('Error loading jobs:', error)
       } finally {
         // Mark loading as complete
         setIsLoadingHistory(false)
       }
     }
     
-    // Load jobs immediately (no timeout needed)
-    loadAndPollJobs().then(() => {
+    // Fire once, after mount
+    loadJobs().then(() => {
       // Scroll to bottom after jobs and media are loaded
       setTimeout(() => {
         bottomRef.current?.scrollIntoView({ behavior: 'instant', block: 'end' })
       }, 500)
     })
-  }, [user?.id]) // Only re-run when user changes
+  }, [isMounted, user?.id]) // CRITICAL: Both deps needed - isMounted prevents race condition, user?.id prevents stale data
 
   const getSignedUrlForJob = async (job: any, tab: keyof typeof gen.histories, messageId: string) => {
     try {
@@ -925,7 +936,12 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
       })
 
     return () => {
-      supabase.removeChannel(channel)
+      try {
+        supabase.removeChannel(channel)
+        console.log('🧹 Realtime channel unsubscribed successfully')
+      } catch (error) {
+        console.error('Error unsubscribing realtime channel:', error)
+      }
     }
   }, [user.id]) // Only depend on user.id, supabase is now stable
 
@@ -1059,7 +1075,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
           </div>
         )}
         {history.map(m => (
-            <div key={`${m.id}-${m.createdAt}`} className={`flex w-full ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+            <div key={`${m.id}-${m.role}-${m.jobId || ''}`} className={`flex w-full ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
             <div className={`${m.role === 'user' ? 'bg-purple-600 text-white rounded-2xl rounded-br-sm' : 'bg-white border border-gray-200 rounded-2xl rounded-bl-sm'} px-3 sm:px-4 py-2 sm:py-3 shadow-sm text-xs sm:text-sm max-w-[85%] sm:max-w-[75%] md:max-w-[65%]`}>
               <div className="whitespace-pre-wrap leading-relaxed break-words">
                 {m.content}
