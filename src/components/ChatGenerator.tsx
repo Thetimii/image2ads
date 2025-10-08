@@ -271,13 +271,27 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
         console.log(`[ChatGenerator] Starting image upload...`)
         console.log(`[ChatGenerator] File details:`, { name: localFile.name, size: localFile.size, type: localFile.type })
         
-        const fileName = `${user.id}/${Date.now()}-${localFile.name}`
+        // Create unique filename to avoid conflicts
+        const timestamp = Date.now()
+        const randomId = Math.random().toString(36).substring(2, 8)
+        const fileName = `${user.id}/${timestamp}-${randomId}-${localFile.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`
         console.log(`[ChatGenerator] Upload filename: ${fileName}`)
+        console.log(`[ChatGenerator] Starting upload to uploads bucket...`)
         
-        const { data: uploadData, error: uploadErr } = await supabase.storage.from('uploads').upload(fileName, localFile)
+        // Add timeout to upload to prevent hanging
+        const uploadPromise = supabase.storage.from('uploads').upload(fileName, localFile, {
+          upsert: true // Allow overwriting if file exists
+        })
+        
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Upload timeout after 30 seconds')), 30000)
+        )
+        
+        const { data: uploadData, error: uploadErr } = await Promise.race([uploadPromise, timeoutPromise]) as any
+        
         if (uploadErr) {
           console.error(`[ChatGenerator] Upload error:`, uploadErr)
-          throw new Error(uploadErr.message)
+          throw new Error(`Upload failed: ${uploadErr.message}`)
         }
         console.log(`[ChatGenerator] Upload successful:`, uploadData)
         
@@ -288,9 +302,12 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
           original_name: localFile.name,
           folder_id: null
         }).select().single()
+        
         if (imageDbErr) {
           console.error(`[ChatGenerator] Image DB error:`, imageDbErr)
-          throw new Error(imageDbErr.message)
+          // Clean up uploaded file if DB insert fails
+          await supabase.storage.from('uploads').remove([uploadData.path])
+          throw new Error(`Database error: ${imageDbErr.message}`)
         }
         console.log(`[ChatGenerator] Image record created:`, imageData)
         imageId = imageData.id
