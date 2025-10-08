@@ -1,6 +1,7 @@
 'use client'
 
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react'
+import { usePathname } from 'next/navigation'
 
 export interface ChatMessage {
   id: string
@@ -69,14 +70,40 @@ const initialState: GeneratorState = {
 
 export function GeneratorProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<GeneratorState>(initialState)
+  const pathname = usePathname()
 
-  // Load last active tab from localStorage
+  // Sync activeTab with URL pathname
   useEffect(() => {
-    const savedTab = localStorage.getItem('activeGeneratorTab') as GeneratorMode
-    if (savedTab) {
-      setState(prev => ({ ...prev, activeTab: savedTab }))
+    const pathSegments = pathname.split('/')
+    const lastSegment = pathSegments[pathSegments.length - 1]
+    
+    let urlMode: GeneratorMode | null = null
+    
+    // Map URL segments to generator modes
+    switch (lastSegment) {
+      case 'text-to-image':
+        urlMode = 'text-to-image'
+        break
+      case 'image-to-image':
+        urlMode = 'image-to-image'
+        break
+      case 'text-to-video':
+        urlMode = 'text-to-video'
+        break
+      case 'image-to-video':
+        urlMode = 'image-to-video'
+        break
+      default:
+        // Fallback to localStorage or default
+        const savedTab = localStorage.getItem('activeGeneratorTab') as GeneratorMode
+        urlMode = savedTab || 'text-to-image'
     }
-  }, [])
+    
+    if (urlMode && state.activeTab !== urlMode) {
+      setState(prev => ({ ...prev, activeTab: urlMode! }))
+      localStorage.setItem('activeGeneratorTab', urlMode)
+    }
+  }, [pathname, state.activeTab])
 
   // Save active tab to localStorage
   const setActiveTab = (tab: GeneratorMode) => {

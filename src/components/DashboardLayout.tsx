@@ -149,7 +149,7 @@ export default function DashboardLayout({ user, profile, children, onDemoOpen }:
           {/* User info */}
           <div className="px-6 py-4 border-b border-gray-200 flex-shrink-0">
             <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full flex items-center justify-center">
+              <div className="w-14 h-9 bg-gradient-to-r from-blue-500 to-purple-500 rounded-2xl flex items-center justify-center">
                 <span className="text-white font-semibold text-sm">
                   {profile.full_name ? profile.full_name.charAt(0).toUpperCase() : user.email?.charAt(0).toUpperCase()}
                 </span>

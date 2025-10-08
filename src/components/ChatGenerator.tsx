@@ -510,7 +510,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
                     <p className="text-xs text-gray-500">
                       Supports JPG, PNG up to 10MB
                     </p>
-                    <div className="bg-green-50 border border-green-200 px-3 py-1 rounded-full">
+                    <div className="bg-green-50 border border-green-200 px-3 py-1 rounded-xl">
                       <span className="text-xs font-medium text-green-700">
                         {gen.activeTab === 'image-to-video' ? '8 credits per video' : '1 credit per image'}
                       </span>
@@ -528,7 +528,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
                     <p className="text-xs text-gray-400">
                       Example: "8-second dolly shot of a luxury perfume bottle rotating on marble, soft lighting, elegant motion blur"
                     </p>
-                    <div className="bg-orange-50 border border-orange-200 px-3 py-1 rounded-full">
+                    <div className="bg-orange-50 border border-orange-200 px-3 py-1 rounded-xl">
                       <span className="text-xs font-medium text-orange-700">8 credits per video</span>
                     </div>
                   </div>
@@ -544,7 +544,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
                     <p className="text-xs text-gray-400">
                       Example: "Luxury watch on marble surface, dramatic lighting, macro lens, professional product photography"
                     </p>
-                    <div className="bg-green-50 border border-green-200 px-3 py-1 rounded-full">
+                    <div className="bg-green-50 border border-green-200 px-3 py-1 rounded-xl">
                       <span className="text-xs font-medium text-green-700">1 credit per image</span>
                     </div>
                   </div>
