@@ -126,6 +126,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
   const [isSubmitting, setIsSubmitting] = useState(false)
   const activeTimeouts = useRef<Set<NodeJS.Timeout>>(new Set())
   const activePolling = useRef<Set<string>>(new Set()) // Track active polling jobs
+  const hasLoadedJobs = useRef(false) // Prevent infinite job loading
   const [isMounted, setIsMounted] = useState(false) // Client-side only flag
   const [isLoadingHistory, setIsLoadingHistory] = useState(true) // Track if we're loading jobs from DB
 
@@ -156,15 +157,29 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
     }
   }, [])
 
-  // Clear timeouts when user changes
+  // Clear timeouts when user changes and reset job loading flag
   useEffect(() => {
     activeTimeouts.current.forEach(timeoutId => clearTimeout(timeoutId))
     activeTimeouts.current.clear()
+    hasLoadedJobs.current = false // Reset job loading flag for new user
+    console.log('🔄 User changed, reset hasLoadedJobs flag')
   }, [user.id])
 
   // Load and poll jobs from database - this is the source of truth
   useEffect(() => {
+    console.log('🎯 useEffect triggered for job loading. hasLoadedJobs.current:', hasLoadedJobs.current)
+    
+    // CRITICAL: Only run once per mount using ref guard
+    if (hasLoadedJobs.current) {
+      console.log('🚫 Jobs already loaded (ref guard), skipping')
+      return
+    }
+    
+    console.log('✅ Setting hasLoadedJobs.current = true and starting job load')
+    hasLoadedJobs.current = true
+    
     const loadAndPollJobs = async () => {
+      
       const startTime = performance.now()
       try {
         console.log('💾 Loading jobs from database...')
@@ -260,23 +275,31 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
           
           tabJobs.forEach(job => {
             const alreadyHasAssistant = existingMessages.some(m => m.jobId === job.id && m.role === 'assistant')
-            const alreadyHasUser = existingMessages.some(m => m.id === `user-${job.id}`)
+            const alreadyHasUser = existingMessages.some(m => m.jobId === job.id && m.role === 'user')
+            
+            // Skip if both messages already exist for this job
+            if (alreadyHasUser && alreadyHasAssistant) {
+              console.log('🚫 Job messages already exist, skipping:', job.id)
+              return
+            }
+            
             // Only add messages if they don't exist
             if (!alreadyHasUser) {
-            // Add user message
-            const userMessage: ChatMessage = {
-              id: `user-${job.id}`,
-              role: 'user',
-              content: job.prompt,
-              createdAt: new Date(job.created_at).getTime()
-            }
+              // Add user message with unique ID
+              const userMessage: ChatMessage = {
+                id: generateId(), // Use generateId() for truly unique keys
+                role: 'user',
+                content: job.prompt,
+                createdAt: new Date(job.created_at).getTime(),
+                jobId: job.id // Store jobId for reference
+              }
               gen.pushMessage(tabKey, userMessage)
             }
 
             let assistantMessage: ChatMessage | undefined
             if (!alreadyHasAssistant) {
               assistantMessage = {
-                id: `assistant-${job.id}`,
+                id: generateId(), // Use generateId() for truly unique keys
                 role: 'assistant',
                 content: job.status === 'completed' ? `${job.result_type === 'video' ? 'Video' : 'Image'} generated ✅` : 
                         job.status === 'failed' ? (job.error_message || 'Generation failed') :
@@ -319,18 +342,15 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
         setIsLoadingHistory(false)
       }
     }
-
-    // Load jobs after a short delay to let context initialize
-    const timeoutId = setTimeout(() => {
-      loadAndPollJobs().then(() => {
-        // Scroll to bottom after jobs and media are loaded
-        setTimeout(() => {
-          bottomRef.current?.scrollIntoView({ behavior: 'instant', block: 'end' })
-        }, 1000)
-      })
-    }, 300)
-    return () => clearTimeout(timeoutId)
-  }, [user.id]) // Only run when user changes
+    
+    // Load jobs immediately (no timeout needed)
+    loadAndPollJobs().then(() => {
+      // Scroll to bottom after jobs and media are loaded
+      setTimeout(() => {
+        bottomRef.current?.scrollIntoView({ behavior: 'instant', block: 'end' })
+      }, 500)
+    })
+  }, []) // Empty dependency array - only run once on mount
 
   const getSignedUrlForJob = async (job: any, tab: keyof typeof gen.histories, messageId: string) => {
     try {
@@ -1038,7 +1058,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
           </div>
         )}
         {history.map(m => (
-            <div key={m.id} className={`flex w-full ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+            <div key={`${m.id}-${m.createdAt}`} className={`flex w-full ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
             <div className={`${m.role === 'user' ? 'bg-purple-600 text-white rounded-2xl rounded-br-sm' : 'bg-white border border-gray-200 rounded-2xl rounded-bl-sm'} px-3 sm:px-4 py-2 sm:py-3 shadow-sm text-xs sm:text-sm max-w-[85%] sm:max-w-[75%] md:max-w-[65%]`}>
               <div className="whitespace-pre-wrap leading-relaxed break-words">
                 {m.content}

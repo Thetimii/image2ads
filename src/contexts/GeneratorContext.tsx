@@ -71,12 +71,15 @@ const initialState: GeneratorState = {
 
 export function GeneratorProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<GeneratorState>(initialState)
-  const [isClient, setIsClient] = useState(false)
   const pathname = usePathname()
 
-  // Set client flag after hydration to prevent SSR mismatch
+  // CRITICAL SECURITY FIX: Clear localStorage to prevent user data leakage between accounts
   useEffect(() => {
-    setIsClient(true)
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('generatorHistories')
+      localStorage.removeItem('activeGeneratorTab')
+      console.log('🔥 SECURITY FIX: Cleared localStorage to prevent user data leakage')
+    }
   }, [])
 
   // Sync activeTab with URL pathname
@@ -109,10 +112,10 @@ export function GeneratorProvider({ children }: { children: ReactNode }) {
     }
   }, [pathname, state.activeTab])
 
-  // Save active tab to localStorage
+  // Set active tab (NO localStorage to prevent user data leakage)
   const setActiveTab = (tab: GeneratorMode) => {
     setState(prev => ({ ...prev, activeTab: tab }))
-    localStorage.setItem('activeGeneratorTab', tab)
+    // REMOVED: localStorage.setItem() to prevent user data leakage between accounts
   }
 
   const setPrompt = (prompt: string) => setState(prev => ({ ...prev, prompt }))
