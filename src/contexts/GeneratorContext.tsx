@@ -133,23 +133,45 @@ export function GeneratorProvider({ children }: { children: ReactNode }) {
     setState(prev => ({ ...prev, error }))
 
   const pushMessage = (tab: GeneratorMode, message: ChatMessage) => {
-    setState(prev => ({
-      ...prev,
-      histories: {
-        ...prev.histories,
-        [tab]: [...prev.histories[tab], message]
+    setState(prev => {
+      // Check if message already exists to prevent duplicates
+      // Check by both id AND jobId + role combination to prevent job-based duplicates
+      const exists = prev.histories[tab].some(m => 
+        m.id === message.id || 
+        (message.jobId && m.jobId === message.jobId && m.role === message.role)
+      )
+      if (exists) {
+        console.log('🚫 Message already exists, skipping:', message.id, 'jobId:', message.jobId)
+        return prev // Return unchanged state
       }
-    }))
+      
+      return {
+        ...prev,
+        histories: {
+          ...prev.histories,
+          [tab]: [...prev.histories[tab], message]
+        }
+      }
+    })
   }
 
   const updateMessage = (tab: GeneratorMode, id: string, patch: Partial<ChatMessage>) => {
-    setState(prev => ({
-      ...prev,
-      histories: {
-        ...prev.histories,
-        [tab]: prev.histories[tab].map(m => m.id === id ? { ...m, ...patch } : m)
+    setState(prev => {
+      // Check if message exists before updating
+      const messageExists = prev.histories[tab].some(m => m.id === id)
+      if (!messageExists) {
+        console.log('🚫 Message not found for update, skipping:', id)
+        return prev // Return unchanged state
       }
-    }))
+      
+      return {
+        ...prev,
+        histories: {
+          ...prev.histories,
+          [tab]: prev.histories[tab].map(m => m.id === id ? { ...m, ...patch } : m)
+        }
+      }
+    })
   }
 
   const setResolution = (tab: GeneratorMode, res: '1K' | '2K' | '4K') => {

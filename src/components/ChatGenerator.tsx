@@ -215,13 +215,11 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
 
         if (error) {
           console.error('Error loading jobs:', error)
-          return
-        }
-
-        if (!jobs || jobs.length === 0) {
+          // Don't return early - let finally block set loading to false
+        } else if (!jobs || jobs.length === 0) {
           console.log('No jobs found')
-          return
-        }
+          // Don't return early - let finally block set loading to false  
+        } else {
 
         // Reverse to get chronological order
         jobs.reverse()
@@ -334,6 +332,8 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
         })
 
         console.log(`⏱️ Total load time: ${(performance.now() - startTime).toFixed(0)}ms`)
+        
+        } // End of else block for jobs processing
 
       } catch (error) {
         console.error('Error in loadAndPollJobs:', error)
