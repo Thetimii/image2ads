@@ -118,6 +118,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
   const activeTimeouts = useRef<Set<NodeJS.Timeout>>(new Set())
   const activePolling = useRef<Set<string>>(new Set()) // Track active polling jobs
   const [isMounted, setIsMounted] = useState(false) // Client-side only flag
+  const [isLoadingHistory, setIsLoadingHistory] = useState(true) // Track if we're loading jobs from DB
 
   const meta = TAB_META[gen.activeTab]
   const history = gen.histories[gen.activeTab]
@@ -159,6 +160,23 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
       try {
         console.log('💾 Loading jobs from database...')
         console.log('👤 User ID:', user.id)
+        
+        // CRITICAL: Check if we have a valid session before querying
+        // Even though user prop exists, the Supabase client needs a fresh session
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+        console.log('🔐 Session check:', { 
+          hasSession: !!session, 
+          userId: session?.user?.id, 
+          sessionError: sessionError?.message 
+        })
+        
+        if (!session) {
+          console.error('❌ No valid session found! Cannot load jobs.')
+          console.error('This usually means the auth cookie is missing or expired.')
+          return
+        }
+        
+        console.log('✅ Session valid, querying jobs table...')
         
         // Get only recent jobs (last 10) to speed up initial load
         const { data: jobs, error } = await supabase
@@ -287,6 +305,9 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
 
       } catch (error) {
         console.error('Error in loadAndPollJobs:', error)
+      } finally {
+        // Mark loading as complete
+        setIsLoadingHistory(false)
       }
     }
 
@@ -882,7 +903,17 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
             </div>
           </div>
         )}
-        {history.length === 0 && (
+        {/* Show loading skeleton while fetching history */}
+        {isLoadingHistory && (
+          <div className="flex items-center justify-center h-full">
+            <div className="text-center">
+              <div className="w-8 h-8 border-4 border-purple-200 border-t-purple-600 rounded-full animate-spin mx-auto mb-3"></div>
+              <p className="text-sm text-gray-500">Loading your history...</p>
+            </div>
+          </div>
+        )}
+        {/* Show placeholder only when not loading and no history */}
+        {!isLoadingHistory && history.length === 0 && (
           <div className="flex items-center justify-center h-full">
             <div 
               onClick={requiresImage ? handleUploadClick : undefined}
