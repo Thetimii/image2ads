@@ -41,8 +41,9 @@ const CHECK_JOB_STATUS_ENDPOINT = `${SUPABASE_FUNCTIONS_BASE}/check-job-status`
 const TAB_META: Record<string, { title: string; subtitle: string; locked?: boolean; model: string; resultType: 'image' | 'video' }> = {
   'text-to-image': { title: '🖼️ Text to Image', subtitle: 'Generate product-ready visuals from ideas', model: 'gemini', resultType: 'image' },
   'image-to-image': { title: '🌅 Image to Image', subtitle: 'Transform or restyle an input image', model: 'gemini', resultType: 'image' },
-  'text-to-video': { title: '🎬 Text to Video', subtitle: 'Bring concepts to motion with AI video', locked: true, model: 'seedream', resultType: 'video' },
-  'image-to-video': { title: '🎥 Image to Video', subtitle: 'Animate a still into dynamic video', locked: true, model: 'seedream', resultType: 'video' },
+  // Switch video tabs to use sora-2 (user request) instead of seedream
+  'text-to-video': { title: '🎬 Text to Video', subtitle: 'Bring concepts to motion with AI video', locked: true, model: 'sora-2', resultType: 'video' },
+  'image-to-video': { title: '🎥 Image to Video', subtitle: 'Animate a still into dynamic video', locked: true, model: 'sora-2', resultType: 'video' },
 }
 
 const EXAMPLES: Record<string, Array<{ short: string; full: string }>> = {
@@ -106,7 +107,8 @@ const EXAMPLES: Record<string, Array<{ short: string; full: string }>> = {
 
 export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGeneratorProps) {
   const gen = useGenerator()
-  const supabase = createClient()
+  const supabaseRef = useRef(createClient())
+  const supabase = supabaseRef.current
   const [input, setInput] = useState('')
   const bottomRef = useRef<HTMLDivElement | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
@@ -114,7 +116,11 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
   const [localFile, setLocalFile] = useState<File | null>(null)
   const [localPreview, setLocalPreview] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [historyLoaded, setHistoryLoaded] = useState(false)
+  const activeTimeouts = useRef<Set<NodeJS.Timeout>>(new Set())
+  const activePolling = useRef<Set<string>>(new Set()) // Track active polling jobs
+  const isLoadingJobs = useRef(false) // Prevent concurrent job loads
+  const hasLoadedOnce = useRef(false) // Track if we've loaded jobs at least once
+  const [isMounted, setIsMounted] = useState(false) // Client-side only flag
 
   const meta = TAB_META[gen.activeTab]
   const history = gen.histories[gen.activeTab]
@@ -122,56 +128,286 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
   // Check if feature is locked: only locked if marked as locked AND user doesn't have stripe customer ID
   const isLocked = !!meta.locked && !profile?.stripe_customer_id
   
-
+  // Client-side only to prevent hydration mismatch
+  useEffect(() => {
+    setIsMounted(true)
+  }, [])
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+    // Use setTimeout to ensure DOM has updated
+    setTimeout(() => {
+      bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
+    }, 100)
   }, [history.length])
 
-  // Load chat history from localStorage on component mount (only once)
+  // Cleanup timeouts on unmount or user change
   useEffect(() => {
-    if (historyLoaded) return // Prevent multiple loads
-    
-    const savedHistories = localStorage.getItem(`chat-histories-${user.id}`)
-    if (savedHistories) {
-      try {
-        const parsed = JSON.parse(savedHistories)
-        
-        // Load saved histories without duplicating
-        Object.keys(parsed).forEach(tab => {
-          const tabKey = tab as keyof typeof gen.histories
-          if (parsed[tab]?.length > 0) {
-            // Check if this tab already has messages to prevent duplicates
-            const existingIds = new Set(gen.histories[tabKey].map(m => m.id))
-            
-            parsed[tab].forEach((msg: ChatMessage) => {
-              // Only add if message ID doesn't already exist
-              if (!existingIds.has(msg.id)) {
-                gen.pushMessage(tabKey, msg)
-              }
-            })
-          }
-        })
-        
-        setHistoryLoaded(true)
-      } catch (e) {
-        console.warn('Failed to load chat history:', e)
-        setHistoryLoaded(true)
-      }
-    } else {
-      setHistoryLoaded(true)
+    return () => {
+      // Clear all active timeouts when component unmounts
+      activeTimeouts.current.forEach(timeoutId => clearTimeout(timeoutId))
+      activeTimeouts.current.clear()
     }
-  }, [user.id, historyLoaded]) // Include historyLoaded to prevent re-runs
+  }, [])
 
-  // Reset history loaded flag when user changes
+  // Clear timeouts when user changes
   useEffect(() => {
-    setHistoryLoaded(false)
+    activeTimeouts.current.forEach(timeoutId => clearTimeout(timeoutId))
+    activeTimeouts.current.clear()
   }, [user.id])
 
-  // Save chat history to localStorage whenever it changes
+  // Load and poll jobs from database - this is the source of truth
   useEffect(() => {
-    localStorage.setItem(`chat-histories-${user.id}`, JSON.stringify(gen.histories))
-  }, [gen.histories, user.id])
+    const loadAndPollJobs = async () => {
+      // Prevent concurrent loads
+      if (isLoadingJobs.current) {
+        console.log('⏭️ Skipping job load - already loading')
+        return
+      }
+      
+      // Only load once per session (prevents hot reload from loading multiple times)
+      if (hasLoadedOnce.current) {
+        console.log('⏭️ Skipping job load - already loaded once')
+        return
+      }
+      
+      isLoadingJobs.current = true
+      hasLoadedOnce.current = true
+      const startTime = performance.now()
+      try {
+        console.log('Loading jobs from database...')
+        // Get only recent jobs (last 10) to speed up initial load
+        const { data: jobs, error } = await supabase
+          .from('jobs')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false })
+          .limit(10)
+
+        console.log(`⏱️ Jobs query took ${(performance.now() - startTime).toFixed(0)}ms`)
+
+        if (error) {
+          console.error('Error loading jobs:', error)
+          return
+        }
+
+        if (!jobs || jobs.length === 0) {
+          console.log('No jobs found')
+          return
+        }
+
+        // Reverse to get chronological order
+        jobs.reverse()
+
+        console.log(`Found ${jobs.length} jobs:`, jobs)
+
+        // Convert jobs to chat messages and organize by type
+        const jobsByType: Record<keyof typeof gen.histories, any[]> = {
+          'text-to-image': [],
+          'image-to-image': [],
+          'text-to-video': [],
+          'image-to-video': []
+        }
+
+        // Group jobs by result type
+        jobs.forEach(job => {
+          const tabKey = job.has_images 
+            ? (job.result_type === 'video' ? 'image-to-video' : 'image-to-image')
+            : (job.result_type === 'video' ? 'text-to-video' : 'text-to-image')
+          
+          jobsByType[tabKey].push(job)
+        })
+
+        // Batch fetch all signed URLs for completed jobs
+        const urlFetchStart = performance.now()
+        const completedJobs = jobs.filter(job => job.status === 'completed' && job.result_url)
+        console.log(`📦 Fetching ${completedJobs.length} signed URLs in parallel...`)
+        const signedUrlPromises = completedJobs.map(job => 
+          supabase.storage
+            .from('results')
+            .createSignedUrl(job.result_url, 3600)
+            .then(result => ({ jobId: job.id, signedUrl: result.data?.signedUrl }))
+            .catch(err => {
+              console.error(`Error getting signed URL for job ${job.id}:`, err)
+              return { jobId: job.id, signedUrl: null }
+            })
+        )
+        
+        const signedUrlResults = await Promise.all(signedUrlPromises)
+        console.log(`⏱️ Signed URLs fetched in ${(performance.now() - urlFetchStart).toFixed(0)}ms`)
+        const signedUrlMap = new Map(
+          signedUrlResults
+            .filter(result => result.signedUrl)
+            .map(result => [result.jobId, result.signedUrl])
+        )
+
+        // Update histories with jobs converted to messages
+        Object.entries(jobsByType).forEach(([tab, tabJobs]) => {
+          const tabKey = tab as keyof typeof gen.histories
+          const existingMessages = gen.histories[tabKey]
+          
+          tabJobs.forEach(job => {
+            const alreadyHasAssistant = existingMessages.some(m => m.jobId === job.id && m.role === 'assistant')
+            const alreadyHasUser = existingMessages.some(m => m.id === `user-${job.id}`)
+            // Only add messages if they don't exist
+            if (!alreadyHasUser) {
+            // Add user message
+            const userMessage: ChatMessage = {
+              id: `user-${job.id}`,
+              role: 'user',
+              content: job.prompt,
+              createdAt: new Date(job.created_at).getTime()
+            }
+              gen.pushMessage(tabKey, userMessage)
+            }
+
+            let assistantMessage: ChatMessage | undefined
+            if (!alreadyHasAssistant) {
+              assistantMessage = {
+                id: `assistant-${job.id}`,
+                role: 'assistant',
+                content: job.status === 'completed' ? `${job.result_type === 'video' ? 'Video' : 'Image'} generated ✅` : 
+                        job.status === 'failed' ? (job.error_message || 'Generation failed') :
+                        'Generating…',
+                createdAt: new Date(job.created_at).getTime() + 1000,
+                status: job.status === 'completed' ? 'complete' : 
+                        job.status === 'failed' ? 'error' : 'pending',
+                jobId: job.id,
+                // Add mediaUrl from batch fetch if available
+                ...(signedUrlMap.has(job.id) && {
+                  mediaUrl: signedUrlMap.get(job.id),
+                  mediaType: job.result_type === 'video' ? 'video' : 'image'
+                })
+              }
+              gen.pushMessage(tabKey, assistantMessage)
+            } else {
+              assistantMessage = existingMessages.find(m => m.jobId === job.id && m.role === 'assistant')
+              // Update existing message with mediaUrl if we fetched it
+              if (assistantMessage && signedUrlMap.has(job.id)) {
+                gen.updateMessage(tabKey, assistantMessage.id, {
+                  mediaUrl: signedUrlMap.get(job.id),
+                  mediaType: job.result_type === 'video' ? 'video' : 'image'
+                })
+              }
+            }
+
+            // If job is still pending/processing, start polling
+            if ((job.status === 'pending' || job.status === 'processing') && assistantMessage) {
+              startJobPolling(tabKey, assistantMessage.id, job.id)
+            }
+          })
+        })
+
+        console.log(`⏱️ Total load time: ${(performance.now() - startTime).toFixed(0)}ms`)
+
+      } catch (error) {
+        console.error('Error in loadAndPollJobs:', error)
+      } finally {
+        isLoadingJobs.current = false
+      }
+    }
+
+    // Load jobs after a short delay to let context initialize
+    const timeoutId = setTimeout(() => {
+      loadAndPollJobs().then(() => {
+        // Scroll to bottom after jobs and media are loaded
+        setTimeout(() => {
+          bottomRef.current?.scrollIntoView({ behavior: 'instant', block: 'end' })
+        }, 1000)
+      })
+    }, 300)
+    return () => clearTimeout(timeoutId)
+  }, [user.id]) // Only run when user changes
+
+  const getSignedUrlForJob = async (job: any, tab: keyof typeof gen.histories, messageId: string) => {
+    try {
+      const { data: signedUrl } = await supabase.storage
+        .from('results')
+        .createSignedUrl(job.result_url, 3600)
+
+      if (signedUrl?.signedUrl) {
+        gen.updateMessage(tab, messageId, {
+          mediaUrl: signedUrl.signedUrl,
+          mediaType: job.result_type === 'video' ? 'video' : 'image'
+        })
+      }
+    } catch (error) {
+      console.error('Error getting signed URL:', error)
+    }
+  }
+
+  const startJobPolling = (tab: keyof typeof gen.histories, messageId: string, jobId: string) => {
+    // Prevent duplicate polling for the same job
+    if (activePolling.current.has(jobId)) {
+      console.log(`🔄 [JobRecovery] Already polling job ${jobId}, skipping`)
+      return
+    }
+    console.log('[JobRecovery] startJobPolling INIT', { tab, messageId, jobId })
+    activePolling.current.add(jobId)
+    
+    const pollJob = async () => {
+      try {
+        console.log('[JobRecovery] pollJob tick', { jobId, tab, messageId })
+        // Call the status endpoint so backend can advance processing (important after refresh)
+        const statusResp = await fetch(`${CHECK_JOB_STATUS_ENDPOINT}?jobId=${jobId}`, {
+          method: 'GET',
+          headers: { 'Authorization': `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}` }
+        })
+
+        if (!statusResp.ok) {
+          console.error('[JobRecovery] Status endpoint error', statusResp.status)
+          const timeoutId = setTimeout(pollJob, 3000)
+          activeTimeouts.current.add(timeoutId)
+          return
+        }
+
+        const statusData = await statusResp.json()
+        console.log('[JobRecovery] statusData', statusData)
+
+        if (statusData.status === 'completed' && statusData.result_url) {
+          // Fetch signed URL
+          const { data: signedUrl } = await supabase.storage
+            .from('results')
+            .createSignedUrl(statusData.result_url, 3600)
+
+          gen.updateMessage(tab, messageId, {
+            status: 'complete',
+            content: `${tab.includes('video') ? 'Video' : 'Image'} generated ✅`,
+            mediaUrl: signedUrl?.signedUrl || null,
+            mediaType: tab.includes('video') ? 'video' : 'image'
+          })
+          activePolling.current.delete(jobId)
+          return
+        }
+
+        if (statusData.status === 'failed') {
+          gen.updateMessage(tab, messageId, {
+            status: 'error',
+            content: statusData.error || 'Generation failed'
+          })
+          activePolling.current.delete(jobId)
+          return
+        }
+
+        // Still processing
+        gen.updateMessage(tab, messageId, {
+          status: 'pending',
+            content: statusData.message || 'Generation in progress'
+        })
+        const timeoutId = setTimeout(pollJob, 3000)
+        activeTimeouts.current.add(timeoutId)
+      } catch (error) {
+        console.error('Error in polling:', error)
+        gen.updateMessage(tab, messageId, { 
+          status: 'error',
+          content: 'Error checking generation status'
+        })
+        activePolling.current.delete(jobId)
+      }
+    }
+
+    // Start polling immediately
+    pollJob()
+  }
 
   const handleExample = (fullPrompt: string) => {
     setInput(fullPrompt)
@@ -202,7 +438,6 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
   }
 
   const aspectOptions: { label: string; value: typeof gen.aspectRatio; ratio: string }[] = [
-    { label: '1:1', value: 'square', ratio: '1:1' },
     { label: '16:9', value: 'landscape', ratio: '16:9' },
     { label: '9:16', value: 'portrait', ratio: '9:16' },
   ]
@@ -246,6 +481,9 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
     }
     gen.pushMessage(gen.activeTab, userMsg)
 
+    // Capture the tab at the moment the generation starts so tab switches don't break updates
+    const tabAtRequest = gen.activeTab
+
     const assistantPlaceholder: ChatMessage = {
       id: generateId(),
       role: 'assistant',
@@ -253,36 +491,33 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
       createdAt: Date.now(),
       status: 'pending'
     }
-    gen.pushMessage(gen.activeTab, assistantPlaceholder)
+    gen.pushMessage(tabAtRequest, assistantPlaceholder)
 
     setInput('')
     
-    // Clear the local file and preview after sending
+    // Capture the local file BEFORE clearing it
+    const fileToUpload = localFile
+    
+    // Clear the local file and preview after sending (but we keep fileToUpload)
     setLocalFile(null)
     setLocalPreview(null)
 
     try {
       console.log(`[ChatGenerator] Setting isGenerating to true`)
-      gen.setIsGenerating(true)
+  gen.setIsGenerating(true)
+
+      console.log(`[ChatGenerator] CHECK - requiresImage:`, requiresImage, 'fileToUpload:', !!fileToUpload, 'fileToUpload object:', fileToUpload)
 
       // Upload image if needed
       let imageId: string | null = null
-      if (requiresImage && localFile) {
+      if (requiresImage && fileToUpload) {
         console.log(`[ChatGenerator] Starting image upload...`)
-        console.log(`[ChatGenerator] File details:`, { name: localFile.name, size: localFile.size, type: localFile.type })
+        console.log(`[ChatGenerator] File details:`, { name: fileToUpload.name, size: fileToUpload.size, type: fileToUpload.type })
         
-        // Simple filename - no special characters
-        const timestamp = Date.now()
-        const fileName = `${user.id}/${timestamp}-image.png`
+        const fileName = `${user.id}/${Date.now()}-${fileToUpload.name}`
         console.log(`[ChatGenerator] Upload filename: ${fileName}`)
-        console.log(`[ChatGenerator] File size: ${localFile.size} bytes`)
-        console.log(`[ChatGenerator] Starting upload...`)
         
-        const { data: uploadData, error: uploadErr } = await supabase.storage
-          .from('uploads')
-          .upload(fileName, localFile)
-        
-        console.log(`[ChatGenerator] Upload result:`, { data: uploadData, error: uploadErr })
+        const { data: uploadData, error: uploadErr } = await supabase.storage.from('uploads').upload(fileName, fileToUpload)
         
         if (uploadErr) {
           console.error(`[ChatGenerator] Upload error:`, uploadErr)
@@ -291,12 +526,21 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
         console.log(`[ChatGenerator] Upload successful:`, uploadData)
         
         console.log(`[ChatGenerator] Creating image record in database...`)
+        console.log(`[ChatGenerator] Image record payload:`, {
+          user_id: user.id,
+          file_path: uploadData.path,
+          original_name: fileToUpload.name,
+          folder_id: null
+        })
+        
         const { data: imageData, error: imageDbErr } = await supabase.from('images').insert({
           user_id: user.id,
           file_path: uploadData.path,
-          original_name: localFile.name,
+          original_name: fileToUpload.name,
           folder_id: null
         }).select().single()
+        
+        console.log(`[ChatGenerator] Database insert result - error:`, imageDbErr, 'data:', imageData)
         
         if (imageDbErr) {
           console.error(`[ChatGenerator] Image DB error:`, imageDbErr)
@@ -307,14 +551,27 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
         console.log(`[ChatGenerator] Image record created:`, imageData)
         imageId = imageData.id
       } else {
-        console.log(`[ChatGenerator] No image upload required (requiresImage: ${requiresImage}, localFile: ${!!localFile})`)
+        console.log(`[ChatGenerator] No image upload required (requiresImage: ${requiresImage}, fileToUpload: ${!!fileToUpload})`)
       }
+
+      console.log(`[ChatGenerator] About to create job...`)
+      console.log(`[ChatGenerator] Current state - imageId:`, imageId)
+      console.log(`[ChatGenerator] Current state - meta:`, meta)
+      console.log(`[ChatGenerator] Current state - aspectRatio:`, gen.aspectRatio)
 
       // Create job
       console.log(`[ChatGenerator] Creating job record...`)
+      // Attach aspect ratio suffix to model ONLY for video models (sora-2)
+      // Image models (gemini) don't need aspect ratio in the model name
+      const isVideoModel = meta.resultType === 'video'
+      const aspectSuffix = isVideoModel 
+        ? (gen.aspectRatio === 'landscape' ? '-landscape' : gen.aspectRatio === 'portrait' ? '-portrait' : '')
+        : ''
+      
+      const baseModel = meta.model === 'sora-2' ? 'sora-2' : meta.model
       const jobPayload: any = {
         user_id: user.id,
-        model: meta.model,
+        model: `${baseModel}${aspectSuffix}`,
         prompt: userMsg.content,
         status: 'pending',
         result_type: meta.resultType,
@@ -331,9 +588,12 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
       }
       console.log(`[ChatGenerator] Job created successfully:`, job)
 
-      const endpoint = ENDPOINT_MAP[gen.activeTab]
+      // Update the assistant message with the job ID so we can resume polling after refresh
+  gen.updateMessage(tabAtRequest, assistantPlaceholder.id, { jobId: job.id })
+
+      const endpoint = ENDPOINT_MAP[tabAtRequest]
       console.log(`[ChatGenerator] *** STARTING REQUEST ***`)
-      console.log(`[ChatGenerator] Active tab: ${gen.activeTab}`)
+  console.log(`[ChatGenerator] Active tab (live): ${gen.activeTab} | tabAtRequest (frozen): ${tabAtRequest}`)
       console.log(`[ChatGenerator] Endpoint: ${endpoint}`)
       console.log(`[ChatGenerator] JobId: ${job.id}`)
       console.log(`[ChatGenerator] Job data:`, job)
@@ -370,7 +630,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
       }
 
       // Task created successfully, now poll for results
-      gen.updateMessage(gen.activeTab, assistantPlaceholder.id, {
+      gen.updateMessage(tabAtRequest, assistantPlaceholder.id, {
         status: 'pending',
         content: 'Processing with AI...'
       })
@@ -392,56 +652,78 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
           const statusData = await statusResp.json()
 
           if (statusData.status === 'completed' && statusData.result_url) {
-            console.log(`[ChatGenerator] Generation completed! Result URL: ${statusData.result_url}`)
+            console.log(`[ChatGenerator] 🎉 GENERATION COMPLETED! Result URL: ${statusData.result_url}`)
             
             // Create signed URL - same as library does
+            console.log(`[ChatGenerator] 🔗 Creating signed URL...`)
             const { data: signedUrl } = await supabase.storage
               .from('results')
               .createSignedUrl(statusData.result_url, 3600)
 
+            console.log(`[ChatGenerator] 🔗 Signed URL result:`, signedUrl)
+            
             const mediaUrl = signedUrl?.signedUrl || ''
-            console.log(`[ChatGenerator] Final media URL: ${mediaUrl}`)
-            console.log(`[ChatGenerator] signedUrl data:`, signedUrl)
-            console.log(`[ChatGenerator] About to update message with:`, {
+            console.log(`[ChatGenerator] 🖼️ FINAL MEDIA URL: ${mediaUrl}`)
+            
+            if (!mediaUrl) {
+              console.error(`[ChatGenerator] ❌ NO MEDIA URL - CANNOT SHOW IMAGE!`)
+              console.error(`[ChatGenerator] signedUrl:`, signedUrl)
+              console.error(`[ChatGenerator] statusData:`, statusData)
+            }
+
+            console.log(`[ChatGenerator] 📝 Updating message with data:`, {
+              messageId: assistantPlaceholder.id,
+              activeTab: gen.activeTab,
               status: 'complete',
               content: meta.resultType === 'image' ? 'Image generated ✅' : 'Video generated ✅',
               mediaUrl,
-              mediaType: meta.resultType,
-              messageId: assistantPlaceholder.id,
-              activeTab: gen.activeTab
+              mediaType: meta.resultType
             })
 
-            gen.updateMessage(gen.activeTab, assistantPlaceholder.id, {
+            gen.updateMessage(tabAtRequest, assistantPlaceholder.id, {
               status: 'complete',
               content: meta.resultType === 'image' ? 'Image generated ✅' : 'Video generated ✅',
               mediaUrl,
               mediaType: meta.resultType
             })
             
-            console.log(`[ChatGenerator] Message update called successfully`)
+            console.log(`[ChatGenerator] ✅ MESSAGE UPDATE COMPLETED!`)
+            console.log(`[ChatGenerator] 🎯 Final message should show image with URL: ${mediaUrl}`)
+            
+            // Clear all active timeouts
+            activeTimeouts.current.forEach(timeoutId => clearTimeout(timeoutId))
+            activeTimeouts.current.clear()
             
             // Make sure to reset generating state
             gen.setIsGenerating(false)
+            console.log(`[ChatGenerator] 🔄 isGenerating set to false`)
             return
           }
 
           if (statusData.status === 'failed') {
+            // Clear all active timeouts
+            activeTimeouts.current.forEach(timeoutId => clearTimeout(timeoutId))
+            activeTimeouts.current.clear()
             gen.setIsGenerating(false)
             throw new Error(statusData.error || 'Generation failed')
           }
 
           // Still processing, continue polling
-          gen.updateMessage(gen.activeTab, assistantPlaceholder.id, {
+          gen.updateMessage(tabAtRequest, assistantPlaceholder.id, {
             status: 'pending',
             content: statusData.message || 'Still processing...'
           })
 
           // Poll again in 3 seconds
-          setTimeout(pollForResult, 3000)
+          const timeoutId = setTimeout(pollForResult, 3000)
+          activeTimeouts.current.add(timeoutId)
         } catch (error) {
           console.error('Polling error:', error)
+          // Clear all active timeouts
+          activeTimeouts.current.forEach(timeoutId => clearTimeout(timeoutId))
+          activeTimeouts.current.clear()
           gen.setIsGenerating(false)
-          gen.updateMessage(gen.activeTab, assistantPlaceholder.id, {
+          gen.updateMessage(tabAtRequest, assistantPlaceholder.id, {
             status: 'error',
             content: `Polling failed: ${error instanceof Error ? error.message : 'Unknown error'}`
           })
@@ -449,7 +731,8 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
       }
 
       // Start polling after 3 seconds
-      setTimeout(pollForResult, 3000)
+      const initialTimeoutId = setTimeout(pollForResult, 3000)
+      activeTimeouts.current.add(initialTimeoutId)
     } catch (e: any) {
       console.error(`[ChatGenerator] *** GENERATION ERROR ***`)
       console.error(`[ChatGenerator] Error for ${gen.activeTab}:`, e)
@@ -462,7 +745,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
         errorMessage = 'Request timed out after 30 seconds. Please try again.'
       }
       
-      gen.updateMessage(gen.activeTab, assistantPlaceholder.id, {
+      gen.updateMessage(tabAtRequest, assistantPlaceholder.id, {
         status: 'error',
         content: errorMessage
       })
@@ -471,6 +754,76 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
       setIsSubmitting(false)
     }
   }
+
+  // Realtime subscription: listen for job status changes so UI updates immediately even if polling misses or user refreshes
+  useEffect(() => {
+    const channel = supabase.channel('jobs-realtime')
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'jobs',
+        filter: `user_id=eq.${user.id}`
+      }, async (payload) => {
+        const newRow: any = payload.new
+        const jobId = newRow.id
+        const status = newRow.status
+        console.log(`[ChatGenerator][Realtime] Job ${jobId} updated to ${status}`)
+        console.log(`[ChatGenerator][Realtime] Payload:`, payload)
+        
+        // Find which tab this job belongs to by deriving from row (mirrors logic in loadAndPollJobs)
+        const tabKey: keyof typeof gen.histories = newRow.has_images
+          ? (newRow.result_type === 'video' ? 'image-to-video' : 'image-to-image')
+          : (newRow.result_type === 'video' ? 'text-to-video' : 'text-to-image')
+
+        console.log(`[ChatGenerator][Realtime] Determined tab: ${tabKey}`)
+
+        // Locate assistant message with this jobId
+        const messages = gen.histories[tabKey]
+        const assistantMsg = messages.find(m => m.jobId === jobId && m.role === 'assistant')
+        console.log(`[ChatGenerator][Realtime] Found assistant message:`, assistantMsg?.id)
+        if (!assistantMsg) {
+          console.log(`[ChatGenerator][Realtime] No assistant message found for job ${jobId} in tab ${tabKey}`)
+          return
+        }
+
+        if (status === 'completed' && newRow.result_url && !assistantMsg.mediaUrl) {
+          console.log(`[ChatGenerator][Realtime] Job completed, getting signed URL for:`, newRow.result_url)
+          try {
+            const { data: signed, error: signedError } = await supabase.storage.from('results').createSignedUrl(newRow.result_url, 3600)
+            console.log(`[ChatGenerator][Realtime] Signed URL result:`, { signed, signedError })
+            
+            if (signedError) {
+              console.error(`[ChatGenerator][Realtime] Signed URL error:`, signedError)
+              return
+            }
+            
+            console.log(`[ChatGenerator][Realtime] Updating message ${assistantMsg.id} with mediaUrl:`, signed?.signedUrl)
+            
+            gen.updateMessage(tabKey, assistantMsg.id, {
+              status: 'complete',
+              content: newRow.result_type === 'video' ? 'Video generated ✅' : 'Image generated ✅',
+              mediaUrl: signed?.signedUrl || null,
+              mediaType: newRow.result_type
+            })
+            console.log(`[ChatGenerator][Realtime] Updated message ${assistantMsg.id} for job ${jobId} to completed`)
+          } catch (err) {
+            console.error('[ChatGenerator][Realtime] Signed URL error:', err)
+          }
+        } else if ((status === 'failed' || status === 'error') && assistantMsg.status !== 'error') {
+          gen.updateMessage(tabKey, assistantMsg.id, {
+            status: 'error',
+            content: newRow.error_message || 'Generation failed'
+          })
+        }
+      })
+      .subscribe((status) => {
+        console.log('[ChatGenerator][Realtime] Subscription status:', status)
+      })
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [user.id]) // Only depend on user.id, supabase is now stable
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -587,21 +940,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
             </div>
           </div>
         )}
-        {history.map(m => {
-          // Debug logging for each message
-          if (m.role === 'assistant' && m.status === 'complete') {
-            console.log(`[ChatGenerator] Rendering message:`, {
-              id: m.id,
-              status: m.status,
-              content: m.content,
-              mediaUrl: m.mediaUrl,
-              mediaType: m.mediaType,
-              hasMediaUrl: !!m.mediaUrl,
-              isImage: m.mediaType === 'image'
-            })
-          }
-          
-          return (
+        {history.map(m => (
             <div key={m.id} className={`flex w-full ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
             <div className={`${m.role === 'user' ? 'bg-purple-600 text-white rounded-2xl rounded-br-sm' : 'bg-white border border-gray-200 rounded-2xl rounded-bl-sm'} px-4 py-3 shadow-sm text-sm max-w-[65%]`}>
               <div className="whitespace-pre-wrap leading-relaxed">
@@ -711,8 +1050,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
               )}
             </div>
           </div>
-          )
-        })}
+        ))}
         <div ref={bottomRef} />
       </div>
 
@@ -779,19 +1117,21 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
             </span>
           </button>
         </div>
-        {/* Quick controls */}
-        <div className="flex justify-center gap-4 mt-1 flex-wrap text-xs text-gray-500">
-          <div className="flex gap-2 items-center">
-            {aspectOptions.map(opt => (
-              <button
-                key={opt.value}
-                onClick={() => gen.setAspectRatio(opt.value)}
-                className={`${gen.aspectRatio === opt.value ? 'bg-purple-50 border border-purple-500 text-purple-600 font-semibold' : 'border border-gray-200 hover:bg-gray-50'} rounded-md px-2 py-1 transition`}
-              >{opt.label}</button>
-            ))}
+        {/* Quick controls - only render client-side to prevent hydration mismatch */}
+        {isMounted && (
+          <div className="flex justify-center gap-4 mt-1 flex-wrap text-xs text-gray-500">
+            <div className="flex gap-2 items-center">
+              {aspectOptions.map(opt => (
+                <button
+                  key={opt.value}
+                  onClick={() => gen.setAspectRatio(opt.value)}
+                  className={`${gen.aspectRatio === opt.value ? 'bg-purple-50 border border-purple-500 text-purple-600 font-semibold' : 'border border-gray-200 hover:bg-gray-50'} rounded-md px-2 py-1 transition`}
+                >{opt.label}</button>
+              ))}
+            </div>
+            {/* Resolutions removed */}
           </div>
-          {/* Resolutions removed */}
-        </div>
+        )}
       </div>
     </div>
   )

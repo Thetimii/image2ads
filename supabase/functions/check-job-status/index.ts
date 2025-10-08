@@ -45,8 +45,12 @@ async function handler(req: Request) {
   try {
     const url = new URL(req.url);
     const jobId = url.searchParams.get("jobId");
+    console.log(`[check-job-status] Incoming request: ${req.method} jobId=${jobId}`);
+    // Minimal header echo (no auth secrets)
+    console.log(`[check-job-status] Origin: ${req.headers.get('origin')}`);
     
     if (!jobId) {
+      console.log('[check-job-status] Missing jobId param');
       return new Response("Job ID required", { status: 400, headers: cors });
     }
 
@@ -61,8 +65,11 @@ async function handler(req: Request) {
       .single();
     
     if (jobErr || !job) {
+      console.log(`[check-job-status] Job not found for id=${jobId} error=${jobErr?.message}`);
       return new Response("Job not found", { status: 404, headers: cors });
     }
+
+    console.log(`[check-job-status] Loaded job: status=${job.status} task_id=${job.task_id} result_url=${job.result_url}`);
 
     // If job is already completed, return the result
     if (job.status === "completed" && job.result_url) {
@@ -121,50 +128,82 @@ async function handler(req: Request) {
       throw new Error(`Kie.ai API error: ${response.status}`);
     }
 
-    const result = await response.json();
-    console.log(`[check-job-status] Kie.ai response:`, result);
+  const result = await response.json();
+  console.log(`[check-job-status] Kie.ai response raw: ${JSON.stringify(result)}`);
 
-    // Check if the task is still processing
-    if (result.data?.state !== "success") {
+    // Kie.ai schema: earlier utilities expect data.status (pending|processing|success|failed)
+    // This function previously used data.state causing perpetual 'processing'. Support both for safety.
+    const taskStatus = (result.data?.status || result.data?.state || '').toLowerCase();
+    if (taskStatus !== 'success' && taskStatus !== 'completed') {
+      // Detect failure variants early
+      if (['fail','failed','error'].includes(taskStatus)) {
+        const failMsg = result.data?.failMsg || 'Generation failed'
+        console.log(`[check-job-status] Task reported failure state '${taskStatus}' failMsg='${failMsg}'`)
+        // Update job to failed
+        await supabase.from('jobs').update({
+          status: 'failed',
+          error_message: failMsg,
+          updated_at: new Date().toISOString()
+        }).eq('id', jobId)
+        return new Response(
+          JSON.stringify({ 
+            success: false,
+            status: 'failed',
+            error: failMsg,
+            jobId
+          }),
+          { headers: { ...cors, 'Content-Type': 'application/json' } }
+        )
+      }
       return new Response(
         JSON.stringify({ 
           success: true, 
-          status: "processing", 
-          progress: result.data?.state || "queued",
-          message: "Generation in progress",
+          status: 'processing', 
+          progress: taskStatus || 'queued',
+          message: 'Generation in progress',
           jobId 
         }),
-        { headers: { ...cors, "Content-Type": "application/json" } }
+        { headers: { ...cors, 'Content-Type': 'application/json' } }
       );
     }
 
-    // Task completed successfully - get the result URL
-    // Parse the resultJson string that contains the URLs
+    // Task completed successfully - extract result URL(s)
     let resultUrl: string | null = null;
-    
+    let allUrls: string[] = []
     try {
-      const resultJsonStr = result.data?.resultJson;
-      if (resultJsonStr) {
-        const parsed = typeof resultJsonStr === 'string' ? JSON.parse(resultJsonStr) : resultJsonStr;
-        resultUrl = parsed?.resultUrls?.[0];
-        console.log(`[check-job-status] Parsed resultJson:`, parsed);
+      const raw = result.data?.resultJson
+      const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw
+      if (parsed?.resultUrls && Array.isArray(parsed.resultUrls)) {
+        allUrls = parsed.resultUrls
       }
-      
-      // Fallback to direct resultUrl if parsing fails
-      if (!resultUrl) {
-        resultUrl = result.data?.resultUrl;
+      if (parsed?.videoUrls && Array.isArray(parsed.videoUrls)) {
+        // Some providers might return videoUrls specifically
+        allUrls = allUrls.concat(parsed.videoUrls)
       }
-    } catch (parseError) {
-      console.error(`[check-job-status] Failed to parse resultJson:`, parseError);
-      resultUrl = result.data?.resultUrl;
+      if (parsed?.results && Array.isArray(parsed.results)) {
+        // Generic fallback list
+        allUrls = allUrls.concat(parsed.results.map((r: any) => r.url).filter(Boolean))
+      }
+    } catch (e) {
+      console.log('[check-job-status] resultJson parse warning:', e)
     }
-    
+    // Direct fallbacks
+    if (result.data?.resultUrl) allUrls.push(result.data.resultUrl)
+    if (result.data?.videoUrl) allUrls.push(result.data.videoUrl)
+    // Deduplicate
+    allUrls = [...new Set(allUrls.filter(Boolean))]
+    // Prefer mp4 if job expects video
+    if (job.result_type === 'video') {
+      resultUrl = allUrls.find(u => /\.mp4(\?|$)/i.test(u)) || allUrls[0] || null
+    } else {
+      resultUrl = allUrls[0] || null
+    }
     if (!resultUrl) {
-      console.error(`[check-job-status] No result URL found. Full response:`, JSON.stringify(result, null, 2));
-      throw new Error("No result URL found in Kie.ai response");
+      console.error('[check-job-status] No usable result URL. Aggregate list:', allUrls, 'Raw data:', JSON.stringify(result, null, 2))
+      throw new Error('No result URL found in Kie.ai response')
     }
 
-    console.log(`[check-job-status] Generation completed: ${resultUrl}`);
+  console.log(`[check-job-status] Generation completed: ${resultUrl}`);
 
     // Download the generated image
     const imageBytes = await downloadFile(resultUrl);

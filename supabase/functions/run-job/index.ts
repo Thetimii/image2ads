@@ -295,17 +295,31 @@ async function handler(req: Request) {
     });
     
     console.log(`[run-job] Generation completed, result size: ${outBytes.length} bytes`);
+    
+    // Validate the result
+    if (!outBytes || outBytes.length === 0) {
+      throw new Error("Generation failed: Empty result from AI");
+    }
 
     const userId = job.user_id as string;
-    const folderId = files.length > 0 ? files[0]?.folder_id ?? "uploads" : "uploads";
-    const key = userId + "/" + folderId + "/" + jobId + "-" + Date.now() + ".png";
+    // Determine the correct result folder based on job type
+    const resultFolder = job.has_images 
+      ? (job.result_type === 'video' ? 'image-to-video' : 'image-to-image')
+      : (job.result_type === 'video' ? 'text-to-video' : 'text-to-image');
+    const key = userId + "/" + resultFolder + "/" + jobId + "-" + Date.now() + ".png";
 
+    console.log(`[run-job] Uploading to storage with key: ${key}`);
     const up = await supabase.storage.from("results").upload(key, outBytes, {
       contentType: "image/png",
       upsert: true
     });
-    if (up.error) throw new Error(up.error.message);
+    if (up.error) {
+      console.error(`[run-job] Storage upload failed:`, up.error);
+      throw new Error(up.error.message);
+    }
+    console.log(`[run-job] Storage upload successful:`, up.data);
 
+    console.log(`[run-job] Updating job status to completed with result_url: ${key}`);
     await supabase.from("jobs").update({ status: "completed", result_url: key }).eq("id", jobId);
 
     // Always save metadata with the prompt as the name

@@ -32,6 +32,7 @@ function corsHeadersFor(req: Request) {
 
 // --- Main handler ---
 async function handler(req: Request) {
+  console.log(`[generate-text-image] Handler called with method: ${req.method}`);
   const cors = corsHeadersFor(req);
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   if (req.method !== "POST")

@@ -209,8 +209,8 @@ export default function GeneratorHub({ user, profile }: GeneratorHubProps) {
           <label className="block text-gray-700 font-medium mb-4">
             {isVideoMode ? 'Aspect Ratio' : 'Image Size'}
           </label>
-          <div className="grid grid-cols-3 gap-4">
-            {(['square', 'landscape', 'portrait'] as const).map((ratio) => (
+          <div className="grid grid-cols-2 gap-4">
+            {(['landscape', 'portrait'] as const).map((ratio) => (
               <button
                 key={ratio}
                 onClick={() => generator.setAspectRatio(ratio)}
@@ -222,7 +222,6 @@ export default function GeneratorHub({ user, profile }: GeneratorHubProps) {
               >
                 <div className="font-semibold text-gray-800 capitalize">{ratio}</div>
                 <div className="text-sm text-gray-500 mt-1">
-                  {ratio === 'square' && '1:1'}
                   {ratio === 'landscape' && '16:9'}
                   {ratio === 'portrait' && '9:16'}
                 </div>

@@ -11,6 +11,7 @@ export interface ChatMessage {
   status?: 'pending' | 'complete' | 'error'
   mediaUrl?: string | null
   mediaType?: 'image' | 'video'
+  jobId?: string // Store the job ID so we can resume polling after refresh
 }
 
 type GeneratorMode = 'text-to-image' | 'image-to-image' | 'text-to-video' | 'image-to-video'
@@ -18,7 +19,7 @@ type GeneratorMode = 'text-to-image' | 'image-to-image' | 'text-to-video' | 'ima
 interface GeneratorState {
   activeTab: GeneratorMode
   prompt: string
-  aspectRatio: 'square' | 'landscape' | 'portrait'
+  aspectRatio: 'landscape' | 'portrait'
   selectedFile: File | null
   previewUrl: string | null
   isGenerating: boolean
@@ -31,7 +32,7 @@ interface GeneratorState {
 interface GeneratorContextType extends GeneratorState {
   setActiveTab: (tab: GeneratorMode) => void
   setPrompt: (prompt: string) => void
-  setAspectRatio: (ratio: 'square' | 'landscape' | 'portrait') => void
+  setAspectRatio: (ratio: 'landscape' | 'portrait') => void
   setSelectedFile: (file: File | null) => void
   setPreviewUrl: (url: string | null) => void
   setIsGenerating: (generating: boolean) => void
@@ -48,7 +49,7 @@ const GeneratorContext = createContext<GeneratorContextType | undefined>(undefin
 const initialState: GeneratorState = {
   activeTab: 'text-to-image',
   prompt: '',
-  aspectRatio: 'square',
+  aspectRatio: 'landscape',
   selectedFile: null,
   previewUrl: null,
   isGenerating: false,
@@ -70,7 +71,13 @@ const initialState: GeneratorState = {
 
 export function GeneratorProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<GeneratorState>(initialState)
+  const [isClient, setIsClient] = useState(false)
   const pathname = usePathname()
+
+  // Set client flag after hydration to prevent SSR mismatch
+  useEffect(() => {
+    setIsClient(true)
+  }, [])
 
   // Sync activeTab with URL pathname
   useEffect(() => {
@@ -94,14 +101,11 @@ export function GeneratorProvider({ children }: { children: ReactNode }) {
         urlMode = 'image-to-video'
         break
       default:
-        // Fallback to localStorage or default
-        const savedTab = localStorage.getItem('activeGeneratorTab') as GeneratorMode
-        urlMode = savedTab || 'text-to-image'
+        urlMode = 'text-to-image' // Default fallback
     }
     
     if (urlMode && state.activeTab !== urlMode) {
       setState(prev => ({ ...prev, activeTab: urlMode! }))
-      localStorage.setItem('activeGeneratorTab', urlMode)
     }
   }, [pathname, state.activeTab])
 
@@ -112,7 +116,7 @@ export function GeneratorProvider({ children }: { children: ReactNode }) {
   }
 
   const setPrompt = (prompt: string) => setState(prev => ({ ...prev, prompt }))
-  const setAspectRatio = (aspectRatio: 'square' | 'landscape' | 'portrait') => 
+  const setAspectRatio = (aspectRatio: 'landscape' | 'portrait') => 
     setState(prev => ({ ...prev, aspectRatio }))
   const setSelectedFile = (selectedFile: File | null) => 
     setState(prev => ({ ...prev, selectedFile }))

@@ -126,9 +126,10 @@ async function handler(req: Request) {
     // Update job status to processing
     await supabase.from("jobs").update({ status: "processing" }).eq("id", jobId);
 
-    // Determine aspect ratio from model
-    let aspectRatio = "landscape";
-    if (job.model?.includes("-portrait")) aspectRatio = "portrait";
+  // Determine aspect ratio from model suffix (-landscape, -portrait, default landscape)
+  let aspectRatio = 'landscape'  // Try lowercase
+  if (job.model?.includes('-landscape')) aspectRatio = 'landscape'
+  else if (job.model?.includes('-portrait')) aspectRatio = 'portrait'
 
     console.log(`[generate-image-video] Creating task for job ${jobId}`);
     console.log(`[generate-image-video] Reference image: ${imageUrl}`);
@@ -146,11 +147,9 @@ async function handler(req: Request) {
     };
     console.log(`[generate-image-video] Task payload:`, taskPayload);
 
-    const taskId = await createKieTask(
-      "sora-2-image-to-video",
-      taskPayload,
-      KIE_API_KEY
-    );
+    const kieModel = 'sora-2-image-to-video'
+    console.log('[generate-image-video] Kie model:', kieModel, 'payload:', taskPayload)
+    const taskId = await createKieTask(kieModel, taskPayload, KIE_API_KEY)
 
     console.log(`[generate-image-video] Task created: ${taskId}`);
 
@@ -177,6 +176,7 @@ async function handler(req: Request) {
         jobId, 
         taskId, 
         status: "processing",
+        result_type: "video",
         message: "Task created successfully. Result will be available shortly."
       }),
       { headers: { ...cors, "Content-Type": "application/json" } }
