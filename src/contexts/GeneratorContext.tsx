@@ -73,12 +73,24 @@ export function GeneratorProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<GeneratorState>(initialState)
   const pathname = usePathname()
 
-  // CRITICAL SECURITY FIX: Clear localStorage to prevent user data leakage between accounts
+  // SECURITY FIX: Only clear localStorage on explicit signout to prevent user data leakage
+  // Don't clear automatically on every load - that destroys user session and causes loops
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      localStorage.removeItem('generatorHistories')
-      localStorage.removeItem('activeGeneratorTab')
-      console.log('🔥 SECURITY FIX: Cleared localStorage to prevent user data leakage')
+      // Listen for auth state changes and clear only on signout
+      import('@/lib/supabase/client').then(({ createClient }) => {
+        const supabase = createClient()
+        
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((event: string) => {
+          if (event === 'SIGNED_OUT') {
+            localStorage.removeItem('generatorHistories')
+            localStorage.removeItem('activeGeneratorTab')
+            console.log('🔥 Cleared localStorage on user signout')
+          }
+        })
+
+        return () => subscription.unsubscribe()
+      })
     }
   }, [])
 

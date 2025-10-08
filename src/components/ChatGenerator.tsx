@@ -167,11 +167,9 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
 
   // Load and poll jobs from database - this is the source of truth
   useEffect(() => {
-    console.log('🎯 useEffect triggered for job loading. hasLoadedJobs.current:', hasLoadedJobs.current)
-    
-    // CRITICAL: Only run once per mount using ref guard
-    if (hasLoadedJobs.current) {
-      console.log('🚫 Jobs already loaded (ref guard), skipping')
+    // CRITICAL: Only run once per user and prevent loops
+    if (!user || hasLoadedJobs.current) {
+      console.log('🚫 Jobs loading skipped - user:', !!user, 'hasLoaded:', hasLoadedJobs.current)
       return
     }
     
@@ -350,7 +348,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
         bottomRef.current?.scrollIntoView({ behavior: 'instant', block: 'end' })
       }, 500)
     })
-  }, []) // Empty dependency array - only run once on mount
+  }, [user?.id]) // Only re-run when user changes
 
   const getSignedUrlForJob = async (job: any, tab: keyof typeof gen.histories, messageId: string) => {
     try {
@@ -937,6 +935,9 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
       sendPrompt()
     }
   }
+
+  // Prevent SSR mismatch by waiting for client-side mount
+  if (!isMounted) return null
 
   return (
     <div className="flex flex-col h-full">
