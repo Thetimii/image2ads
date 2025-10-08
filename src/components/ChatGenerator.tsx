@@ -611,10 +611,17 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
         },
         body: JSON.stringify({ jobId: job.id }),
         signal: controller.signal
+      }).catch((fetchError) => {
+        console.error(`[ChatGenerator] Fetch failed:`, fetchError)
+        console.error(`[ChatGenerator] Fetch error name:`, fetchError.name)
+        console.error(`[ChatGenerator] Fetch error message:`, fetchError.message)
+        throw fetchError
       })
       
       clearTimeout(timeoutId)
+      console.log(`[ChatGenerator] Response received`)
       console.log(`[ChatGenerator] Response status: ${resp.status}`)
+      console.log(`[ChatGenerator] Response statusText: ${resp.statusText}`)
       console.log(`[ChatGenerator] Response headers:`, Object.fromEntries(resp.headers.entries()))
       if (!resp.ok) {
         const errData = await resp.json().catch(() => ({}))
@@ -1062,7 +1069,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
             <button
               key={ex.short}
               onClick={() => handleExample(ex.full)}
-              className="px-3 py-1.5 rounded-full bg-gray-100 hover:bg-gray-200 transition text-gray-600 whitespace-nowrap border border-gray-200 hover:border-gray-300"
+              className="px-2 py-1 md:px-3 md:py-1.5 rounded-full bg-gray-100 hover:bg-gray-200 transition text-gray-600 whitespace-nowrap border border-gray-200 hover:border-gray-300 text-[10px] md:text-xs"
               title={ex.full}
             >
               {ex.short}
