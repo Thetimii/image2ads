@@ -472,6 +472,14 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
     console.log(`[ChatGenerator] Proceeding with generation...`)
     setIsSubmitting(true)
 
+    // Validate image requirement early
+    if (requiresImage && !localFile) {
+      console.error(`[ChatGenerator] ERROR: Image required but not provided`)
+      alert('Please upload a reference image first')
+      setIsSubmitting(false)
+      return
+    }
+
     const userMsg: ChatMessage = {
       id: generateId(),
       role: 'user',
@@ -597,10 +605,15 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
       console.log(`[ChatGenerator] Endpoint: ${endpoint}`)
       console.log(`[ChatGenerator] JobId: ${job.id}`)
       console.log(`[ChatGenerator] Job data:`, job)
+      console.log(`[ChatGenerator] Anon key exists:`, !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)
+      console.log(`[ChatGenerator] Anon key preview:`, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.substring(0, 20) + '...')
       
       // Add timeout to detect hanging requests
       const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), 30000) // 30 second timeout
+      const timeoutId = setTimeout(() => {
+        console.error(`[ChatGenerator] Request timed out after 30 seconds`)
+        controller.abort()
+      }, 30000) // 30 second timeout
       
       console.log(`[ChatGenerator] Making fetch request...`)
       const resp = await fetch(endpoint, {
@@ -954,7 +967,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
                 {m.content}
               </div>
               {m.status === 'pending' && (
-                <div className="mt-3 w-[260px] h-[170px] rounded-lg bg-gradient-to-br from-purple-50 via-pink-50 to-purple-50 relative overflow-hidden border border-purple-200/50">
+                <div className="mt-3 w-full max-w-[260px] h-[170px] rounded-lg bg-gradient-to-br from-purple-50 via-pink-50 to-purple-50 relative overflow-hidden border border-purple-200/50">
                   {/* Animated shimmer */}
                   <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/50 to-transparent animate-[shimmer_2s_infinite] -translate-x-full" />
                   
@@ -1064,12 +1077,12 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
       {/* Bottom input bar */}
       <div className="border-t border-gray-200 bg-white px-4 py-3 flex flex-col gap-2 shadow-inner">
         {/* Examples */}
-        <div className="flex gap-2 overflow-x-auto text-xs text-gray-600 pb-1 hide-scrollbar pr-4">
+        <div className="flex gap-2 overflow-x-scroll text-xs text-gray-600 pb-1 scrollbar-hide">
           {EXAMPLES[gen.activeTab].map(ex => (
             <button
               key={ex.short}
               onClick={() => handleExample(ex.full)}
-              className="px-2 py-1 md:px-3 md:py-1.5 rounded-full bg-gray-100 hover:bg-gray-200 transition text-gray-600 whitespace-nowrap border border-gray-200 hover:border-gray-300 text-[10px] md:text-xs"
+              className="px-2 py-1 md:px-3 md:py-1.5 rounded-full bg-gray-100 hover:bg-gray-200 transition text-gray-600 whitespace-nowrap border border-gray-200 hover:border-gray-300 text-[10px] md:text-xs flex-shrink-0"
               title={ex.full}
             >
               {ex.short}
