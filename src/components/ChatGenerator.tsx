@@ -157,6 +157,9 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
 
   // Load and poll jobs from database - this is the source of truth
   useEffect(() => {
+    // Reset the loaded flag when user changes
+    hasLoadedOnce.current = false
+    
     const loadAndPollJobs = async () => {
       // Prevent concurrent loads
       if (isLoadingJobs.current) {
@@ -164,9 +167,9 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
         return
       }
       
-      // Only load once per session (prevents hot reload from loading multiple times)
+      // Only load once per user session (prevents hot reload from loading multiple times)
       if (hasLoadedOnce.current) {
-        console.log('⏭️ Skipping job load - already loaded once')
+        console.log('⏭️ Skipping job load - already loaded once for this user')
         return
       }
       
@@ -174,6 +177,10 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
       const startTime = performance.now()
       try {
         console.log('Loading jobs from database...')
+        console.log('User ID:', user.id)
+        console.log('Supabase client exists:', !!supabase)
+        console.log('About to query jobs table...')
+        
         // Get only recent jobs (last 10) to speed up initial load
         const { data: jobs, error } = await supabase
           .from('jobs')
@@ -183,6 +190,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
           .limit(10)
 
         console.log(`⏱️ Jobs query took ${(performance.now() - startTime).toFixed(0)}ms`)
+        console.log('Query result - jobs:', jobs?.length, 'error:', error)
 
         if (error) {
           console.error('Error loading jobs:', error)
