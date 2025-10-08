@@ -28,8 +28,16 @@ export async function updateSession(request: NextRequest) {
       },
       setAll(cookiesToSet) {
         cookiesToSet.forEach(({ name, value, options }) => {
+          // Set on request cookies for immediate use
           request.cookies.set(name, value);
-          response.cookies.set(name, value, options);
+          // Set on response cookies for browser
+          response.cookies.set(name, value, {
+            ...options,
+            sameSite: 'lax',
+            secure: process.env.NODE_ENV === 'production',
+            httpOnly: false, // Allow client-side access for auth tokens
+            path: '/',
+          });
         });
       },
     },

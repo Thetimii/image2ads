@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Poppins } from "next/font/google";
 import Script from "next/script";
 import CookieBanner from "@/components/CookieBanner";
+import AuthDebug from "@/components/AuthDebug";
 import { TutorialProvider } from "@/contexts/TutorialContext";
 import "./globals.css";
 
@@ -88,6 +89,7 @@ export default function RootLayout({
         <TutorialProvider>
           {children}
           <CookieBanner />
+          <AuthDebug />
         </TutorialProvider>
       </body>
     </html>
