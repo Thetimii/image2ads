@@ -193,8 +193,18 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
         console.log('💾 Loading jobs from database...')
         console.log('👤 User ID:', user.id)
         
-        // CRITICAL: Check if we have a valid session before querying
-        const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+        // CRITICAL: Check if we have a valid session before querying with timeout
+        console.log('🔍 Getting session...')
+        const sessionPromise = supabase.auth.getSession()
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Session check timeout')), 5000)
+        )
+        
+        const { data: { session }, error: sessionError } = await Promise.race([
+          sessionPromise,
+          timeoutPromise
+        ]) as any
+        
         console.log('🔐 Session check:', { 
           hasSession: !!session, 
           userId: session?.user?.id, 
@@ -203,21 +213,34 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
         
         if (!session) {
           console.error('❌ No valid session found! Cannot load jobs.')
+          console.error('This usually means the auth cookie is missing or expired.')
           return
         }
         
         console.log('✅ Session valid, querying jobs table...')
         
-        // Get only recent jobs (last 10) to speed up initial load
-        const { data: jobs, error } = await supabase
+        // Get only recent jobs (last 10) to speed up initial load with timeout
+        console.log('📋 Executing jobs query...')
+        const queryStartTime = performance.now()
+        
+        const queryPromise = supabase
           .from('jobs')
           .select('*')
           .eq('user_id', user.id)
           .order('created_at', { ascending: false })
           .limit(10)
+        
+        const queryTimeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Database query timeout')), 8000)
+        )
+        
+        const { data: jobs, error } = await Promise.race([
+          queryPromise,
+          queryTimeoutPromise
+        ]) as any
 
-        console.log(`⏱️ Jobs query took ${(performance.now() - startTime).toFixed(0)}ms`)
-        console.log('Query result - jobs:', jobs?.length, 'error:', error)
+        console.log(`⏱️ Jobs query took ${(performance.now() - queryStartTime).toFixed(0)}ms`)
+        console.log('📊 Query result - jobs:', jobs?.length, 'error:', error?.message || 'none')
 
         if (error) {
           console.error('Error loading jobs:', error)
