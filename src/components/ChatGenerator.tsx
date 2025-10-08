@@ -366,7 +366,6 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
       // Poll for results every 3 seconds
       const pollForResult = async (): Promise<void> => {
         try {
-          console.log(`[ChatGenerator] Polling status for job: ${job.id}`)
           const statusResp = await fetch(`${CHECK_JOB_STATUS_ENDPOINT}?jobId=${job.id}`, {
             method: 'GET',
             headers: {
@@ -374,52 +373,22 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
             }
           })
 
-          console.log(`[ChatGenerator] Status response status: ${statusResp.status}`)
           if (!statusResp.ok) {
-            const errorText = await statusResp.text()
-            console.error(`[ChatGenerator] Status check error response:`, errorText)
             throw new Error(`Status check failed: ${statusResp.status}`)
           }
 
           const statusData = await statusResp.json()
-          console.log(`[ChatGenerator] Status check response:`, statusData)
 
           if (statusData.status === 'completed' && statusData.result_url) {
             console.log(`[ChatGenerator] Generation completed! Result URL: ${statusData.result_url}`)
             
-            // Generation completed successfully - get signed URL for private bucket
-            console.log(`[ChatGenerator] Attempting to create signed URL for: ${statusData.result_url}`)
-            const { data: signedData, error: signedError } = await supabase.storage
+            // Create signed URL - same as library does
+            const { data: signedUrl } = await supabase.storage
               .from('results')
-              .createSignedUrl(statusData.result_url, 3600) // 1 hour expiry
+              .createSignedUrl(statusData.result_url, 3600)
 
-            console.log(`[ChatGenerator] Signed URL data:`, signedData)
-            console.log(`[ChatGenerator] Signed URL error:`, signedError)
-
-            if (signedError) {
-              console.error(`[ChatGenerator] Signed URL creation failed:`, signedError)
-              console.log(`[ChatGenerator] Falling back to direct result URL: ${statusData.result_url}`)
-            }
-
-            let mediaUrl = signedError ? statusData.result_url : signedData?.signedUrl
-            console.log(`[ChatGenerator] Media URL after signed URL attempt: ${mediaUrl}`)
-            
-            // If signed URL creation failed, try to get public URL from results bucket
-            if (!mediaUrl || signedError) {
-              console.log(`[ChatGenerator] Attempting to get public URL from results bucket`)
-              const { data: publicData } = supabase.storage.from('results').getPublicUrl(statusData.result_url)
-              mediaUrl = publicData.publicUrl
-              console.log(`[ChatGenerator] Public URL fallback: ${mediaUrl}`)
-            }
-
+            const mediaUrl = signedUrl?.signedUrl || ''
             console.log(`[ChatGenerator] Final media URL: ${mediaUrl}`)
-            console.log(`[ChatGenerator] Media type: ${meta.resultType}`)
-            console.log(`[ChatGenerator] About to update message with:`, {
-              status: 'complete',
-              content: meta.resultType === 'image' ? 'Image generated ✅' : 'Video generated ✅',
-              mediaUrl,
-              mediaType: meta.resultType
-            })
 
             gen.updateMessage(gen.activeTab, assistantPlaceholder.id, {
               status: 'complete',
@@ -427,11 +396,14 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
               mediaUrl,
               mediaType: meta.resultType
             })
-            console.log(`[ChatGenerator] Message updated successfully for ${gen.activeTab}`)
+            
+            // Make sure to reset generating state
+            gen.setIsGenerating(false)
             return
           }
 
           if (statusData.status === 'failed') {
+            gen.setIsGenerating(false)
             throw new Error(statusData.error || 'Generation failed')
           }
 
@@ -445,6 +417,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
           setTimeout(pollForResult, 3000)
         } catch (error) {
           console.error('Polling error:', error)
+          gen.setIsGenerating(false)
           gen.updateMessage(gen.activeTab, assistantPlaceholder.id, {
             status: 'error',
             content: `Polling failed: ${error instanceof Error ? error.message : 'Unknown error'}`
