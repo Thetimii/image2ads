@@ -519,45 +519,53 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
       // Upload image if needed
       let imageId: string | null = null
       if (requiresImage && fileToUpload) {
-        console.log(`[ChatGenerator] Starting image upload...`)
-        console.log(`[ChatGenerator] File details:`, { name: fileToUpload.name, size: fileToUpload.size, type: fileToUpload.type })
-        
-        const fileName = `${user.id}/${Date.now()}-${fileToUpload.name}`
-        console.log(`[ChatGenerator] Upload filename: ${fileName}`)
-        
-        const { data: uploadData, error: uploadErr } = await supabase.storage.from('uploads').upload(fileName, fileToUpload)
-        
-        if (uploadErr) {
-          console.error(`[ChatGenerator] Upload error:`, uploadErr)
-          throw new Error(`Upload failed: ${uploadErr.message}`)
+        try {
+          console.log(`[ChatGenerator] Starting image upload...`)
+          console.log(`[ChatGenerator] File details:`, { name: fileToUpload.name, size: fileToUpload.size, type: fileToUpload.type })
+          
+          const fileName = `${user.id}/${Date.now()}-${fileToUpload.name}`
+          console.log(`[ChatGenerator] Upload filename: ${fileName}`)
+          console.log(`[ChatGenerator] Calling supabase.storage.from('uploads').upload()...`)
+          
+          const { data: uploadData, error: uploadErr } = await supabase.storage.from('uploads').upload(fileName, fileToUpload)
+          
+          console.log(`[ChatGenerator] Upload response - data:`, uploadData, 'error:', uploadErr)
+          
+          if (uploadErr) {
+            console.error(`[ChatGenerator] Upload error:`, uploadErr)
+            throw new Error(`Upload failed: ${uploadErr.message}`)
+          }
+          console.log(`[ChatGenerator] Upload successful:`, uploadData)
+          
+          console.log(`[ChatGenerator] Creating image record in database...`)
+          console.log(`[ChatGenerator] Image record payload:`, {
+            user_id: user.id,
+            file_path: uploadData.path,
+            original_name: fileToUpload.name,
+            folder_id: null
+          })
+          
+          const { data: imageData, error: imageDbErr } = await supabase.from('images').insert({
+            user_id: user.id,
+            file_path: uploadData.path,
+            original_name: fileToUpload.name,
+            folder_id: null
+          }).select().single()
+          
+          console.log(`[ChatGenerator] Database insert result - error:`, imageDbErr, 'data:', imageData)
+          
+          if (imageDbErr) {
+            console.error(`[ChatGenerator] Image DB error:`, imageDbErr)
+            // Clean up uploaded file if DB insert fails
+            await supabase.storage.from('uploads').remove([uploadData.path])
+            throw new Error(`Database error: ${imageDbErr.message}`)
+          }
+          console.log(`[ChatGenerator] Image record created:`, imageData)
+          imageId = imageData.id
+        } catch (uploadError) {
+          console.error(`[ChatGenerator] ❌ IMAGE UPLOAD FAILED:`, uploadError)
+          throw uploadError
         }
-        console.log(`[ChatGenerator] Upload successful:`, uploadData)
-        
-        console.log(`[ChatGenerator] Creating image record in database...`)
-        console.log(`[ChatGenerator] Image record payload:`, {
-          user_id: user.id,
-          file_path: uploadData.path,
-          original_name: fileToUpload.name,
-          folder_id: null
-        })
-        
-        const { data: imageData, error: imageDbErr } = await supabase.from('images').insert({
-          user_id: user.id,
-          file_path: uploadData.path,
-          original_name: fileToUpload.name,
-          folder_id: null
-        }).select().single()
-        
-        console.log(`[ChatGenerator] Database insert result - error:`, imageDbErr, 'data:', imageData)
-        
-        if (imageDbErr) {
-          console.error(`[ChatGenerator] Image DB error:`, imageDbErr)
-          // Clean up uploaded file if DB insert fails
-          await supabase.storage.from('uploads').remove([uploadData.path])
-          throw new Error(`Database error: ${imageDbErr.message}`)
-        }
-        console.log(`[ChatGenerator] Image record created:`, imageData)
-        imageId = imageData.id
       } else {
         console.log(`[ChatGenerator] No image upload required (requiresImage: ${requiresImage}, fileToUpload: ${!!fileToUpload})`)
       }
@@ -967,7 +975,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
                 {m.content}
               </div>
               {m.status === 'pending' && (
-                <div className="mt-3 w-full max-w-[260px] h-[170px] rounded-lg bg-gradient-to-br from-purple-50 via-pink-50 to-purple-50 relative overflow-hidden border border-purple-200/50">
+                <div className="mt-3 w-full aspect-[3/2] max-h-[300px] rounded-lg bg-gradient-to-br from-purple-50 via-pink-50 to-purple-50 relative overflow-hidden border border-purple-200/50">
                   {/* Animated shimmer */}
                   <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/50 to-transparent animate-[shimmer_2s_infinite] -translate-x-full" />
                   
