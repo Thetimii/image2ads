@@ -265,7 +265,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
         }
 
         // Group jobs by result type
-        jobs.forEach(job => {
+        jobs.forEach((job: any) => {
           const tabKey = job.has_images 
             ? (job.result_type === 'video' ? 'image-to-video' : 'image-to-image')
             : (job.result_type === 'video' ? 'text-to-video' : 'text-to-image')
@@ -301,7 +301,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
           const tabKey = tab as keyof typeof gen.histories
           const existingMessages = gen.histories[tabKey]
           
-          tabJobs.forEach(job => {
+          tabJobs.forEach((job: any) => {
             const alreadyHasAssistant = existingMessages.some(m => m.jobId === job.id && m.role === 'assistant')
             const alreadyHasUser = existingMessages.some(m => m.jobId === job.id && m.role === 'user')
             
