@@ -50,7 +50,23 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  return updateSession(request);
+  // Update session for all requests
+  const response = updateSession(request);
+  
+  // 🔥 CRITICAL: Prevent caching for dashboard routes to fix "must hard refresh" issue  
+  // This ensures fresh user sessions and prevents SSR/hydration mismatches
+  if (pathname.startsWith('/dashboard')) {
+    const finalResponse = response.then(res => {
+      res.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate')
+      res.headers.set('Pragma', 'no-cache')
+      res.headers.set('Expires', '0')
+      res.headers.set('Surrogate-Control', 'no-store')
+      return res
+    })
+    return finalResponse
+  }
+
+  return response;
 }
 
 export const config = {
