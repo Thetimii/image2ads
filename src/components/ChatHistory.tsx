@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useSupabaseUser } from '@/hooks/useSupabaseUser'
 import { createClient } from '@/lib/supabase/client'
 import Image from 'next/image'
 
@@ -20,22 +21,23 @@ interface ChatHistoryProps {
 
 export default function ChatHistory({ jobType }: ChatHistoryProps) {
   const supabase = createClient()
+  const { user, loading: userLoading } = useSupabaseUser()
   const [jobs, setJobs] = useState<Job[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
+    if (userLoading) return
+    if (!user) {
+      setError('No user signed in')
+      setLoading(false)
+      return
+    }
+
     const loadJobs = async () => {
       try {
         setLoading(true)
         setError(null)
-
-        // Get current user
-        const { data: { user }, error: userError } = await supabase.auth.getUser()
-        if (userError || !user) {
-          setError('No user signed in')
-          return
-        }
 
         console.log(`🔍 Loading jobs for tab: ${jobType}, user: ${user.id}`)
 
@@ -120,7 +122,7 @@ export default function ChatHistory({ jobType }: ChatHistoryProps) {
     return () => {
       cleanup?.then(fn => fn?.())
     }
-  }, [jobType]) // Refetch when jobType changes
+  }, [jobType, user, userLoading]) // Refetch when jobType or user changes
 
   const getSignedUrl = async (job: Job) => {
     if (!job.result_url) return null

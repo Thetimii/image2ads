@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { createClient } from '@/lib/supabase/client'
+import { useSupabaseUser } from '@/hooks/useSupabaseUser'
 
 interface AuthDebugInfo {
   hasUser: boolean
@@ -15,34 +15,27 @@ interface AuthDebugInfo {
 }
 
 export default function AuthDebug() {
+  const { user, loading } = useSupabaseUser()
   const [debugInfo, setDebugInfo] = useState<AuthDebugInfo | null>(null)
   const [isVisible, setIsVisible] = useState(false)
 
   useEffect(() => {
-    const checkAuth = async () => {
+    const checkAuth = () => {
       try {
-        const supabase = createClient()
-        
         // Check for auth cookies
         const authCookies = document.cookie
           .split(';')
           .filter(cookie => cookie.trim().includes('sb-'))
         
-        // Get user
-        const { data: { user }, error } = await supabase.auth.getUser()
-        
-        // Get session
-        const { data: { session } } = await supabase.auth.getSession()
-        
         setDebugInfo({
           hasUser: !!user,
           userId: user?.id,
-          sessionExists: !!session,
+          sessionExists: !!user,
           cookiesPresent: authCookies.length > 0,
           environment: process.env.NODE_ENV || 'unknown',
           supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL || 'missing',
           timestamp: new Date().toISOString(),
-          error: error?.message
+          error: undefined
         })
       } catch (err) {
         setDebugInfo({
@@ -57,8 +50,10 @@ export default function AuthDebug() {
       }
     }
 
-    checkAuth()
-  }, [])
+    if (!loading) {
+      checkAuth()
+    }
+  }, [user, loading])
 
   // Only show in development or when URL contains ?debug=auth
   useEffect(() => {

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { useGenerator, ChatMessage } from '@/contexts/GeneratorContext'
+import { useSupabaseUser } from '@/hooks/useSupabaseUser'
 import { createClient } from '@/lib/supabase/client'
 import Image from 'next/image'
 import type { User } from '@supabase/supabase-js'
@@ -193,51 +194,16 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
         console.log('💾 Loading jobs from database...')
         console.log('👤 User ID:', user.id)
         
-        // CRITICAL: Check if we have a valid session before querying with timeout
-        console.log('🔍 Getting session...')
-        const sessionPromise = supabase.auth.getSession()
-        const timeoutPromise = new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Session check timeout')), 5000)
-        )
-        
-        const { data: { session }, error: sessionError } = await Promise.race([
-          sessionPromise,
-          timeoutPromise
-        ]) as any
-        
-        console.log('🔐 Session check:', { 
-          hasSession: !!session, 
-          userId: session?.user?.id, 
-          sessionError: sessionError?.message 
-        })
-        
-        if (!session) {
-          console.error('❌ No valid session found! Cannot load jobs.')
-          console.error('This usually means the auth cookie is missing or expired.')
-          return
-        }
-        
-        console.log('✅ Session valid, querying jobs table...')
-        
-        // Get only recent jobs (last 10) to speed up initial load with timeout
+        // Simple query - no timeout needed with the new hook handling sessions
         console.log('📋 Executing jobs query...')
         const queryStartTime = performance.now()
         
-        const queryPromise = supabase
+        const { data: jobs, error } = await supabase
           .from('jobs')
           .select('*')
           .eq('user_id', user.id)
           .order('created_at', { ascending: false })
           .limit(10)
-        
-        const queryTimeoutPromise = new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Database query timeout')), 8000)
-        )
-        
-        const { data: jobs, error } = await Promise.race([
-          queryPromise,
-          queryTimeoutPromise
-        ]) as any
 
         console.log(`⏱️ Jobs query took ${(performance.now() - queryStartTime).toFixed(0)}ms`)
         console.log('📊 Query result - jobs:', jobs?.length, 'error:', error?.message || 'none')
