@@ -35,6 +35,7 @@ export interface GeneratedAd {
   created_at: string;
   size: number;
   status: string;
+  mediaType?: 'image' | 'video';
 }
 
 // API response types

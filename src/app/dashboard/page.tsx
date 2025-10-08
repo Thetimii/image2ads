@@ -1,7 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { getUserFolders, getUserProfile } from '@/lib/database'
 import { redirect } from 'next/navigation'
-import DashboardClient from './dashboard-client'
 
 export default async function DashboardPage() {
   const supabase = await createClient()
@@ -21,11 +20,6 @@ export default async function DashboardPage() {
     redirect('/signin')
   }
 
-  return (
-    <DashboardClient 
-      user={user} 
-      profile={profile} 
-      initialFolders={folders} 
-    />
-  )
+  // Redirect to text-to-image generator as default
+  redirect('/dashboard/generate/text-to-image')
 }
