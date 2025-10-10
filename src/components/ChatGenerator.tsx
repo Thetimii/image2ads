@@ -351,23 +351,23 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
     const startTime = Date.now()
     
     // Type-specific polling configuration
-    // Images: Fast (immediate, 3s interval, 5min timeout)
-    // Music: Medium (10s delay, 5s interval, 5min timeout)  
-    // Videos: Patient (30s delay, 15s interval, 10min timeout)
+    // Images: Fast (immediate, 3s interval, 10min timeout)
+    // Music: Medium (immediate, 5s interval, 10min timeout)  
+    // Videos: Ultra-patient (immediate, 10s interval, 20min timeout)
     let maxDuration: number
     let pollInterval: number
     let initialDelay: number
     
     if (tab.includes('video')) {
-      maxDuration = 600000  // 10 minutes for videos
-      pollInterval = 15000   // Poll every 15 seconds
-      initialDelay = 30000   // Wait 30s before starting
+      maxDuration = 1200000  // 20 minutes for videos - DON'T GIVE UP!
+      pollInterval = 10000   // Poll every 10 seconds
+      initialDelay = 0       // Start immediately - no waiting!
     } else if (tab.includes('music')) {
-      maxDuration = 300000   // 5 minutes for music
+      maxDuration = 600000   // 10 minutes for music
       pollInterval = 5000    // Poll every 5 seconds
-      initialDelay = 10000   // Wait 10s before starting
+      initialDelay = 0       // Start immediately
     } else {
-      maxDuration = 300000   // 5 minutes for images
+      maxDuration = 600000   // 10 minutes for images
       pollInterval = 3000    // Poll every 3 seconds
       initialDelay = 0       // Start immediately
     }
@@ -386,25 +386,33 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
           return
         }
         
-        const { data: job, error } = await supabase
-          .from('jobs')
-          .select('*')
-          .eq('id', jobId)
-          .single()
-
-        if (error) {
-          console.error('Error polling job:', error)
-          gen.updateMessage(tab, messageId, { 
-            status: 'error',
-            content: 'Error checking generation status'
-          })
+        // 🔥 CRITICAL: Call check-job-status Edge Function to actually check Kie.ai and download results
+        const session = await supabase.auth.getSession()
+        const token = session.data.session?.access_token
+        
+        if (!token) {
+          console.error('No auth token for polling')
           activePolling.current.delete(jobId)
           return
         }
+        
+        const checkResponse = await fetch(`${CHECK_JOB_STATUS_ENDPOINT}?jobId=${jobId}`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+        })
+        
+        if (!checkResponse.ok) {
+          console.error(`❌ check-job-status returned ${checkResponse.status}`)
+          const timeoutId = setTimeout(pollJob, pollInterval)
+          activeTimeouts.current.add(timeoutId)
+          return
+        }
+        
+        const jobStatus = await checkResponse.json()
+        console.log(`🔍 Polling job ${jobId}: status=${jobStatus.status}, elapsed=${Math.round(elapsed/1000)}s`)
 
-        console.log(`🔍 Polling job ${jobId}: status=${job.status}, elapsed=${Math.round(elapsed/1000)}s`)
-
-        if (job.status === 'completed' && job.result_url) {
+        if (jobStatus.status === 'completed' && jobStatus.result_url) {
           console.log(`✅ Job ${jobId} completed! Getting signed URL...`)
           
           // Show success toast notification
@@ -417,7 +425,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
           // Get signed URL for the result
           const { data: signedUrl } = await supabase.storage
             .from('results')
-            .createSignedUrl(job.result_url, 3600)
+            .createSignedUrl(jobStatus.result_url, 3600)
 
           if (signedUrl?.signedUrl) {
             
@@ -436,22 +444,22 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
           
           // Remove from active polling
           activePolling.current.delete(jobId)
-        } else if (job.status === 'failed' || job.status === 'error') {
+        } else if (jobStatus.status === 'failed' || jobStatus.status === 'error') {
           // Show error toast notification
           toast.error('Generation failed', {
-            description: job.error_message || 'An error occurred during generation',
+            description: jobStatus.error_message || 'An error occurred during generation',
             duration: 5000,
           })
           
           gen.updateMessage(tab, messageId, { 
             status: 'error',
-            content: job.error_message || 'Generation failed'
+            content: jobStatus.error_message || 'Generation failed'
           })
           // Remove from active polling
           activePolling.current.delete(jobId)
         } else {
           // Still processing, continue polling
-          console.log(`⏳ Job ${jobId} still ${job.status}, polling again in ${pollInterval/1000}s...`)
+          console.log(`⏳ Job ${jobId} still ${jobStatus.status}, polling again in ${pollInterval/1000}s...`)
           const timeoutId = setTimeout(pollJob, pollInterval)
           activeTimeouts.current.add(timeoutId)
         }
