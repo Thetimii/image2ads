@@ -2,11 +2,11 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { useGenerator, ChatMessage } from '@/contexts/GeneratorContext'
-import { useSupabaseUser } from '@/hooks/useSupabaseUser'
 import { createClient } from '@/lib/supabase/client'
 import Image from 'next/image'
 import type { User } from '@supabase/supabase-js'
 import type { Profile } from '@/lib/validations'
+import PricingPlans from './PricingPlans'
 
 // Generate UUID that works on both server and client
 const generateId = () => {
@@ -27,7 +27,7 @@ interface ChatGeneratorProps {
   onLockedFeature?: () => void
 }
 
-// Supabase Edge Function endpoints - These are the live production endpoints
+// Supabase Edge Function endpoints
 const SUPABASE_FUNCTIONS_BASE = 'https://cqnaooicfxqtnbuwsopu.supabase.co/functions/v1'
 
 const ENDPOINT_MAP: Record<string, string> = {
@@ -35,25 +35,17 @@ const ENDPOINT_MAP: Record<string, string> = {
   'image-to-image': `${SUPABASE_FUNCTIONS_BASE}/generate-image-image`,
   'text-to-video': `${SUPABASE_FUNCTIONS_BASE}/generate-text-video`,
   'image-to-video': `${SUPABASE_FUNCTIONS_BASE}/generate-image-video`,
+  'text-to-music': `${SUPABASE_FUNCTIONS_BASE}/generate-text-music`,
 }
 
 const CHECK_JOB_STATUS_ENDPOINT = `${SUPABASE_FUNCTIONS_BASE}/check-job-status`
 
-// Log endpoints on load for debugging
-console.log('🔗 Supabase Edge Function Endpoints:', {
-  'text-to-image': ENDPOINT_MAP['text-to-image'],
-  'image-to-image': ENDPOINT_MAP['image-to-image'],
-  'text-to-video': ENDPOINT_MAP['text-to-video'],
-  'image-to-video': ENDPOINT_MAP['image-to-video'],
-  'check-job-status': CHECK_JOB_STATUS_ENDPOINT
-})
-
-const TAB_META: Record<string, { title: string; subtitle: string; locked?: boolean; model: string; resultType: 'image' | 'video' }> = {
+const TAB_META: Record<string, { title: string; subtitle: string; locked?: boolean; model: string; resultType: 'image' | 'video' | 'music' }> = {
   'text-to-image': { title: '🖼️ Text to Image', subtitle: 'Generate product-ready visuals from ideas', model: 'gemini', resultType: 'image' },
   'image-to-image': { title: '🌅 Image to Image', subtitle: 'Transform or restyle an input image', model: 'gemini', resultType: 'image' },
-  // Switch video tabs to use sora-2 (user request) instead of seedream
-  'text-to-video': { title: '🎬 Text to Video', subtitle: 'Bring concepts to motion with AI video', locked: true, model: 'sora-2', resultType: 'video' },
-  'image-to-video': { title: '🎥 Image to Video', subtitle: 'Animate a still into dynamic video', locked: true, model: 'sora-2', resultType: 'video' },
+  'text-to-video': { title: '🎬 Text to Video', subtitle: 'Bring concepts to motion with AI video', locked: true, model: 'seedream', resultType: 'video' },
+  'image-to-video': { title: '🎥 Image to Video', subtitle: 'Animate a still into dynamic video', locked: true, model: 'seedream', resultType: 'video' },
+  'text-to-music': { title: '🎵 Text to Music', subtitle: 'Create original music from text descriptions', locked: true, model: 'suno', resultType: 'music' },
 }
 
 const EXAMPLES: Record<string, Array<{ short: string; full: string }>> = {
@@ -112,13 +104,26 @@ const EXAMPLES: Record<string, Array<{ short: string; full: string }>> = {
       short: '🌫️ Atmospheric Fog & Light Motion',
       full: 'Add dynamic atmospheric motion: drifting fog layers, gentle light shifts, subtle camera push forward, premium film tone'
     }
+  ],
+  'text-to-music': [
+    {
+      short: '🎸 Upbeat Rock Energy',
+      full: 'Upbeat energetic rock track with driving electric guitars, powerful drums, perfect for action scenes and high-energy moments'
+    },
+    {
+      short: '🎹 Chill Lo-Fi Beats',
+      full: 'Relaxing lo-fi hip hop with smooth piano melodies, vinyl crackle, mellow beats, ideal for background ambiance and focus'
+    },
+    {
+      short: '🎺 Cinematic Epic Orchestral',
+      full: 'Epic orchestral piece with soaring strings, powerful brass, dramatic percussion, building to an inspiring crescendo'
+    }
   ]
 }
 
-export default function ChatGenerator({ user: propsUser, profile, onLockedFeature }: ChatGeneratorProps) {
+export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGeneratorProps) {
   const gen = useGenerator()
-  const { user } = useSupabaseUser() // USE THE HOOK - single source of truth!
-  const supabase = createClient() // Create fresh client each render - it reads cookies
+  const supabase = createClient()
   const [input, setInput] = useState('')
   const bottomRef = useRef<HTMLDivElement | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
@@ -128,26 +133,58 @@ export default function ChatGenerator({ user: propsUser, profile, onLockedFeatur
   const [isSubmitting, setIsSubmitting] = useState(false)
   const activeTimeouts = useRef<Set<NodeJS.Timeout>>(new Set())
   const activePolling = useRef<Set<string>>(new Set()) // Track active polling jobs
-  const hasLoadedJobs = useRef(false) // Prevent infinite job loading
-  const [isMounted, setIsMounted] = useState(false) // Client-side only flag
-  const [isLoadingHistory, setIsLoadingHistory] = useState(true) // Track if we're loading jobs from DB
+  const [showCreditPopup, setShowCreditPopup] = useState(false)
+  const [isUpgrading, setIsUpgrading] = useState<string | null>(null)
+
+  // Music-specific options
+  const [makeInstrumental, setMakeInstrumental] = useState(false)
+  const [musicTags, setMusicTags] = useState('')
+  const [lyricsMode, setLyricsMode] = useState<'ai' | 'custom'>('ai') // 'ai' = AI generates lyrics, 'custom' = user provides
+  const [customLyrics, setCustomLyrics] = useState('')
+  const [musicDuration, setMusicDuration] = useState<10 | 30 | 60 | 120 | 180>(30) // Duration in seconds
 
   const meta = TAB_META[gen.activeTab]
   const history = gen.histories[gen.activeTab]
   const requiresImage = gen.activeTab === 'image-to-image' || gen.activeTab === 'image-to-video'
+  const isMusicMode = gen.activeTab === 'text-to-music'
   // Check if feature is locked: only locked if marked as locked AND user doesn't have stripe customer ID
   const isLocked = !!meta.locked && !profile?.stripe_customer_id
   
-  // Client-side only to prevent hydration mismatch
-  useEffect(() => {
-    setIsMounted(true)
-  }, [])
+  const handleSubscribe = async (plan: 'starter' | 'pro' | 'business') => {
+    setIsUpgrading(plan)
+    try {
+      // Create checkout session via API
+      const response = await fetch('/api/stripe/create-checkout-session', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          plan,
+          successUrl: `${window.location.origin}/billing?success=true`,
+          cancelUrl: `${window.location.origin}${window.location.pathname}`,
+        }),
+      })
+
+      if (response.ok) {
+        const { url } = await response.json()
+        window.location.href = url
+      } else {
+        const errorData = await response.json()
+        console.error('Failed to create checkout session:', errorData.error)
+        alert('Failed to start checkout. Please try again.')
+        setIsUpgrading(null)
+      }
+    } catch (error) {
+      console.error('Error creating checkout session:', error)
+      alert('Failed to start checkout. Please try again.')
+      setIsUpgrading(null)
+    }
+  }
+  
 
   useEffect(() => {
-    // Use setTimeout to ensure DOM has updated
-    setTimeout(() => {
-      bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
-    }, 100)
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [history.length])
 
   // Cleanup timeouts on unmount or user change
@@ -159,55 +196,23 @@ export default function ChatGenerator({ user: propsUser, profile, onLockedFeatur
     }
   }, [])
 
-  // Clear timeouts when user changes and reset job loading flag
+  // Clear timeouts when user changes
   useEffect(() => {
     activeTimeouts.current.forEach(timeoutId => clearTimeout(timeoutId))
     activeTimeouts.current.clear()
-    activePolling.current.clear() // Clear active polling to prevent stale loops
-    hasLoadedJobs.current = false // Reset job loading flag for new user
-    console.log('🔄 User changed, reset hasLoadedJobs flag and cleared polling')
-  }, [user?.id])
+  }, [user.id])
 
-  // ✅ Load and poll jobs once, after client mount & valid user
+  // Load and poll jobs from database - this is the source of truth
   useEffect(() => {
-    // Combined readiness check: both user and mount state must be ready  
-    if (!user?.id || !isMounted) {
-      if (!user?.id) console.log('🚫 No user ID, skipping job load')
-      if (!isMounted) console.log('🕐 Component not mounted yet, waiting...')
-      return
-    }
-
-    // Prevent duplicate loads
-    if (hasLoadedJobs.current) {
-      console.log('⚠️ Jobs already loaded — skipping duplicate fetch')
-      return
-    }
-
-    hasLoadedJobs.current = true
-    console.log('✅ Both conditions ready - starting immediate job load')
-    console.log('📊 Readiness status: user.id =', !!user?.id, 'isMounted =', isMounted)
-
-    const loadJobs = async () => {
-      setIsLoadingHistory(true)
-      const startTime = performance.now()
-      
+    const loadAndPollJobs = async () => {
       try {
-        console.log('💾 Loading jobs from database...')
-        console.log('👤 User ID:', user.id)
-        
-        // Simple query - no timeout needed with the new hook handling sessions
-        console.log('📋 Executing jobs query...')
-        const queryStartTime = performance.now()
-        
+        console.log('Loading jobs from database...')
+        // Get all jobs for this user, sorted by creation date
         const { data: jobs, error } = await supabase
           .from('jobs')
           .select('*')
           .eq('user_id', user.id)
-          .order('created_at', { ascending: false })
-          .limit(10)
-
-        console.log(`⏱️ Jobs query took ${(performance.now() - queryStartTime).toFixed(0)}ms`)
-        console.log('📊 Query result - jobs:', jobs?.length, 'error:', error?.message || 'none')
+          .order('created_at', { ascending: true })
 
         if (error) {
           console.error('Error loading jobs:', error)
@@ -215,141 +220,89 @@ export default function ChatGenerator({ user: propsUser, profile, onLockedFeatur
         }
 
         if (!jobs || jobs.length === 0) {
-          console.log('ℹ️ No jobs found')
+          console.log('No jobs found')
           return
         }
 
-        // Reverse to get chronological order
-        jobs.reverse()
-        console.log(`✅ Loaded ${jobs.length} jobs`)
+        console.log(`Found ${jobs.length} jobs:`, jobs.map(j => ({ id: j.id, status: j.status, result_url: j.result_url })))
 
         // Convert jobs to chat messages and organize by type
         const jobsByType: Record<keyof typeof gen.histories, any[]> = {
           'text-to-image': [],
           'image-to-image': [],
           'text-to-video': [],
-          'image-to-video': []
+          'image-to-video': [],
+          'text-to-music': []
         }
 
         // Group jobs by result type
-        jobs.forEach((job: any) => {
-          const tabKey = job.has_images 
-            ? (job.result_type === 'video' ? 'image-to-video' : 'image-to-image')
-            : (job.result_type === 'video' ? 'text-to-video' : 'text-to-image')
+        jobs.forEach(job => {
+          let tabKey: keyof typeof gen.histories
+          
+          if (job.result_type === 'music') {
+            tabKey = 'text-to-music'
+          } else if (job.has_images) {
+            tabKey = job.result_type === 'video' ? 'image-to-video' : 'image-to-image'
+          } else {
+            tabKey = job.result_type === 'video' ? 'text-to-video' : 'text-to-image'
+          }
           
           jobsByType[tabKey].push(job)
         })
 
-        // Batch fetch all signed URLs for completed jobs
-        const urlFetchStart = performance.now()
-        const completedJobs = jobs.filter((job: any) => job.status === 'completed' && job.result_url)
-        console.log(`📦 Fetching ${completedJobs.length} signed URLs in parallel...`)
-        const signedUrlPromises = completedJobs.map((job: any) => 
-          supabase.storage
-            .from('results')
-            .createSignedUrl(job.result_url, 3600)
-            .then(result => ({ jobId: job.id, signedUrl: result.data?.signedUrl }))
-            .catch(err => {
-              console.error(`Error getting signed URL for job ${job.id}:`, err)
-              return { jobId: job.id, signedUrl: null }
-            })
-        )
-        
-        const signedUrlResults = await Promise.all(signedUrlPromises)
-        console.log(`⏱️ Signed URLs fetched in ${(performance.now() - urlFetchStart).toFixed(0)}ms`)
-        const signedUrlMap = new Map(
-          signedUrlResults
-            .filter(result => result.signedUrl)
-            .map(result => [result.jobId, result.signedUrl])
-        )
-
         // Update histories with jobs converted to messages
         Object.entries(jobsByType).forEach(([tab, tabJobs]) => {
           const tabKey = tab as keyof typeof gen.histories
-          const existingMessages = gen.histories[tabKey]
           
-          tabJobs.forEach((job: any) => {
-            const alreadyHasAssistant = existingMessages.some(m => m.jobId === job.id && m.role === 'assistant')
-            const alreadyHasUser = existingMessages.some(m => m.jobId === job.id && m.role === 'user')
-            
-            // Skip if both messages already exist for this job
-            if (alreadyHasUser && alreadyHasAssistant) {
-              console.log('🚫 Job messages already exist, skipping:', job.id)
-              return
+          // Only build messages if this tab is empty (avoid duplicates)
+          if (gen.histories[tabKey].length === 0) {
+            tabJobs.forEach(job => {
+            // Add user message
+            const userMessage: ChatMessage = {
+              id: `user-${job.id}`,
+              role: 'user',
+              content: job.prompt,
+              createdAt: new Date(job.created_at).getTime()
             }
-            
-            // Only add messages if they don't exist
-            if (!alreadyHasUser) {
-              // Add user message with unique ID
-              const userMessage: ChatMessage = {
-                id: generateId(), // Use generateId() for truly unique keys
-                role: 'user',
-                content: job.prompt,
-                createdAt: new Date(job.created_at).getTime(),
-                jobId: job.id // Store jobId for reference
-              }
-              gen.pushMessage(tabKey, userMessage)
+            gen.pushMessage(tabKey, userMessage)
+
+            // Add assistant message based on job status
+            const assistantMessage: ChatMessage = {
+              id: `assistant-${job.id}`,
+              role: 'assistant',
+              content: job.status === 'completed' ? `${job.result_type === 'video' ? 'Video' : 'Image'} generated ✅` : 
+                       job.status === 'failed' ? (job.error_message || 'Generation failed') :
+                       'Generating…',
+              createdAt: new Date(job.created_at).getTime() + 1000, // Slightly after user message
+              status: job.status === 'completed' ? 'complete' : 
+                      job.status === 'failed' ? 'error' : 'pending',
+              jobId: job.id
             }
 
-            let assistantMessage: ChatMessage | undefined
-            if (!alreadyHasAssistant) {
-              assistantMessage = {
-                id: generateId(), // Use generateId() for truly unique keys
-                role: 'assistant',
-                content: job.status === 'completed' ? `${job.result_type === 'video' ? 'Video' : 'Image'} generated ✅` : 
-                        job.status === 'failed' ? (job.error_message || 'Generation failed') :
-                        'Generating…',
-                createdAt: new Date(job.created_at).getTime() + 1000,
-                status: job.status === 'completed' ? 'complete' : 
-                        job.status === 'failed' ? 'error' : 'pending',
-                jobId: job.id,
-                // Add mediaUrl from batch fetch if available
-                ...(signedUrlMap.has(job.id) && {
-                  mediaUrl: signedUrlMap.get(job.id),
-                  mediaType: job.result_type === 'video' ? 'video' : 'image'
-                })
-              }
-              gen.pushMessage(tabKey, assistantMessage)
-            } else {
-              assistantMessage = existingMessages.find(m => m.jobId === job.id && m.role === 'assistant')
-              // Update existing message with mediaUrl if we fetched it
-              if (assistantMessage && signedUrlMap.has(job.id)) {
-                gen.updateMessage(tabKey, assistantMessage.id, {
-                  mediaUrl: signedUrlMap.get(job.id),
-                  mediaType: job.result_type === 'video' ? 'video' : 'image'
-                })
-              }
+            gen.pushMessage(tabKey, assistantMessage)
+
+            // If completed, get signed URL for result immediately  
+            if (job.status === 'completed' && job.result_url) {
+              getSignedUrlForJob(job, tabKey, assistantMessage.id)
             }
 
             // If job is still pending/processing, start polling
-            if ((job.status === 'pending' || job.status === 'processing') && assistantMessage) {
+            if (job.status === 'pending' || job.status === 'processing') {
               startJobPolling(tabKey, assistantMessage.id, job.id)
             }
-          })
+            })
+          }
         })
 
-        console.log(`⏱️ Total load time: ${(performance.now() - startTime).toFixed(0)}ms`)
-        
-        // Log successful job loading into state
-        const totalMessages = Object.values(gen.histories).reduce((sum, history) => sum + history.length, 0)
-        console.log(`✅ Jobs loaded into state: ${jobs.length} jobs converted to ${totalMessages} messages`)
-        
       } catch (error) {
-        console.error('Error loading jobs:', error)
-      } finally {
-        // Mark loading as complete
-        setIsLoadingHistory(false)
+        console.error('Error in loadAndPollJobs:', error)
       }
     }
-    
-    // Fire once, after mount
-    loadJobs().then(() => {
-      // Scroll to bottom after jobs and media are loaded
-      setTimeout(() => {
-        bottomRef.current?.scrollIntoView({ behavior: 'instant', block: 'end' })
-      }, 500)
-    })
-  }, [isMounted, user?.id]) // CRITICAL: Both deps needed - isMounted prevents race condition, user?.id prevents stale data
+
+    // Load jobs after a short delay to let context initialize
+    const timeoutId = setTimeout(loadAndPollJobs, 1000)
+    return () => clearTimeout(timeoutId)
+  }, [user.id]) // Only run when user changes
 
   const getSignedUrlForJob = async (job: any, tab: keyof typeof gen.histories, messageId: string) => {
     try {
@@ -358,10 +311,23 @@ export default function ChatGenerator({ user: propsUser, profile, onLockedFeatur
         .createSignedUrl(job.result_url, 3600)
 
       if (signedUrl?.signedUrl) {
-        gen.updateMessage(tab, messageId, {
+        const updateData: any = {
           mediaUrl: signedUrl.signedUrl,
-          mediaType: job.result_type === 'video' ? 'video' : 'image'
-        })
+          mediaType: job.result_type === 'video' ? 'video' : job.result_type === 'music' ? 'music' : 'image'
+        }
+
+        // For music, also get cover URL if available
+        if (job.result_type === 'music' && job.cover_url) {
+          const { data: coverSignedUrl } = await supabase.storage
+            .from('results')
+            .createSignedUrl(job.cover_url, 3600)
+          
+          if (coverSignedUrl?.signedUrl) {
+            updateData.coverUrl = coverSignedUrl.signedUrl
+          }
+        }
+
+        gen.updateMessage(tab, messageId, updateData)
       }
     } catch (error) {
       console.error('Error getting signed URL:', error)
@@ -374,72 +340,62 @@ export default function ChatGenerator({ user: propsUser, profile, onLockedFeatur
       console.log(`🔄 [JobRecovery] Already polling job ${jobId}, skipping`)
       return
     }
-    console.log('[JobRecovery] startJobPolling INIT', { tab, messageId, jobId })
+    
     activePolling.current.add(jobId)
     
     const pollJob = async () => {
       try {
-        console.log('[JobRecovery] pollJob tick', { jobId, tab, messageId })
-        
-        // Get fresh session token for polling
-        const { data: { session: pollSession } } = await supabase.auth.getSession()
-        if (!pollSession?.access_token) {
-          console.error('[JobRecovery] No valid session for polling')
+        const { data: job, error } = await supabase
+          .from('jobs')
+          .select('*')
+          .eq('id', jobId)
+          .single()
+
+        if (error) {
+          console.error('Error polling job:', error)
+          gen.updateMessage(tab, messageId, { 
+            status: 'error',
+            content: 'Error checking generation status'
+          })
           activePolling.current.delete(jobId)
           return
         }
-        
-        // Call the status endpoint so backend can advance processing (important after refresh)
-        const statusResp = await fetch(`${CHECK_JOB_STATUS_ENDPOINT}?jobId=${jobId}`, {
-          method: 'GET',
-          headers: { 
-            'Authorization': `Bearer ${pollSession.access_token}`,
-            'Content-Type': 'application/json'
-          }
-        })
 
-        if (!statusResp.ok) {
-          console.error('[JobRecovery] Status endpoint error', statusResp.status)
-          const timeoutId = setTimeout(pollJob, 3000)
-          activeTimeouts.current.add(timeoutId)
-          return
-        }
-
-        const statusData = await statusResp.json()
-        console.log('[JobRecovery] statusData', statusData)
-
-        if (statusData.status === 'completed' && statusData.result_url) {
-          // Fetch signed URL
+        if (job.status === 'completed' && job.result_url) {
+          // Get signed URL for the result
           const { data: signedUrl } = await supabase.storage
             .from('results')
-            .createSignedUrl(statusData.result_url, 3600)
+            .createSignedUrl(job.result_url, 3600)
 
-          gen.updateMessage(tab, messageId, {
-            status: 'complete',
-            content: `${tab.includes('video') ? 'Video' : 'Image'} generated ✅`,
-            mediaUrl: signedUrl?.signedUrl || null,
-            mediaType: tab.includes('video') ? 'video' : 'image'
-          })
+          if (signedUrl?.signedUrl) {
+            
+            gen.updateMessage(tab, messageId, {
+              status: 'complete',
+              content: `${tab.includes('video') ? 'Video' : 'Image'} generated ✅`,
+              mediaUrl: signedUrl.signedUrl,
+              mediaType: tab.includes('video') ? 'video' : 'image'
+            })
+          } else {
+            gen.updateMessage(tab, messageId, { 
+              status: 'error',
+              content: 'Error accessing generated content'
+            })
+          }
+          
+          // Remove from active polling
           activePolling.current.delete(jobId)
-          return
-        }
-
-        if (statusData.status === 'failed') {
-          gen.updateMessage(tab, messageId, {
+        } else if (job.status === 'failed' || job.status === 'error') {
+          gen.updateMessage(tab, messageId, { 
             status: 'error',
-            content: statusData.error || 'Generation failed'
+            content: job.error_message || 'Generation failed'
           })
+          // Remove from active polling
           activePolling.current.delete(jobId)
-          return
+        } else {
+          // Still processing, continue polling
+          const timeoutId = setTimeout(pollJob, 3000) // Poll every 3 seconds
+          activeTimeouts.current.add(timeoutId)
         }
-
-        // Still processing
-        gen.updateMessage(tab, messageId, {
-          status: 'pending',
-            content: statusData.message || 'Generation in progress'
-        })
-        const timeoutId = setTimeout(pollJob, 3000)
-        activeTimeouts.current.add(timeoutId)
       } catch (error) {
         console.error('Error in polling:', error)
         gen.updateMessage(tab, messageId, { 
@@ -483,6 +439,7 @@ export default function ChatGenerator({ user: propsUser, profile, onLockedFeatur
   }
 
   const aspectOptions: { label: string; value: typeof gen.aspectRatio; ratio: string }[] = [
+
     { label: '16:9', value: 'landscape', ratio: '16:9' },
     { label: '9:16', value: 'portrait', ratio: '9:16' },
   ]
@@ -508,6 +465,15 @@ export default function ChatGenerator({ user: propsUser, profile, onLockedFeatur
       onLockedFeature?.()
       return
     }
+    
+    // Check if user has sufficient credits BEFORE generation
+    const requiredCredits = meta.resultType === 'video' ? 8 : meta.resultType === 'music' ? 3 : 1
+    if (profile.credits < requiredCredits) {
+      console.log(`[ChatGenerator] Blocked: Insufficient credits (have: ${profile.credits}, need: ${requiredCredits})`)
+      setShowCreditPopup(true)
+      return
+    }
+    
     if (requiresImage && !localFile) {
       console.log(`[ChatGenerator] Blocked: Image required but not provided`)
       onLockedFeature?.()
@@ -516,14 +482,6 @@ export default function ChatGenerator({ user: propsUser, profile, onLockedFeatur
 
     console.log(`[ChatGenerator] Proceeding with generation...`)
     setIsSubmitting(true)
-
-    // Validate image requirement early
-    if (requiresImage && !localFile) {
-      console.error(`[ChatGenerator] ERROR: Image required but not provided`)
-      alert('Please upload a reference image first')
-      setIsSubmitting(false)
-      return
-    }
 
     const userMsg: ChatMessage = {
       id: generateId(),
@@ -534,9 +492,6 @@ export default function ChatGenerator({ user: propsUser, profile, onLockedFeatur
     }
     gen.pushMessage(gen.activeTab, userMsg)
 
-    // Capture the tab at the moment the generation starts so tab switches don't break updates
-    const tabAtRequest = gen.activeTab
-
     const assistantPlaceholder: ChatMessage = {
       id: generateId(),
       role: 'assistant',
@@ -544,95 +499,60 @@ export default function ChatGenerator({ user: propsUser, profile, onLockedFeatur
       createdAt: Date.now(),
       status: 'pending'
     }
-    gen.pushMessage(tabAtRequest, assistantPlaceholder)
+    gen.pushMessage(gen.activeTab, assistantPlaceholder)
 
     setInput('')
     
-    // Capture the local file BEFORE clearing it
-    const fileToUpload = localFile
-    
-    // Clear the local file and preview after sending (but we keep fileToUpload)
+    // Clear the local file and preview after sending
     setLocalFile(null)
     setLocalPreview(null)
 
     try {
       console.log(`[ChatGenerator] Setting isGenerating to true`)
-  gen.setIsGenerating(true)
-
-      console.log(`[ChatGenerator] CHECK - requiresImage:`, requiresImage, 'fileToUpload:', !!fileToUpload, 'fileToUpload object:', fileToUpload)
+      gen.setIsGenerating(true)
 
       // Upload image if needed
       let imageId: string | null = null
-      if (requiresImage && fileToUpload) {
-        try {
-          console.log(`[ChatGenerator] Starting image upload...`)
-          console.log(`[ChatGenerator] File details:`, { name: fileToUpload.name, size: fileToUpload.size, type: fileToUpload.type })
-          
-          const fileName = `${user.id}/${Date.now()}-${fileToUpload.name}`
-          console.log(`[ChatGenerator] Upload filename: ${fileName}`)
-          console.log(`[ChatGenerator] Calling supabase.storage.from('uploads').upload()...`)
-          
-          const { data: uploadData, error: uploadErr } = await supabase.storage.from('uploads').upload(fileName, fileToUpload)
-          
-          console.log(`[ChatGenerator] Upload response - data:`, uploadData, 'error:', uploadErr)
-          
-          if (uploadErr) {
-            console.error(`[ChatGenerator] Upload error:`, uploadErr)
-            throw new Error(`Upload failed: ${uploadErr.message}`)
-          }
-          console.log(`[ChatGenerator] Upload successful:`, uploadData)
-          
-          console.log(`[ChatGenerator] Creating image record in database...`)
-          console.log(`[ChatGenerator] Image record payload:`, {
-            user_id: user.id,
-            file_path: uploadData.path,
-            original_name: fileToUpload.name,
-            folder_id: null
-          })
-          
-          const { data: imageData, error: imageDbErr } = await supabase.from('images').insert({
-            user_id: user.id,
-            file_path: uploadData.path,
-            original_name: fileToUpload.name,
-            folder_id: null
-          }).select().single()
-          
-          console.log(`[ChatGenerator] Database insert result - error:`, imageDbErr, 'data:', imageData)
-          
-          if (imageDbErr) {
-            console.error(`[ChatGenerator] Image DB error:`, imageDbErr)
-            // Clean up uploaded file if DB insert fails
-            await supabase.storage.from('uploads').remove([uploadData.path])
-            throw new Error(`Database error: ${imageDbErr.message}`)
-          }
-          console.log(`[ChatGenerator] Image record created:`, imageData)
-          imageId = imageData.id
-        } catch (uploadError) {
-          console.error(`[ChatGenerator] ❌ IMAGE UPLOAD FAILED:`, uploadError)
-          throw uploadError
+      if (requiresImage && localFile) {
+        console.log(`[ChatGenerator] Starting image upload...`)
+        console.log(`[ChatGenerator] File details:`, { name: localFile.name, size: localFile.size, type: localFile.type })
+        
+        const fileName = `${user.id}/${Date.now()}-${localFile.name}`
+        console.log(`[ChatGenerator] Upload filename: ${fileName}`)
+        
+        const { data: uploadData, error: uploadErr } = await supabase.storage.from('uploads').upload(fileName, localFile)
+        
+        if (uploadErr) {
+          console.error(`[ChatGenerator] Upload error:`, uploadErr)
+          throw new Error(`Upload failed: ${uploadErr.message}`)
         }
+        console.log(`[ChatGenerator] Upload successful:`, uploadData)
+        
+        console.log(`[ChatGenerator] Creating image record in database...`)
+        const { data: imageData, error: imageDbErr } = await supabase.from('images').insert({
+          user_id: user.id,
+          file_path: uploadData.path,
+          original_name: localFile.name,
+          folder_id: null
+        }).select().single()
+        
+        if (imageDbErr) {
+          console.error(`[ChatGenerator] Image DB error:`, imageDbErr)
+          // Clean up uploaded file if DB insert fails
+          await supabase.storage.from('uploads').remove([uploadData.path])
+          throw new Error(`Database error: ${imageDbErr.message}`)
+        }
+        console.log(`[ChatGenerator] Image record created:`, imageData)
+        imageId = imageData.id
       } else {
-        console.log(`[ChatGenerator] No image upload required (requiresImage: ${requiresImage}, fileToUpload: ${!!fileToUpload})`)
+        console.log(`[ChatGenerator] No image upload required (requiresImage: ${requiresImage}, localFile: ${!!localFile})`)
       }
-
-      console.log(`[ChatGenerator] About to create job...`)
-      console.log(`[ChatGenerator] Current state - imageId:`, imageId)
-      console.log(`[ChatGenerator] Current state - meta:`, meta)
-      console.log(`[ChatGenerator] Current state - aspectRatio:`, gen.aspectRatio)
 
       // Create job
       console.log(`[ChatGenerator] Creating job record...`)
-      // Attach aspect ratio suffix to model ONLY for video models (sora-2)
-      // Image models (gemini) don't need aspect ratio in the model name
-      const isVideoModel = meta.resultType === 'video'
-      const aspectSuffix = isVideoModel 
-        ? (gen.aspectRatio === 'landscape' ? '-landscape' : gen.aspectRatio === 'portrait' ? '-portrait' : '')
-        : ''
-      
-      const baseModel = meta.model === 'sora-2' ? 'sora-2' : meta.model
       const jobPayload: any = {
         user_id: user.id,
-        model: `${baseModel}${aspectSuffix}`,
+        model: meta.model,
         prompt: userMsg.content,
         status: 'pending',
         result_type: meta.resultType,
@@ -640,6 +560,18 @@ export default function ChatGenerator({ user: propsUser, profile, onLockedFeatur
         image_ids: imageId ? [imageId] : [],
         image_id: imageId || null
       }
+      
+      // Add music-specific parameters
+      if (isMusicMode) {
+        jobPayload.music_options = {
+          make_instrumental: makeInstrumental,
+          tags: musicTags.trim() || undefined,
+          lyrics_mode: lyricsMode,
+          custom_lyrics: lyricsMode === 'custom' ? customLyrics.trim() : undefined,
+          duration: musicDuration
+        }
+      }
+      
       console.log(`[ChatGenerator] Job payload:`, jobPayload)
       
       const { data: job, error: jobErr } = await supabase.from('jobs').insert(jobPayload).select().single()
@@ -650,84 +582,49 @@ export default function ChatGenerator({ user: propsUser, profile, onLockedFeatur
       console.log(`[ChatGenerator] Job created successfully:`, job)
 
       // Update the assistant message with the job ID so we can resume polling after refresh
-  gen.updateMessage(tabAtRequest, assistantPlaceholder.id, { jobId: job.id })
+      gen.updateMessage(gen.activeTab, assistantPlaceholder.id, { jobId: job.id })
 
-      const endpoint = ENDPOINT_MAP[tabAtRequest]
+      const endpoint = ENDPOINT_MAP[gen.activeTab]
       console.log(`[ChatGenerator] *** STARTING REQUEST ***`)
-  console.log(`[ChatGenerator] Active tab (live): ${gen.activeTab} | tabAtRequest (frozen): ${tabAtRequest}`)
+      console.log(`[ChatGenerator] Active tab: ${gen.activeTab}`)
       console.log(`[ChatGenerator] Endpoint: ${endpoint}`)
       console.log(`[ChatGenerator] JobId: ${job.id}`)
       console.log(`[ChatGenerator] Job data:`, job)
       
-      // Get the user's session token for proper authorization
-      const { data: { session } } = await supabase.auth.getSession()
-      if (!session?.access_token) {
-        throw new Error('No valid session token found')
-      }
-      console.log(`[ChatGenerator] Using session token for authorization`)
-      
       // Add timeout to detect hanging requests
+      // Music generation takes longer (30-90 seconds), so use 5 minute timeout
       const controller = new AbortController()
-      const timeoutId = setTimeout(() => {
-        console.error(`[ChatGenerator] Request timed out after 30 seconds`)
-        controller.abort()
-      }, 30000) // 30 second timeout
+      const timeoutId = setTimeout(() => controller.abort(), 300000) // 5 minute timeout for music
       
-      console.log(`[ChatGenerator] Making fetch request to: ${endpoint}`)
+      console.log(`[ChatGenerator] Making fetch request...`)
       const resp = await fetch(endpoint, {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`
+          'Authorization': `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`
         },
         body: JSON.stringify({ jobId: job.id }),
         signal: controller.signal
-      }).catch((fetchError) => {
-        console.error(`[ChatGenerator] Fetch failed:`, fetchError)
-        console.error(`[ChatGenerator] Fetch error name:`, fetchError.name)
-        console.error(`[ChatGenerator] Fetch error message:`, fetchError.message)
-        throw fetchError
       })
       
       clearTimeout(timeoutId)
-      console.log(`[ChatGenerator] Response received`)
       console.log(`[ChatGenerator] Response status: ${resp.status}`)
-      console.log(`[ChatGenerator] Response statusText: ${resp.statusText}`)
       console.log(`[ChatGenerator] Response headers:`, Object.fromEntries(resp.headers.entries()))
-      
       if (!resp.ok) {
         const errData = await resp.json().catch(() => ({}))
-        console.error(`❌ [ChatGenerator] Edge Function Error:`)
-        console.error(`   Endpoint: ${endpoint}`)
-        console.error(`   Status: ${resp.status} ${resp.statusText}`)
-        console.error(`   Error Data:`, errData)
-        console.error(`   Job ID: ${job.id}`)
-        console.error(`   Tab: ${gen.activeTab}`)
-        
-        // User-friendly error messages based on status code
-        let userMessage = 'Generation failed'
-        if (resp.status === 401) {
-          userMessage = 'Authentication failed. Please refresh the page and try again.'
-        } else if (resp.status === 403) {
-          userMessage = 'You do not have permission to perform this action.'
-        } else if (resp.status === 429) {
-          userMessage = 'Too many requests. Please wait a moment and try again.'
-        } else if (resp.status >= 500) {
-          userMessage = 'Server error. Please try again in a moment.'
-        }
-        
-        throw new Error(errData.error || userMessage)
+        console.error(`[ChatGenerator] API Response Error for ${gen.activeTab}:`, resp.status, errData)
+        console.error(`[ChatGenerator] Response headers:`, Object.fromEntries(resp.headers.entries()))
+        throw new Error(errData.error || `HTTP ${resp.status}: Generation failed`)
       }
-      
       const responseData = await resp.json()
-      console.log(`✅ [ChatGenerator] Success response from ${gen.activeTab}:`, responseData)
+      console.log(`[ChatGenerator] Response from ${gen.activeTab}:`, responseData)
       
       if (!responseData.success) {
         throw new Error(responseData.error || 'Generation failed')
       }
 
       // Task created successfully, now poll for results
-      gen.updateMessage(tabAtRequest, assistantPlaceholder.id, {
+      gen.updateMessage(gen.activeTab, assistantPlaceholder.id, {
         status: 'pending',
         content: 'Processing with AI...'
       })
@@ -735,18 +632,10 @@ export default function ChatGenerator({ user: propsUser, profile, onLockedFeatur
       // Poll for results every 3 seconds
       const pollForResult = async (): Promise<void> => {
         try {
-          // Get fresh session token for each poll
-          const { data: { session: pollSession } } = await supabase.auth.getSession()
-          if (!pollSession?.access_token) {
-            console.error('No valid session for polling')
-            return
-          }
-          
           const statusResp = await fetch(`${CHECK_JOB_STATUS_ENDPOINT}?jobId=${job.id}`, {
             method: 'GET',
             headers: {
-              'Authorization': `Bearer ${pollSession.access_token}`,
-              'Content-Type': 'application/json'
+              'Authorization': `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`
             }
           })
 
@@ -776,21 +665,42 @@ export default function ChatGenerator({ user: propsUser, profile, onLockedFeatur
               console.error(`[ChatGenerator] statusData:`, statusData)
             }
 
+            // For music, also get cover URL if available
+            let coverUrl = ''
+            if (meta.resultType === 'music' && statusData.cover_url) {
+              console.log(`[ChatGenerator] 🎨 Creating cover signed URL...`)
+              const { data: coverSignedUrl } = await supabase.storage
+                .from('results')
+                .createSignedUrl(statusData.cover_url, 3600)
+              
+              if (coverSignedUrl?.signedUrl) {
+                coverUrl = coverSignedUrl.signedUrl
+                console.log(`[ChatGenerator] 🎨 Cover URL: ${coverUrl}`)
+              }
+            }
+
             console.log(`[ChatGenerator] 📝 Updating message with data:`, {
               messageId: assistantPlaceholder.id,
               activeTab: gen.activeTab,
               status: 'complete',
-              content: meta.resultType === 'image' ? 'Image generated ✅' : 'Video generated ✅',
+              content: meta.resultType === 'image' ? 'Image generated ✅' : meta.resultType === 'video' ? 'Video generated ✅' : 'Music generated ✅',
               mediaUrl,
+              coverUrl: coverUrl || undefined,
               mediaType: meta.resultType
             })
 
-            gen.updateMessage(tabAtRequest, assistantPlaceholder.id, {
+            const updateData: any = {
               status: 'complete',
-              content: meta.resultType === 'image' ? 'Image generated ✅' : 'Video generated ✅',
+              content: meta.resultType === 'image' ? 'Image generated ✅' : meta.resultType === 'video' ? 'Video generated ✅' : 'Music generated ✅',
               mediaUrl,
               mediaType: meta.resultType
-            })
+            }
+
+            if (coverUrl) {
+              updateData.coverUrl = coverUrl
+            }
+
+            gen.updateMessage(gen.activeTab, assistantPlaceholder.id, updateData)
             
             console.log(`[ChatGenerator] ✅ MESSAGE UPDATE COMPLETED!`)
             console.log(`[ChatGenerator] 🎯 Final message should show image with URL: ${mediaUrl}`)
@@ -814,7 +724,7 @@ export default function ChatGenerator({ user: propsUser, profile, onLockedFeatur
           }
 
           // Still processing, continue polling
-          gen.updateMessage(tabAtRequest, assistantPlaceholder.id, {
+          gen.updateMessage(gen.activeTab, assistantPlaceholder.id, {
             status: 'pending',
             content: statusData.message || 'Still processing...'
           })
@@ -828,7 +738,7 @@ export default function ChatGenerator({ user: propsUser, profile, onLockedFeatur
           activeTimeouts.current.forEach(timeoutId => clearTimeout(timeoutId))
           activeTimeouts.current.clear()
           gen.setIsGenerating(false)
-          gen.updateMessage(tabAtRequest, assistantPlaceholder.id, {
+          gen.updateMessage(gen.activeTab, assistantPlaceholder.id, {
             status: 'error',
             content: `Polling failed: ${error instanceof Error ? error.message : 'Unknown error'}`
           })
@@ -850,7 +760,7 @@ export default function ChatGenerator({ user: propsUser, profile, onLockedFeatur
         errorMessage = 'Request timed out after 30 seconds. Please try again.'
       }
       
-      gen.updateMessage(tabAtRequest, assistantPlaceholder.id, {
+      gen.updateMessage(gen.activeTab, assistantPlaceholder.id, {
         status: 'error',
         content: errorMessage
       })
@@ -860,83 +770,6 @@ export default function ChatGenerator({ user: propsUser, profile, onLockedFeatur
     }
   }
 
-  // Realtime subscription: listen for job status changes so UI updates immediately even if polling misses or user refreshes
-  useEffect(() => {
-    if (!user?.id) return; // Guard against null user
-    
-    const channel = supabase.channel('jobs-realtime')
-      .on('postgres_changes', {
-        event: 'UPDATE',
-        schema: 'public',
-        table: 'jobs',
-        filter: `user_id=eq.${user.id}`
-      }, async (payload) => {
-        const newRow: any = payload.new
-        const jobId = newRow.id
-        const status = newRow.status
-        console.log(`[ChatGenerator][Realtime] Job ${jobId} updated to ${status}`)
-        console.log(`[ChatGenerator][Realtime] Payload:`, payload)
-        
-        // Find which tab this job belongs to by deriving from row (mirrors logic in loadAndPollJobs)
-        const tabKey: keyof typeof gen.histories = newRow.has_images
-          ? (newRow.result_type === 'video' ? 'image-to-video' : 'image-to-image')
-          : (newRow.result_type === 'video' ? 'text-to-video' : 'text-to-image')
-
-        console.log(`[ChatGenerator][Realtime] Determined tab: ${tabKey}`)
-
-        // Locate assistant message with this jobId
-        const messages = gen.histories[tabKey]
-        const assistantMsg = messages.find(m => m.jobId === jobId && m.role === 'assistant')
-        console.log(`[ChatGenerator][Realtime] Found assistant message:`, assistantMsg?.id)
-        if (!assistantMsg) {
-          console.log(`[ChatGenerator][Realtime] No assistant message found for job ${jobId} in tab ${tabKey}`)
-          return
-        }
-
-        if (status === 'completed' && newRow.result_url && !assistantMsg.mediaUrl) {
-          console.log(`[ChatGenerator][Realtime] Job completed, getting signed URL for:`, newRow.result_url)
-          try {
-            const { data: signed, error: signedError } = await supabase.storage.from('results').createSignedUrl(newRow.result_url, 3600)
-            console.log(`[ChatGenerator][Realtime] Signed URL result:`, { signed, signedError })
-            
-            if (signedError) {
-              console.error(`[ChatGenerator][Realtime] Signed URL error:`, signedError)
-              return
-            }
-            
-            console.log(`[ChatGenerator][Realtime] Updating message ${assistantMsg.id} with mediaUrl:`, signed?.signedUrl)
-            
-            gen.updateMessage(tabKey, assistantMsg.id, {
-              status: 'complete',
-              content: newRow.result_type === 'video' ? 'Video generated ✅' : 'Image generated ✅',
-              mediaUrl: signed?.signedUrl || null,
-              mediaType: newRow.result_type
-            })
-            console.log(`[ChatGenerator][Realtime] Updated message ${assistantMsg.id} for job ${jobId} to completed`)
-          } catch (err) {
-            console.error('[ChatGenerator][Realtime] Signed URL error:', err)
-          }
-        } else if ((status === 'failed' || status === 'error') && assistantMsg.status !== 'error') {
-          gen.updateMessage(tabKey, assistantMsg.id, {
-            status: 'error',
-            content: newRow.error_message || 'Generation failed'
-          })
-        }
-      })
-      .subscribe((status) => {
-        console.log('[ChatGenerator][Realtime] Subscription status:', status)
-      })
-
-    return () => {
-      try {
-        supabase.removeChannel(channel)
-        console.log('🧹 Realtime channel unsubscribed successfully')
-      } catch (error) {
-        console.error('Error unsubscribing realtime channel:', error)
-      }
-    }
-  }, [user?.id]) // Only depend on user?.id, supabase is now stable
-
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
@@ -944,23 +777,45 @@ export default function ChatGenerator({ user: propsUser, profile, onLockedFeatur
     }
   }
 
-  // Prevent SSR mismatch by waiting for client-side mount
-  if (!isMounted) return null
-
-  // Wait for user to load from hook
-  if (!user) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <div className="text-center">
-          <div className="w-8 h-8 border-4 border-purple-200 border-t-purple-600 rounded-full animate-spin mx-auto mb-3"></div>
-          <p className="text-sm text-gray-500">Loading session...</p>
-        </div>
-      </div>
-    )
-  }
-
   return (
     <div className="flex flex-col h-full">
+      {/* Credit Popup */}
+      {showCreditPopup && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-5xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
+            {/* Header */}
+            <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex justify-between items-center rounded-t-2xl">
+              <div>
+                <h2 className="text-xl font-bold text-gray-900">⚠️ Insufficient Credits</h2>
+                <p className="text-sm text-gray-500 mt-1">
+                  You need {meta.resultType === 'video' ? '8' : meta.resultType === 'music' ? '3' : '1'} credits but only have {profile.credits}. Choose a plan to continue:
+                </p>
+              </div>
+              <button
+                onClick={() => setShowCreditPopup(false)}
+                className="text-gray-400 hover:text-gray-600 text-2xl leading-none"
+              >
+                ×
+              </button>
+            </div>
+
+            {/* Plans Grid */}
+            <PricingPlans 
+              onSubscribeAction={handleSubscribe}
+              isLoading={isUpgrading}
+              variant="popup"
+            />
+
+            {/* Footer */}
+            <div className="border-t border-gray-200 px-6 py-4 bg-gray-50 rounded-b-2xl">
+              <p className="text-xs text-gray-500 text-center">
+                💳 Secure payment powered by Stripe • Cancel anytime • 30-day money-back guarantee
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+      
       {/* Header */}
       <div className="flex justify-between items-center border-b border-gray-200 bg-white px-6 py-3 flex-shrink-0">
         <div>
@@ -974,8 +829,7 @@ export default function ChatGenerator({ user: propsUser, profile, onLockedFeatur
 
       {/* Chat scroll area */}
       <div 
-        className="flex-1 overflow-y-auto px-4 sm:px-8 py-4 sm:py-6 bg-[#f7f7f8] space-y-4 sm:space-y-6 relative overscroll-contain"
-        style={{ WebkitOverflowScrolling: 'touch' }}
+        className="flex-1 overflow-y-auto px-8 py-6 bg-[#f7f7f8] space-y-6 relative"
         onDragOver={(e) => { e.preventDefault(); if (requiresImage) setIsDragging(true) }}
         onDragLeave={() => setIsDragging(false)}
         onDrop={(e) => {
@@ -997,36 +851,26 @@ export default function ChatGenerator({ user: propsUser, profile, onLockedFeatur
             </div>
           </div>
         )}
-        {/* Show loading skeleton while fetching history */}
-        {isLoadingHistory && (
-          <div className="flex items-center justify-center h-full">
-            <div className="text-center">
-              <div className="w-8 h-8 border-4 border-purple-200 border-t-purple-600 rounded-full animate-spin mx-auto mb-3"></div>
-              <p className="text-sm text-gray-500">Loading your history...</p>
-            </div>
-          </div>
-        )}
-        {/* Show placeholder only when not loading and no history */}
-        {!isLoadingHistory && history.length === 0 && (
+        {history.length === 0 && (
           <div className="flex items-center justify-center h-full">
             <div 
               onClick={requiresImage ? handleUploadClick : undefined}
-              className={`max-w-lg w-full text-center px-6 sm:px-8 py-8 sm:py-12 rounded-xl border-2 ${
+              className={`max-w-lg w-full text-center px-8 py-12 rounded-xl border-2 ${
                 requiresImage 
-                  ? 'border-dashed border-purple-300 bg-purple-50/30 cursor-pointer hover:bg-purple-50/50 hover:border-purple-400 transition-all active:scale-95' 
+                  ? 'border-dashed border-purple-300 bg-purple-50/30 cursor-pointer hover:bg-purple-50/50 hover:border-purple-400 transition-all' 
                   : 'border-gray-200 bg-white'
               }`}
             >
               {requiresImage ? (
                 <>
-                  <div className="flex justify-center gap-3 mb-3 sm:mb-4 text-3xl sm:text-4xl">
+                  <div className="flex justify-center gap-3 mb-4 text-4xl">
                     <span>📷</span>
                     <span>🖼️</span>
                     <span>📁</span>
                   </div>
-                  <h3 className="text-sm sm:text-base font-semibold text-gray-800 mb-2">Upload Your Reference Image</h3>
-                  <p className="text-xs sm:text-sm text-gray-600 leading-relaxed mb-1">
-                    Tap here or drag & drop an image to start transforming.
+                  <h3 className="text-base font-semibold text-gray-800 mb-2">Upload Your Reference Image</h3>
+                  <p className="text-sm text-gray-600 leading-relaxed mb-1">
+                    Click here or drag & drop an image to start transforming.
                   </p>
                   <div className="flex items-center justify-between mt-3">
                     <p className="text-xs text-gray-500">
@@ -1055,6 +899,22 @@ export default function ChatGenerator({ user: propsUser, profile, onLockedFeatur
                     </div>
                   </div>
                 </>
+              ) : isMusicMode ? (
+                <>
+                  <div className="text-5xl mb-4">🎵</div>
+                  <h3 className="text-base font-semibold text-gray-800 mb-2">Describe Your Music</h3>
+                  <p className="text-sm text-gray-600 leading-relaxed">
+                    Describe the style, mood, instruments, tempo, and feeling. Include genre, energy level, and specific musical elements you want.
+                  </p>
+                  <div className="flex items-center justify-between mt-3">
+                    <p className="text-xs text-gray-400">
+                      Example: "Upbeat rock song with electric guitars and powerful drums, energetic and motivational"
+                    </p>
+                    <div className="bg-purple-50 border border-purple-200 px-3 py-1 rounded-xl">
+                      <span className="text-xs font-medium text-purple-700">3 credits per music</span>
+                    </div>
+                  </div>
+                </>
               ) : (
                 <>
                   <div className="text-5xl mb-4">✨</div>
@@ -1079,40 +939,40 @@ export default function ChatGenerator({ user: propsUser, profile, onLockedFeatur
           </div>
         )}
         {history.map(m => (
-            <div key={`${m.id}-${m.role}-${m.jobId || ''}`} className={`flex w-full ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-            <div className={`${m.role === 'user' ? 'bg-purple-600 text-white rounded-2xl rounded-br-sm' : 'bg-white border border-gray-200 rounded-2xl rounded-bl-sm'} px-3 sm:px-4 py-2 sm:py-3 shadow-sm text-xs sm:text-sm max-w-[85%] sm:max-w-[75%] md:max-w-[65%]`}>
-              <div className="whitespace-pre-wrap leading-relaxed break-words">
+            <div key={m.id} className={`flex w-full ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+            <div className={`${m.role === 'user' ? 'bg-purple-600 text-white rounded-2xl rounded-br-sm' : 'bg-white border border-gray-200 rounded-2xl rounded-bl-sm'} px-4 py-3 shadow-sm text-sm max-w-[65%]`}>
+              <div className="whitespace-pre-wrap leading-relaxed">
                 {m.content}
               </div>
               {m.status === 'pending' && (
-                <div className="mt-3 w-full sm:w-[320px] md:w-[420px] h-[180px] sm:h-[200px] md:h-[280px] rounded-lg bg-gradient-to-br from-purple-50 via-pink-50 to-purple-50 relative overflow-hidden border border-purple-200/50">
+                <div className="mt-3 w-[260px] h-[170px] rounded-lg bg-gradient-to-br from-purple-50 via-pink-50 to-purple-50 relative overflow-hidden border border-purple-200/50">
                   {/* Animated shimmer */}
                   <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/50 to-transparent animate-[shimmer_2s_infinite] -translate-x-full" />
                   
                   {/* Pulsing dots */}
-                  <div className="absolute top-3 sm:top-4 left-3 sm:left-4 flex gap-1">
-                    <div className="w-1.5 sm:w-2 h-1.5 sm:h-2 bg-purple-400 rounded-full animate-bounce [animation-delay:-0.3s]" />
-                    <div className="w-1.5 sm:w-2 h-1.5 sm:h-2 bg-pink-400 rounded-full animate-bounce [animation-delay:-0.15s]" />
-                    <div className="w-1.5 sm:w-2 h-1.5 sm:h-2 bg-purple-400 rounded-full animate-bounce" />
+                  <div className="absolute top-4 left-4 flex gap-1">
+                    <div className="w-2 h-2 bg-purple-400 rounded-full animate-bounce [animation-delay:-0.3s]" />
+                    <div className="w-2 h-2 bg-pink-400 rounded-full animate-bounce [animation-delay:-0.15s]" />
+                    <div className="w-2 h-2 bg-purple-400 rounded-full animate-bounce" />
                   </div>
                   
                   {/* Rotating spinner */}
-                  <div className="absolute top-3 sm:top-4 right-3 sm:right-4">
-                    <div className="w-3 sm:w-4 h-3 sm:h-4 border-2 border-purple-300 border-t-purple-600 rounded-full animate-spin" />
+                  <div className="absolute top-4 right-4">
+                    <div className="w-4 h-4 border-2 border-purple-300 border-t-purple-600 rounded-full animate-spin" />
                   </div>
                   
                   {/* Center text with typing animation */}
-                  <div className="absolute inset-0 flex flex-col items-center justify-center text-center px-4">
-                    <div className="text-purple-600 font-medium text-xs sm:text-sm mb-1">
+                  <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
+                    <div className="text-purple-600 font-medium text-sm mb-1">
                       Generating {meta.resultType}
                     </div>
-                    <div className="text-[10px] sm:text-xs text-purple-500/70 animate-pulse">
+                    <div className="text-xs text-purple-500/70 animate-pulse">
                       This may take {meta.resultType === 'video' ? '2-5 minutes' : '30-60 seconds'}
                     </div>
                   </div>
                   
                   {/* Progress bar */}
-                  <div className="absolute bottom-3 sm:bottom-4 left-3 sm:left-4 right-3 sm:right-4 h-1 bg-purple-100 rounded-full overflow-hidden">
+                  <div className="absolute bottom-4 left-4 right-4 h-1 bg-purple-100 rounded-full overflow-hidden">
                     <div className="h-full bg-gradient-to-r from-purple-500 to-pink-500 rounded-full animate-[progress_3s_ease-in-out_infinite]" />
                   </div>
                 </div>
@@ -1124,10 +984,10 @@ export default function ChatGenerator({ user: propsUser, profile, onLockedFeatur
                     alt="Generated result" 
                     width={400} 
                     height={400} 
-                    className="rounded-lg w-full max-w-[280px] sm:max-w-[350px] md:max-w-[400px] shadow-sm cursor-pointer hover:shadow-lg transition-shadow" 
+                    className="rounded-lg w-full max-w-[400px] shadow-sm cursor-pointer hover:shadow-lg transition-shadow" 
                     onClick={() => m.mediaUrl && window.open(m.mediaUrl, '_blank')}
                   />
-                  <div className="absolute top-2 right-2 sm:opacity-0 sm:group-hover:opacity-100 sm:transition-opacity">
+                  <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
                     <button
                       onClick={async () => {
                         try {
@@ -1145,7 +1005,7 @@ export default function ChatGenerator({ user: propsUser, profile, onLockedFeatur
                           console.error('Download failed:', e)
                         }
                       }}
-                      className="bg-black/50 hover:bg-black/70 active:bg-black/80 text-white p-1.5 sm:p-2 rounded-full text-xs sm:text-sm transition-colors"
+                      className="bg-black/50 hover:bg-black/70 text-white p-2 rounded-full text-sm transition-colors"
                       title="Download image"
                     >
                       ⬇️
@@ -1158,9 +1018,9 @@ export default function ChatGenerator({ user: propsUser, profile, onLockedFeatur
                   <video 
                     src={m.mediaUrl} 
                     controls 
-                    className="rounded-lg w-full max-w-[280px] sm:max-w-[400px] md:max-w-[500px] shadow-md" 
+                    className="rounded-lg w-full max-w-[500px] shadow-md" 
                   />
-                  <div className="absolute top-2 right-2 sm:opacity-0 sm:group-hover:opacity-100 sm:transition-opacity">
+                  <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
                     <button
                       onClick={async () => {
                         try {
@@ -1178,8 +1038,68 @@ export default function ChatGenerator({ user: propsUser, profile, onLockedFeatur
                           console.error('Download failed:', e)
                         }
                       }}
-                      className="bg-black/50 hover:bg-black/70 active:bg-black/80 text-white p-1.5 sm:p-2 rounded-full text-xs sm:text-sm transition-colors"
+                      className="bg-black/50 hover:bg-black/70 text-white p-2 rounded-full text-sm transition-colors"
                       title="Download video"
+                    >
+                      ⬇️
+                    </button>
+                  </div>
+                </div>
+              )}
+              {m.mediaUrl && m.mediaType === 'music' && (
+                <div className="mt-3 relative group">
+                  <div className="bg-gradient-to-r from-purple-500 to-pink-500 rounded-lg overflow-hidden max-w-[500px]">
+                    {/* Cover Image */}
+                    {m.coverUrl && (
+                      <div className="relative w-full aspect-square">
+                        <Image
+                          src={m.coverUrl}
+                          alt="Music Cover Art"
+                          fill
+                          className="object-cover"
+                          unoptimized
+                        />
+                      </div>
+                    )}
+                    
+                    {/* Music Info and Player */}
+                    <div className="p-4">
+                      <div className="flex items-center gap-3 mb-2">
+                        <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center">
+                          <span className="text-2xl">🎵</span>
+                        </div>
+                        <div className="flex-1 text-white">
+                          <div className="font-semibold">Generated Music</div>
+                          <div className="text-xs opacity-90">AI-Generated Audio</div>
+                        </div>
+                      </div>
+                      <audio 
+                        src={m.mediaUrl} 
+                        controls 
+                        className="w-full"
+                      />
+                    </div>
+                  </div>
+                  <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button
+                      onClick={async () => {
+                        try {
+                          const response = await fetch(m.mediaUrl!)
+                          const blob = await response.blob()
+                          const url = window.URL.createObjectURL(blob)
+                          const a = document.createElement('a')
+                          a.href = url
+                          a.download = `generated-music-${Date.now()}.mp3`
+                          document.body.appendChild(a)
+                          a.click()
+                          window.URL.revokeObjectURL(url)
+                          document.body.removeChild(a)
+                        } catch (e) {
+                          console.error('Download failed:', e)
+                        }
+                      }}
+                      className="bg-black/50 hover:bg-black/70 text-white p-2 rounded-full text-sm transition-colors"
+                      title="Download music"
                     >
                       ⬇️
                     </button>
@@ -1193,27 +1113,112 @@ export default function ChatGenerator({ user: propsUser, profile, onLockedFeatur
       </div>
 
       {/* Bottom input bar */}
-      <div className="border-t border-gray-200 bg-white px-3 sm:px-4 py-2 sm:py-3 flex flex-col gap-2 shadow-inner">
+      <div className="border-t border-gray-200 bg-white px-4 py-3 flex flex-col gap-2 shadow-inner">
         {/* Examples */}
-        <div className="flex gap-2 overflow-x-auto text-xs text-gray-600 pb-1 scrollbar-hide -mx-1 px-1" style={{ WebkitOverflowScrolling: 'touch' }}>
+        <div className="flex gap-2 overflow-x-auto text-xs text-gray-600 pb-1 hide-scrollbar pr-4">
           {EXAMPLES[gen.activeTab].map(ex => (
             <button
               key={ex.short}
               onClick={() => handleExample(ex.full)}
-              className="px-2 py-1 md:px-3 md:py-1.5 rounded-full bg-gray-100 hover:bg-gray-200 active:bg-gray-300 transition text-gray-600 whitespace-nowrap border border-gray-200 hover:border-gray-300 text-[10px] md:text-xs flex-shrink-0"
+              className="px-3 py-1.5 rounded-full bg-gray-100 hover:bg-gray-200 transition text-gray-600 whitespace-nowrap border border-gray-200 hover:border-gray-300"
               title={ex.full}
             >
               {ex.short}
             </button>
           ))}
         </div>
+        
+        {/* Music-specific options */}
+        {isMusicMode && (
+          <div className="flex flex-col gap-3 p-3 bg-gradient-to-r from-purple-50 to-pink-50 rounded-xl border border-purple-200">
+            <div className="flex items-center justify-between">
+              <label className="flex items-center gap-2 cursor-pointer group">
+                <div className="relative">
+                  <input
+                    type="checkbox"
+                    checked={makeInstrumental}
+                    onChange={(e) => setMakeInstrumental(e.target.checked)}
+                    className="sr-only peer"
+                  />
+                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-purple-500 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
+                </div>
+                <span className="text-sm font-medium text-gray-700 group-hover:text-purple-600 transition">
+                  🎹 Instrumental Only (no vocals)
+                </span>
+              </label>
+            </div>
+            
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-medium text-gray-600 flex items-center gap-1">
+                🏷️ Genre/Style Tags <span className="text-gray-400">(optional)</span>
+              </label>
+              <input
+                type="text"
+                value={musicTags}
+                onChange={(e) => setMusicTags(e.target.value)}
+                placeholder="e.g., rock, pop, electronic, jazz, ambient"
+                className="text-sm border border-purple-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white"
+              />
+              <p className="text-xs text-gray-500">
+                Add specific genres or styles to guide the music generation
+              </p>
+            </div>
+            
+            {/* Lyrics Options */}
+            <div className="flex flex-col gap-2">
+              <label className="text-xs font-medium text-gray-600 flex items-center gap-1">
+                ✍️ Lyrics
+              </label>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setLyricsMode('ai')}
+                  className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition ${
+                    lyricsMode === 'ai'
+                      ? 'bg-purple-600 text-white shadow-md'
+                      : 'bg-white text-gray-600 hover:bg-purple-50 border border-purple-200'
+                  }`}
+                >
+                  🤖 AI Generate
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLyricsMode('custom')}
+                  className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition ${
+                    lyricsMode === 'custom'
+                      ? 'bg-purple-600 text-white shadow-md'
+                      : 'bg-white text-gray-600 hover:bg-purple-50 border border-purple-200'
+                  }`}
+                >
+                  📝 Paste Your Own
+                </button>
+              </div>
+              
+              {lyricsMode === 'custom' && (
+                <textarea
+                  value={customLyrics}
+                  onChange={(e) => setCustomLyrics(e.target.value)}
+                  placeholder="Paste your lyrics here (verse, chorus, bridge, etc.)"
+                  className="text-sm border border-purple-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white resize-y min-h-[100px]"
+                />
+              )}
+              
+              <p className="text-xs text-gray-500">
+                {lyricsMode === 'ai' 
+                  ? 'AI will generate lyrics based on your prompt and genre' 
+                  : 'Enter your own lyrics (the music will match your words)'}
+              </p>
+            </div>
+          </div>
+        )}
+        
         {/* Prompt Row */}
         <div className="flex items-center gap-2">
           {requiresImage && (
             <>
               <button
                 onClick={handleUploadClick}
-                className="text-lg sm:text-xl hover:opacity-80 active:scale-95 cursor-pointer transition"
+                className="text-xl hover:opacity-80 cursor-pointer"
                 title="Upload reference image"
               >📎</button>
               <input ref={fileInputRef} onChange={handleFileChange} type="file" accept="image/*" className="hidden" />
@@ -1225,7 +1230,7 @@ export default function ChatGenerator({ user: propsUser, profile, onLockedFeatur
                       setLocalFile(null)
                       setLocalPreview(null)
                     }}
-                    className="absolute -top-1 -right-1 bg-red-500 hover:bg-red-600 active:bg-red-700 text-white rounded-full w-4 h-4 sm:w-5 sm:h-5 flex items-center justify-center text-xs transition"
+                    className="absolute -top-1 -right-1 bg-red-500 hover:bg-red-600 text-white rounded-full w-4 h-4 flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition-opacity"
                     title="Remove image"
                   >
                     ×
@@ -1239,37 +1244,52 @@ export default function ChatGenerator({ user: propsUser, profile, onLockedFeatur
             value={input}
             onChange={handleInputChange}
             onKeyDown={onKeyDown}
-            placeholder="Describe your idea or drop an image…"
+            placeholder={isMusicMode ? "Describe your music: style, mood, instruments, tempo..." : "Describe your idea or drop an image…"}
             rows={1}
-            className="flex-1 border border-gray-300 rounded-2xl px-3 sm:px-4 py-2 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none overflow-hidden min-h-[36px] sm:min-h-[40px] max-h-[100px] sm:max-h-[120px]"
-            style={{ height: '36px' }}
+            className="flex-1 border border-gray-300 rounded-2xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none overflow-hidden min-h-[40px] max-h-[120px]"
+            style={{ height: '40px' }}
           />
           <button
             onClick={sendPrompt}
             disabled={gen.isGenerating || isSubmitting || (requiresImage && !localFile) || !input.trim()}
-            className="bg-gradient-to-r from-purple-500 to-pink-500 text-white px-3 sm:px-5 py-2 rounded-full text-xs sm:text-sm font-semibold hover:scale-[1.03] active:scale-[0.97] transition disabled:opacity-50 disabled:hover:scale-100 flex items-center gap-1 sm:gap-2 flex-shrink-0"
+            className="bg-gradient-to-r from-purple-500 to-pink-500 text-white px-5 py-2 rounded-full text-sm font-semibold hover:scale-[1.03] active:scale-[0.97] transition disabled:opacity-50 disabled:hover:scale-100 flex items-center gap-2"
           >
             <span>⚡ Generate</span>
-            <span className="bg-white/20 px-1.5 sm:px-2 py-0.5 rounded-full text-[10px] sm:text-xs">
-              {meta.resultType === 'video' ? '8' : '1'} cr
+            <span className="bg-white/20 px-2 py-0.5 rounded-full text-xs">
+              {meta.resultType === 'music' ? '3' : meta.resultType === 'video' ? '8' : '1'} credit{meta.resultType === 'music' || meta.resultType === 'video' ? 's' : ''}
             </span>
           </button>
         </div>
-        {/* Quick controls - only render client-side to prevent hydration mismatch */}
-        {isMounted && (
-          <div className="flex justify-center gap-3 sm:gap-4 mt-1 flex-wrap text-xs text-gray-500">
-            <div className="flex gap-1.5 sm:gap-2 items-center">
+        {/* Quick controls */}
+        <div className="flex justify-center gap-4 mt-1 flex-wrap text-xs text-gray-500">
+          {isMusicMode ? (
+            // Duration selector for music
+            <div className="flex gap-2 items-center">
+              <span className="text-gray-600 font-medium">⏱️ Duration:</span>
+              {[10, 30, 60, 120, 180].map(duration => (
+                <button
+                  key={duration}
+                  onClick={() => setMusicDuration(duration as 10 | 30 | 60 | 120 | 180)}
+                  className={`${musicDuration === duration ? 'bg-purple-50 border border-purple-500 text-purple-600 font-semibold' : 'border border-gray-200 hover:bg-gray-50'} rounded-md px-2 py-1 transition`}
+                >
+                  {duration < 60 ? `${duration}s` : `${duration / 60}m`}
+                </button>
+              ))}
+            </div>
+          ) : (
+            // Aspect ratio for images/videos
+            <div className="flex gap-2 items-center">
               {aspectOptions.map(opt => (
                 <button
                   key={opt.value}
                   onClick={() => gen.setAspectRatio(opt.value)}
-                  className={`${gen.aspectRatio === opt.value ? 'bg-purple-50 border border-purple-500 text-purple-600 font-semibold' : 'border border-gray-200 hover:bg-gray-50 active:bg-gray-100'} rounded-md px-2 py-1 text-[10px] sm:text-xs transition`}
+                  className={`${gen.aspectRatio === opt.value ? 'bg-purple-50 border border-purple-500 text-purple-600 font-semibold' : 'border border-gray-200 hover:bg-gray-50'} rounded-md px-2 py-1 transition`}
                 >{opt.label}</button>
               ))}
             </div>
-            {/* Resolutions removed */}
-          </div>
-        )}
+          )}
+          {/* Resolutions removed */}
+        </div>
       </div>
     </div>
   )

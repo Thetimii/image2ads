@@ -7,6 +7,8 @@ import Link from 'next/link'
 import Image from 'next/image'
 import type { User } from '@supabase/supabase-js'
 import type { Profile } from '@/lib/validations'
+import { STRIPE_PLANS } from '@/lib/stripe-plans'
+import PricingPlans from '@/components/PricingPlans'
 
 
 interface DashboardLayoutProps {
@@ -22,6 +24,7 @@ const navigation: NavItem[] = [
   { name: '🖼️ Image to Image', href: '/dashboard/generate/image-to-image' },
   { name: '🎥 Text to Video', href: '/dashboard/generate/text-to-video', locked: true },
   { name: '📸 Image to Video', href: '/dashboard/generate/image-to-video', locked: true },
+  { name: '🎵 Text to Music', href: '/dashboard/generate/text-to-music', locked: true },
   { name: '📚 Library', href: '/dashboard/library' },
 ]
 
@@ -41,6 +44,7 @@ export default function DashboardLayout({ user, profile, children, onDemoOpen }:
   const [isSafari, setIsSafari] = useState(false)
   const [loadingPath, setLoadingPath] = useState<string | null>(null)
   const [showUpgrade, setShowUpgrade] = useState(false)
+  const [isUpgrading, setIsUpgrading] = useState<string | null>(null)
   const router = useRouter()
   const pathname = usePathname()
   const supabase = createClient()
@@ -57,6 +61,38 @@ export default function DashboardLayout({ user, profile, children, onDemoOpen }:
   const handleSignOut = async () => {
     await supabase.auth.signOut()
     router.push('/')
+  }
+
+  const handleSubscribe = async (plan: 'starter' | 'pro' | 'business') => {
+    setIsUpgrading(plan)
+    try {
+      // Create checkout session via API
+      const response = await fetch('/api/stripe/create-checkout-session', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          plan,
+          successUrl: `${window.location.origin}/billing?success=true`,
+          cancelUrl: `${window.location.origin}${pathname}`,
+        }),
+      })
+
+      if (response.ok) {
+        const { url } = await response.json()
+        window.location.href = url
+      } else {
+        const errorData = await response.json()
+        console.error('Failed to create checkout session:', errorData.error)
+        alert('Failed to start checkout. Please try again.')
+        setIsUpgrading(null)
+      }
+    } catch (error) {
+      console.error('Error creating checkout session:', error)
+      alert('Failed to start checkout. Please try again.')
+      setIsUpgrading(null)
+    }
   }
 
   // Determine if user has pro (stripe customer ID)
@@ -246,18 +282,36 @@ export default function DashboardLayout({ user, profile, children, onDemoOpen }:
       {/* Main content */}
       <div className="flex-1 flex flex-col h-screen overflow-hidden lg:ml-64">
           {showUpgrade && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-              <div className="bg-white rounded-xl shadow-xl max-w-sm w-full p-6 space-y-4">
-                <h2 className="text-lg font-semibold text-gray-800">Upgrade Required</h2>
-                <p className="text-sm text-gray-600 leading-relaxed">This feature is part of our Pro plan. Unlock image refinements and still-to-video animations plus faster generation speeds.</p>
-                <ul className="text-xs text-gray-500 space-y-1 list-disc list-inside">
-                  <li>Access Image → Image & Image → Video</li>
-                  <li>Higher resolutions & longer clips (soon)</li>
-                  <li>More generation enhancements as we roll them out</li>
-                </ul>
-                <div className="flex gap-3 pt-2">
-                  <button onClick={() => setShowUpgrade(false)} className="flex-1 border border-gray-300 rounded-md px-3 py-2 text-sm hover:bg-gray-50">Maybe later</button>
-                  <button onClick={() => { setShowUpgrade(false); router.push('/billing') }} className="flex-1 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-md px-3 py-2 text-sm font-medium shadow hover:brightness-110">Upgrade</button>
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+              <div className="bg-white rounded-2xl shadow-2xl max-w-5xl w-full max-h-[90vh] overflow-y-auto">
+                {/* Header */}
+                <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex justify-between items-center rounded-t-2xl">
+                  <div>
+                    <h2 className="text-xl font-bold text-gray-900">🎬 Unlock Video Generation</h2>
+                    <p className="text-sm text-gray-500 mt-1">
+                      Video features require a Pro or Business subscription. Choose a plan to get started:
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setShowUpgrade(false)}
+                    className="text-gray-400 hover:text-gray-600 text-2xl leading-none"
+                  >
+                    ×
+                  </button>
+                </div>
+
+                {/* Plans Grid */}
+                <PricingPlans 
+                  onSubscribeAction={handleSubscribe}
+                  isLoading={isUpgrading}
+                  variant="popup"
+                />
+
+                {/* Footer */}
+                <div className="border-t border-gray-200 px-6 py-4 bg-gray-50 rounded-b-2xl">
+                  <p className="text-xs text-gray-500 text-center">
+                    💳 Secure payment powered by Stripe • Cancel anytime • 30-day money-back guarantee
+                  </p>
                 </div>
               </div>
             </div>

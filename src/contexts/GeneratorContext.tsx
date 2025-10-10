@@ -10,11 +10,12 @@ export interface ChatMessage {
   createdAt: number
   status?: 'pending' | 'complete' | 'error'
   mediaUrl?: string | null
-  mediaType?: 'image' | 'video'
+  mediaType?: 'image' | 'video' | 'music'
+  coverUrl?: string | null // Cover image URL for music generation
   jobId?: string // Store the job ID so we can resume polling after refresh
 }
 
-type GeneratorMode = 'text-to-image' | 'image-to-image' | 'text-to-video' | 'image-to-video'
+type GeneratorMode = 'text-to-image' | 'image-to-image' | 'text-to-video' | 'image-to-video' | 'text-to-music'
 
 interface GeneratorState {
   activeTab: GeneratorMode
@@ -60,12 +61,14 @@ const initialState: GeneratorState = {
     'image-to-image': [],
     'text-to-video': [],
     'image-to-video': [],
+    'text-to-music': [],
   },
   resolutions: {
     'text-to-image': '1K',
     'image-to-image': '1K',
     'text-to-video': '1K',
     'image-to-video': '1K',
+    'text-to-music': '1K',
   }
 }
 
@@ -109,7 +112,7 @@ export function GeneratorProvider({ children }: { children: ReactNode }) {
   // Sync activeTab with URL pathname - prevent double render loop
   useEffect(() => {
     const lastSegment = pathname.split('/').pop() || ''
-    const urlMode = ['text-to-image','image-to-image','text-to-video','image-to-video']
+    const urlMode = ['text-to-image','image-to-image','text-to-video','image-to-video','text-to-music']
       .includes(lastSegment)
       ? (lastSegment as GeneratorMode)
       : 'text-to-image'

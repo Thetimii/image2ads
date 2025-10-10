@@ -17,6 +17,7 @@ const tabs = [
   { id: 'image-to-image', label: 'Image to Image', emoji: '🖼️' },
   { id: 'text-to-video', label: 'Text to Video', emoji: '🎥' },
   { id: 'image-to-video', label: 'Image to Video', emoji: '📸' },
+  { id: 'text-to-music', label: 'Text to Music', emoji: '🎵' },
 ] as const
 
 export default function GeneratorHub({ user, profile }: GeneratorHubProps) {
@@ -26,6 +27,7 @@ export default function GeneratorHub({ user, profile }: GeneratorHubProps) {
 
   const requiresImage = generator.activeTab === 'image-to-image' || generator.activeTab === 'image-to-video'
   const isVideoMode = generator.activeTab === 'text-to-video' || generator.activeTab === 'image-to-video'
+  const isMusicMode = generator.activeTab === 'text-to-music'
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -89,7 +91,7 @@ export default function GeneratorHub({ user, profile }: GeneratorHubProps) {
         model,
         prompt: generator.prompt.trim(),
         status: 'pending',
-        result_type: isVideoMode ? 'video' : 'image',
+        result_type: isMusicMode ? 'music' : isVideoMode ? 'video' : 'image',
         has_images: requiresImage,
         image_ids: imageId ? [imageId] : []
       }
@@ -198,37 +200,39 @@ export default function GeneratorHub({ user, profile }: GeneratorHubProps) {
           <textarea
             value={generator.prompt}
             onChange={(e) => generator.setPrompt(e.target.value)}
-            placeholder={`Describe your ${isVideoMode ? 'video' : 'image'}...`}
+            placeholder={`Describe your ${isMusicMode ? 'music' : isVideoMode ? 'video' : 'image'}...`}
             rows={4}
             className="w-full resize-none rounded-lg border border-gray-300 focus:ring-2 focus:ring-purple-500 focus:border-transparent p-4 text-gray-700 text-sm placeholder:text-gray-400"
           />
         </div>
 
-        {/* Aspect Ratio Selector */}
-        <div className="bg-white rounded-xl border border-gray-200 p-6 mb-6">
-          <label className="block text-gray-700 font-medium mb-4">
-            {isVideoMode ? 'Aspect Ratio' : 'Image Size'}
-          </label>
-          <div className="grid grid-cols-2 gap-4">
-            {(['landscape', 'portrait'] as const).map((ratio) => (
-              <button
-                key={ratio}
-                onClick={() => generator.setAspectRatio(ratio)}
-                className={`p-4 rounded-lg border-2 transition-all text-center ${
-                  generator.aspectRatio === ratio
-                    ? 'border-purple-500 bg-purple-50 shadow-sm'
-                    : 'border-gray-200 hover:border-gray-300'
-                }`}
-              >
-                <div className="font-semibold text-gray-800 capitalize">{ratio}</div>
-                <div className="text-sm text-gray-500 mt-1">
-                  {ratio === 'landscape' && '16:9'}
-                  {ratio === 'portrait' && '9:16'}
-                </div>
-              </button>
-            ))}
+        {/* Aspect Ratio Selector - Hide for music */}
+        {!isMusicMode && (
+          <div className="bg-white rounded-xl border border-gray-200 p-6 mb-6">
+            <label className="block text-gray-700 font-medium mb-4">
+              {isVideoMode ? 'Aspect Ratio' : 'Image Size'}
+            </label>
+            <div className="grid grid-cols-2 gap-4">
+              {(['landscape', 'portrait'] as const).map((ratio) => (
+                <button
+                  key={ratio}
+                  onClick={() => generator.setAspectRatio(ratio)}
+                  className={`p-4 rounded-lg border-2 transition-all text-center ${
+                    generator.aspectRatio === ratio
+                      ? 'border-purple-500 bg-purple-50 shadow-sm'
+                      : 'border-gray-200 hover:border-gray-300'
+                  }`}
+                >
+                  <div className="font-semibold text-gray-800 capitalize">{ratio}</div>
+                  <div className="text-sm text-gray-500 mt-1">
+                    {ratio === 'landscape' && '16:9'}
+                    {ratio === 'portrait' && '9:16'}
+                  </div>
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Generate Button */}
         <div className="text-center">
@@ -268,7 +272,24 @@ export default function GeneratorHub({ user, profile }: GeneratorHubProps) {
           <div className="mt-8 bg-white border border-gray-200 rounded-xl p-6">
             <h3 className="text-lg font-semibold text-gray-800 mb-4">Result</h3>
             <div className="flex flex-col items-center">
-              {isVideoMode ? (
+              {isMusicMode ? (
+                <div className="w-full max-w-2xl bg-gradient-to-br from-purple-50 to-blue-50 rounded-xl p-8 shadow-lg">
+                  <div className="flex items-center justify-center mb-6">
+                    <div className="w-16 h-16 bg-gradient-to-br from-purple-500 to-blue-500 rounded-full flex items-center justify-center shadow-xl">
+                      <span className="text-3xl">🎵</span>
+                    </div>
+                  </div>
+                  <audio
+                    src={generator.result}
+                    controls
+                    className="w-full mb-4"
+                    style={{ borderRadius: '12px' }}
+                  />
+                  <p className="text-center text-gray-600 text-sm mb-4">
+                    Your music has been generated successfully!
+                  </p>
+                </div>
+              ) : isVideoMode ? (
                 <video
                   src={generator.result}
                   controls
@@ -303,7 +324,7 @@ export default function GeneratorHub({ user, profile }: GeneratorHubProps) {
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                 </svg>
-                <p className="mt-4 text-gray-600 font-medium">Creating your {isVideoMode ? 'video' : 'image'}...</p>
+                <p className="mt-4 text-gray-600 font-medium">Creating your {isMusicMode ? 'music' : isVideoMode ? 'video' : 'image'}...</p>
               </div>
             </div>
           </div>

@@ -9,14 +9,14 @@ interface Job {
   id: string
   prompt: string
   result_url: string | null
-  result_type: 'image' | 'video'
+  result_type: 'image' | 'video' | 'music'
   status: string
   created_at: string
   error_message?: string
 }
 
 interface ChatHistoryProps {
-  jobType: 'text-to-image' | 'image-to-image' | 'text-to-video' | 'image-to-video'
+  jobType: 'text-to-image' | 'image-to-image' | 'text-to-video' | 'image-to-video' | 'text-to-music'
 }
 
 export default function ChatHistory({ jobType }: ChatHistoryProps) {

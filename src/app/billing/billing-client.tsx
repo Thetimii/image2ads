@@ -3,8 +3,9 @@
 import { useState } from 'react'
 import type { User } from '@supabase/supabase-js'
 import type { Profile } from '@/lib/validations'
-import { STRIPE_PLANS, type StripePlan } from '@/lib/stripe-plans'
+import { type StripePlan } from '@/lib/stripe-plans'
 import DashboardLayout from '@/components/DashboardLayout'
+import PricingPlans from '@/components/PricingPlans'
 
 interface BillingClientProps {
   user: User
@@ -252,82 +253,12 @@ export default function BillingClient({ user, profile }: BillingClientProps) {
             <p className="text-sm text-gray-600">Choose the plan that best fits your needs.</p>
           </div>
           
-          <div className="p-6">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {Object.entries(STRIPE_PLANS).map(([key, plan]) => (
-                <div
-                  key={key}
-                  className={`relative rounded-2xl p-6 border-2 transition-all duration-200 ${
-                    key === 'pro' 
-                      ? 'border-blue-500 bg-gradient-to-br from-blue-50 to-purple-50 shadow-lg shadow-blue-100/50' 
-                      : 'border-gray-200 hover:border-gray-300'
-                  }`}
-                >
-                  {key === 'pro' && (
-                    <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
-                      <span className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-4 py-1 rounded-full text-xs font-medium">
-                        Best Value
-                      </span>
-                    </div>
-                  )}
-                  
-                  <div className="text-center mb-6">
-                    <h3 className="text-xl font-semibold text-gray-900 mb-2">{plan.name}</h3>
-                    <div className="mb-2">
-                      <span className="text-4xl font-bold text-gray-900">${plan.price}</span>
-                      <span className="text-gray-500 ml-1">/month</span>
-                    </div>
-                  </div>
-
-                  <ul className="space-y-3 mb-6">
-                    <li className="flex items-center">
-                      <div className="w-5 h-5 bg-green-100 rounded-full flex items-center justify-center mr-3">
-                        <svg className="w-3 h-3 text-green-600" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                        </svg>
-                      </div>
-                      <span className="text-sm text-gray-700">{plan.credits} credits per month</span>
-                    </li>
-                    <li className="flex items-center">
-                      <div className="w-5 h-5 bg-green-100 rounded-full flex items-center justify-center mr-3">
-                        <svg className="w-3 h-3 text-green-600" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                        </svg>
-                      </div>
-                      <span className="text-sm text-gray-700">High-quality AI generation</span>
-                    </li>
-                    <li className="flex items-center">
-                      <div className="w-5 h-5 bg-green-100 rounded-full flex items-center justify-center mr-3">
-                        <svg className="w-3 h-3 text-green-600" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                        </svg>
-                      </div>
-                      <span className="text-sm text-gray-700">Priority processing</span>
-                    </li>
-                  </ul>
-
-                  <button
-                    onClick={() => handleSubscribe(key as StripePlan)}
-                    disabled={isLoading === key}
-                    className={`w-full py-3 px-4 rounded-xl font-medium transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-50 ${
-                      key === 'pro'
-                        ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white hover:from-blue-700 hover:to-purple-700 focus:ring-blue-500 shadow-lg shadow-blue-500/20'
-                        : 'bg-gray-600 text-white hover:bg-gray-700 focus:ring-gray-500'
-                    }`}
-                  >
-                    {isLoading === key ? (
-                      <div className="flex items-center justify-center space-x-2">
-                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                        <span>Loading...</span>
-                      </div>
-                    ) : (
-                      `Subscribe to ${plan.name}`
-                    )}
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
+          <PricingPlans 
+            onSubscribeAction={handleSubscribe}
+            isLoading={isLoading}
+            variant="page"
+            showAllPlans={true}
+          />
         </div>
 
         {/* Usage information */}
