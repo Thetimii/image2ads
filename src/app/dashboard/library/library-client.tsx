@@ -455,6 +455,8 @@ export default function LibraryClient({ user, profile }: LibraryClientProps) {
                     onClick={() => {
                       if (ad.mediaType === 'video') {
                         setSelectedVideo(ad)
+                      } else if (ad.mediaType === 'music') {
+                        setSelectedMusic(ad)
                       } else {
                         setSelectedImage(ad)
                       }
@@ -466,6 +468,22 @@ export default function LibraryClient({ user, profile }: LibraryClientProps) {
                           <svg className="w-6 h-6 text-purple-600" fill="currentColor" viewBox="0 0 24 24">
                             <path d="M8 5v14l11-7z"/>
                           </svg>
+                        </div>
+                      ) : ad.mediaType === 'music' ? (
+                        <div className="w-full h-full bg-gradient-to-br from-purple-100 to-pink-100 flex items-center justify-center relative">
+                          {ad.coverUrl ? (
+                            <Image
+                              src={ad.coverUrl}
+                              alt="Album cover"
+                              fill
+                              className="object-cover"
+                              sizes="48px"
+                            />
+                          ) : (
+                            <svg className="w-6 h-6 text-purple-600" fill="currentColor" viewBox="0 0 24 24">
+                              <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
+                            </svg>
+                          )}
                         </div>
                       ) : (
                         <Image
@@ -480,7 +498,7 @@ export default function LibraryClient({ user, profile }: LibraryClientProps) {
                     <div className="flex-1 min-w-0">
                       <h3 className="font-medium text-gray-900 truncate">{ad.name || 'Untitled'}</h3>
                       <p className="text-sm text-gray-500 truncate">
-                        {ad.mediaType === 'video' ? '🎬 Video' : '🖼️ Image'} • Folder: {ad.folder_name || 'Unknown'} • {new Date(ad.created_at).toLocaleDateString()}
+                        {ad.mediaType === 'video' ? '🎬 Video' : ad.mediaType === 'music' ? '🎵 Music' : '🖼️ Image'} • Folder: {ad.folder_name || 'Unknown'} • {new Date(ad.created_at).toLocaleDateString()}
                       </p>
                     </div>
                     <button
