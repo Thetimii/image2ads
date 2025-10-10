@@ -131,39 +131,106 @@ export async function GET(request: NextRequest) {
       })
     }
 
+    // Get jobs table data for music files (to get cover_url)
+    const { data: musicJobs, error: jobsError } = await supabase
+      .from('jobs')
+      .select('result_url, cover_url')
+      .eq('user_id', user.id)
+      .eq('result_type', 'music')
+      .not('result_url', 'is', null)
+
+    if (jobsError) {
+      console.error('Error fetching music jobs:', jobsError)
+    }
+
+    // Create a map from result_url to cover_url
+    const coverUrlMap = new Map()
+    if (musicJobs) {
+      musicJobs.forEach(job => {
+        if (job.result_url && job.cover_url) {
+          // Map the file path to its cover URL
+          coverUrlMap.set(job.result_url, job.cover_url)
+        }
+      })
+    }
+
     console.log('Metadata map:', Object.fromEntries(metadataMap))
+    console.log('Cover URL map:', Object.fromEntries(coverUrlMap))
 
     // Transform files into a format similar to jobs for UI compatibility
     const generatedAds = await Promise.all(
       (files || [])
-        .filter(file => file.name.endsWith('.png') || file.name.endsWith('.mp4')) // Include PNG images and MP4 videos
+        .filter(file => file.name.endsWith('.png') || file.name.endsWith('.mp4') || file.name.endsWith('.mp3')) // Include PNG images, MP4 videos, and MP3 music
         .map(async (file) => {
           // Determine the correct file path
           const filePath = file.folder_path 
             ? `${file.folder_path}${file.name}` 
             : `${folderPath}${file.name}`;
           
-          // Create signed URL for the image
+          // Create signed URL for the file
           const { data: signedUrl } = await supabase.storage
             .from('results')
             .createSignedUrl(filePath, 3600);
 
           // Determine media type
           const isVideo = file.name.endsWith('.mp4');
-          const mediaType = isVideo ? 'video' : 'image';
+          const isMusic = file.name.endsWith('.mp3');
+          const mediaType = isVideo ? 'video' : isMusic ? 'music' : 'image';
           
-          // Extract timestamp from filename (jobId-timestamp.png/mp4 format)
-          const nameMatch = file.name.match(/^(.+)-(\d+)\.(png|mp4)$/);
+          // For music files, get cover URL from database first, then try file system
+          let coverUrl = null;
+          if (isMusic) {
+            // First, check if we have a cover_url in the database
+            if (coverUrlMap.has(filePath)) {
+              const dbCoverPath = coverUrlMap.get(filePath);
+              console.log(`🎵 Found cover in database for ${file.name}: ${dbCoverPath}`);
+              
+              const { data: coverSignedUrl, error: coverError } = await supabase.storage
+                .from('results')
+                .createSignedUrl(dbCoverPath, 3600);
+              
+              if (!coverError && coverSignedUrl?.signedUrl) {
+                console.log(`✅ Cover URL created from database: ${coverSignedUrl.signedUrl}`);
+                coverUrl = coverSignedUrl.signedUrl;
+              } else {
+                console.log(`❌ Failed to create signed URL for database cover:`, coverError);
+              }
+            }
+            
+            // If not found in database, try file system lookup as fallback
+            if (!coverUrl) {
+              const coverFileName = file.name.replace('.mp3', '_cover.jpg');
+              const coverPath = file.folder_path 
+                ? `${file.folder_path}${coverFileName}` 
+                : `${folderPath}${coverFileName}`;
+              
+              console.log(`🎵 Looking for cover in file system: ${coverPath}`);
+              
+              const { data: coverSignedUrl, error: coverError } = await supabase.storage
+                .from('results')
+                .createSignedUrl(coverPath, 3600);
+              
+              if (coverError) {
+                console.log(`❌ Cover not found in file system: ${coverPath}`, coverError);
+              } else if (coverSignedUrl?.signedUrl) {
+                console.log(`✅ Cover found in file system: ${coverSignedUrl.signedUrl}`);
+                coverUrl = coverSignedUrl.signedUrl;
+              }
+            }
+          }
+          
+          // Extract timestamp from filename (jobId-timestamp.png/mp4/mp3 format)
+          const nameMatch = file.name.match(/^(.+)-(\d+)\.(png|mp4|mp3)$/);
           const timestamp = nameMatch ? parseInt(nameMatch[2]) : file.created_at ? new Date(file.created_at).getTime() : Date.now();
           
           // Get custom name from metadata, fallback to filename without extension
           const customName = metadataMap.get(file.name) || metadataMap.get(filePath)
-          const fallbackName = file.name.replace(/\.(png|mp4)$/, '').replace(/-\d+$/, '') // Remove timestamp from fallback
+          const fallbackName = file.name.replace(/\.(png|mp4|mp3)$/, '').replace(/-\d+$/, '') // Remove timestamp from fallback
           
-          console.log(`File: ${file.name}, Full path: ${filePath}, Custom name: ${customName}, Fallback: ${fallbackName}, Type: ${mediaType}`)
+          console.log(`File: ${file.name}, Full path: ${filePath}, Custom name: ${customName}, Fallback: ${fallbackName}, Type: ${mediaType}, CoverURL: ${coverUrl}`)
           
           return {
-            id: file.name.replace(/\.(png|mp4)$/, ''), // Use filename without extension as ID
+            id: file.name.replace(/\.(png|mp4|mp3)$/, ''), // Use filename without extension as ID
             name: customName || fallbackName, // Use custom name if available, otherwise clean filename
             file_path: filePath,
             url: signedUrl?.signedUrl || '',
@@ -172,7 +239,8 @@ export async function GET(request: NextRequest) {
             status: 'completed',
             folder_id: file.folder_id || folderId, // Include folder info for library view
             folder_name: file.folder_name || file.folder_id || folderId, // Use proper folder name
-            mediaType: mediaType // Add media type to the response
+            mediaType: mediaType, // Add media type to the response
+            coverUrl: coverUrl // Add cover URL for music files
           };
         })
     );

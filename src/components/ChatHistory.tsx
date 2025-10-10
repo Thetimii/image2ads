@@ -13,6 +13,8 @@ interface Job {
   status: string
   created_at: string
   error_message?: string
+  cover_url?: string | null
+  lyrics?: string | null
 }
 
 interface ChatHistoryProps {
@@ -184,8 +186,11 @@ export default function ChatHistory({ jobType }: ChatHistoryProps) {
 
 // Separate component for individual job cards
 function JobCard({ job, getSignedUrl }: { job: Job; getSignedUrl: (job: Job) => Promise<string | null> }) {
+  const supabase = createClient()
   const [mediaUrl, setMediaUrl] = useState<string | null>(null)
+  const [coverUrl, setCoverUrl] = useState<string | null>(null)
   const [loadingMedia, setLoadingMedia] = useState(false)
+  const [downloading, setDownloading] = useState(false)
 
   useEffect(() => {
     if (job.result_url && job.status === 'completed') {
@@ -194,8 +199,76 @@ function JobCard({ job, getSignedUrl }: { job: Job; getSignedUrl: (job: Job) => 
         setMediaUrl(url)
         setLoadingMedia(false)
       })
+      
+      // Load cover URL for music
+      if (job.result_type === 'music' && job.cover_url) {
+        supabase.storage.from('results').createSignedUrl(job.cover_url, 3600).then(({ data }) => {
+          if (data?.signedUrl) setCoverUrl(data.signedUrl)
+        })
+      }
     }
-  }, [job.result_url, job.status])
+  }, [job.result_url, job.status, job.cover_url])
+
+  const handleDownloadMusic = async () => {
+    if (!mediaUrl || job.result_type !== 'music') return
+    
+    try {
+      setDownloading(true)
+      console.log('Starting music download...', { mediaUrl, coverUrl })
+      
+      // Download music file
+      const audioResponse = await fetch(mediaUrl)
+      const audioBlob = await audioResponse.blob()
+      console.log('Audio downloaded:', audioBlob.size, 'bytes')
+      
+      // Download cover if available
+      let coverBlob: Blob | null = null
+      if (coverUrl) {
+        console.log('Downloading cover from:', coverUrl)
+        const coverResponse = await fetch(coverUrl)
+        coverBlob = await coverResponse.blob()
+        console.log('Cover downloaded:', coverBlob.size, 'bytes')
+      } else {
+        console.log('No cover URL available')
+      }
+      
+      // Create ZIP file using JSZip
+      console.log('Creating ZIP file...')
+      const JSZip = (await import('jszip')).default
+      const zip = new JSZip()
+      
+      // Add music file
+      const timestamp = new Date().getTime()
+      zip.file(`music_${timestamp}.mp3`, audioBlob)
+      console.log('Added music to ZIP')
+      
+      // Add cover if available
+      if (coverBlob) {
+        zip.file(`cover_${timestamp}.jpg`, coverBlob)
+        console.log('Added cover to ZIP')
+      }
+      
+      // Generate ZIP and download
+      console.log('Generating ZIP...')
+      const zipBlob = await zip.generateAsync({ type: 'blob' })
+      console.log('ZIP generated:', zipBlob.size, 'bytes')
+      
+      const url = URL.createObjectURL(zipBlob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `music_generation_${timestamp}.zip`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+      console.log('Download initiated')
+    } catch (error) {
+      console.error('Error downloading music:', error)
+      alert('Failed to download files. Error: ' + (error as Error).message)
+    } finally {
+      setDownloading(false)
+    }
+  }
 
   return (
     <div className="space-y-3">
@@ -214,7 +287,7 @@ function JobCard({ job, getSignedUrl }: { job: Job; getSignedUrl: (job: Job) => 
           {job.status === 'completed' && (
             <>
               <div className="text-gray-700 mb-3">
-                {job.result_type === 'video' ? 'Video' : 'Image'} generated ✅
+                {job.result_type === 'video' ? 'Video' : job.result_type === 'music' ? 'Music' : 'Image'} generated ✅
               </div>
               
               {loadingMedia ? (
@@ -233,13 +306,56 @@ function JobCard({ job, getSignedUrl }: { job: Job; getSignedUrl: (job: Job) => 
                       onClick={() => window.open(mediaUrl, '_blank')}
                     />
                   </div>
-                ) : (
+                ) : job.result_type === 'video' ? (
                   <video 
                     src={mediaUrl} 
                     controls 
                     className="rounded-lg max-w-full h-auto shadow-md" 
                   />
-                )
+                ) : job.result_type === 'music' ? (
+                  <div className="space-y-3">
+                    {/* Cover Image */}
+                    {coverUrl && (
+                      <div className="relative">
+                        <Image 
+                          src={coverUrl} 
+                          alt="Album cover" 
+                          width={300} 
+                          height={300} 
+                          className="rounded-lg shadow-md max-w-full h-auto" 
+                        />
+                      </div>
+                    )}
+                    
+                    {/* Audio Player */}
+                    <audio 
+                      src={mediaUrl} 
+                      controls 
+                      className="w-full max-w-[300px]" 
+                    />
+                    
+                    {/* Download Button */}
+                    <button
+                      onClick={handleDownloadMusic}
+                      disabled={downloading}
+                      className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-400 text-white text-sm rounded-lg transition-colors w-full max-w-[300px] justify-center"
+                    >
+                      {downloading ? (
+                        <>
+                          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                          Preparing download...
+                        </>
+                      ) : (
+                        <>
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                          </svg>
+                          Download {coverUrl ? 'Music + Cover' : 'Music'}
+                        </>
+                      )}
+                    </button>
+                  </div>
+                ) : null
               ) : (
                 <div className="w-64 h-40 bg-gray-100 rounded-lg flex items-center justify-center text-gray-500 text-xs">
                   Media unavailable

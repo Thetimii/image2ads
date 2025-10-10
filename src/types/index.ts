@@ -35,7 +35,9 @@ export interface GeneratedAd {
   created_at: string;
   size: number;
   status: string;
-  mediaType?: 'image' | 'video';
+  mediaType?: 'image' | 'video' | 'music';
+  coverUrl?: string; // For music covers (note: different from cover_url for consistency)
+  lyrics?: string; // For music lyrics
 }
 
 // API response types

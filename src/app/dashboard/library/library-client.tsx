@@ -19,9 +19,10 @@ export default function LibraryClient({ user, profile }: LibraryClientProps) {
   const [searchTerm, setSearchTerm] = useState('')
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
   const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'name'>('newest')
-  const [mediaFilter, setMediaFilter] = useState<'all' | 'image' | 'video'>('all')
+  const [mediaFilter, setMediaFilter] = useState<'all' | 'image' | 'video' | 'music'>('all')
   const [selectedVideo, setSelectedVideo] = useState<GeneratedAd | null>(null)
   const [selectedImage, setSelectedImage] = useState<GeneratedAd | null>(null)
+  const [selectedMusic, setSelectedMusic] = useState<GeneratedAd | null>(null)
 
   const handleViewModeChange = (newMode: 'grid' | 'list') => {
     if (newMode !== viewMode) {
@@ -39,16 +40,19 @@ export default function LibraryClient({ user, profile }: LibraryClientProps) {
         const response = await fetch('/api/generated-ads')
         if (response.ok) {
           const data = await response.json()
-          console.log('API Response:', data)
-          console.log('Type of data:', typeof data)
-          console.log('Is data array:', Array.isArray(data))
-          console.log('data.generatedAds:', data.generatedAds)
-          console.log('Is data.generatedAds array:', Array.isArray(data.generatedAds))
+          console.log('📊 Library API Response:', data)
           
           // The API returns { generatedAds: [...] }
           const adsArray = Array.isArray(data.generatedAds) ? data.generatedAds : 
                           Array.isArray(data.ads) ? data.ads : 
                           Array.isArray(data) ? data : []
+          
+          console.log('📊 Total items:', adsArray.length)
+          console.log('📊 Media types breakdown:')
+          adsArray.forEach((ad: GeneratedAd, index: number) => {
+            console.log(`  ${index + 1}. ${ad.name} - Type: ${ad.mediaType || 'image'} - URL: ${ad.url}`)
+          })
+          
           setAds(adsArray)
         }
       } catch (error) {
@@ -70,11 +74,13 @@ export default function LibraryClient({ user, profile }: LibraryClientProps) {
           setSelectedVideo(null)
         } else if (selectedImage) {
           setSelectedImage(null)
+        } else if (selectedMusic) {
+          setSelectedMusic(null)
         }
       }
     }
 
-    if (selectedVideo || selectedImage) {
+    if (selectedVideo || selectedImage || selectedMusic) {
       document.addEventListener('keydown', handleKeyDown)
       // Prevent body scroll when modal is open
       document.body.style.overflow = 'hidden'
@@ -86,23 +92,60 @@ export default function LibraryClient({ user, profile }: LibraryClientProps) {
       document.removeEventListener('keydown', handleKeyDown)
       document.body.style.overflow = 'unset'
     }
-  }, [selectedVideo, selectedImage])
+  }, [selectedVideo, selectedImage, selectedMusic])
 
   const downloadMedia = async (ad: GeneratedAd) => {
     try {
-      const response = await fetch(ad.url)
-      const blob = await response.blob()
-      const url = window.URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.style.display = 'none'
-      a.href = url
-      // Set proper file extension based on media type
-      const extension = ad.mediaType === 'video' ? '.mp4' : '.png'
-      a.download = `${ad.name || (ad.mediaType === 'video' ? 'video' : 'image')}${extension}`
-      document.body.appendChild(a)
-      a.click()
-      window.URL.revokeObjectURL(url)
-      document.body.removeChild(a)
+      if (ad.mediaType === 'music') {
+        // For music, download as ZIP with cover if available
+        const audioResponse = await fetch(ad.url)
+        const audioBlob = await audioResponse.blob()
+        
+        const JSZip = (await import('jszip')).default
+        const zip = new JSZip()
+        
+        // Add music file
+        const timestamp = new Date(ad.created_at).getTime()
+        zip.file(`music_${timestamp}.mp3`, audioBlob)
+        
+        // Add cover if available
+        if (ad.coverUrl) {
+          try {
+            const coverResponse = await fetch(ad.coverUrl)
+            const coverBlob = await coverResponse.blob()
+            zip.file(`cover_${timestamp}.jpg`, coverBlob)
+          } catch (err) {
+            console.warn('Could not download cover:', err)
+          }
+        }
+        
+        // Generate ZIP and download
+        const zipBlob = await zip.generateAsync({ type: 'blob' })
+        const url = window.URL.createObjectURL(zipBlob)
+        const a = document.createElement('a')
+        a.style.display = 'none'
+        a.href = url
+        a.download = `${ad.name || 'music'}_${timestamp}.zip`
+        document.body.appendChild(a)
+        a.click()
+        window.URL.revokeObjectURL(url)
+        document.body.removeChild(a)
+      } else {
+        // Original logic for images and videos
+        const response = await fetch(ad.url)
+        const blob = await response.blob()
+        const url = window.URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.style.display = 'none'
+        a.href = url
+        // Set proper file extension based on media type
+        const extension = ad.mediaType === 'video' ? '.mp4' : '.png'
+        a.download = `${ad.name || (ad.mediaType === 'video' ? 'video' : 'image')}${extension}`
+        document.body.appendChild(a)
+        a.click()
+        window.URL.revokeObjectURL(url)
+        document.body.removeChild(a)
+      }
     } catch (error) {
       console.error('Error downloading media:', error)
     }
@@ -116,7 +159,8 @@ export default function LibraryClient({ user, profile }: LibraryClientProps) {
     // Media type filter
     const matchesMediaType = mediaFilter === 'all' || 
                             (mediaFilter === 'image' && (!ad.mediaType || ad.mediaType === 'image')) ||
-                            (mediaFilter === 'video' && ad.mediaType === 'video')
+                            (mediaFilter === 'video' && ad.mediaType === 'video') ||
+                            (mediaFilter === 'music' && ad.mediaType === 'music')
     
     return matchesSearch && matchesMediaType
   }) : []
@@ -139,6 +183,10 @@ export default function LibraryClient({ user, profile }: LibraryClientProps) {
   // Calculate media type counts for filter labels
   const imageCount = ads.filter(ad => !ad.mediaType || ad.mediaType === 'image').length
   const videoCount = ads.filter(ad => ad.mediaType === 'video').length
+  const musicCount = ads.filter(ad => ad.mediaType === 'music').length
+  
+  console.log('📊 Filter counts - Images:', imageCount, 'Videos:', videoCount, 'Music:', musicCount)
+  console.log('📊 Current filter:', mediaFilter, '- Showing', sortedAds.length, 'items')
 
   return (
     <DashboardLayout user={user} profile={profile}>
@@ -185,12 +233,13 @@ export default function LibraryClient({ user, profile }: LibraryClientProps) {
           {/* Media Type Filter */}
           <select
             value={mediaFilter}
-            onChange={(e) => setMediaFilter(e.target.value as 'all' | 'image' | 'video')}
+            onChange={(e) => setMediaFilter(e.target.value as 'all' | 'image' | 'video' | 'music')}
             className="px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all duration-200 bg-white"
           >
             <option value="all">All Media ({ads.length})</option>
             <option value="image">🖼️ Images ({imageCount})</option>
             <option value="video">🎬 Videos ({videoCount})</option>
+            <option value="music">🎵 Music ({musicCount})</option>
           </select>
 
           {/* View Toggle */}
@@ -274,6 +323,8 @@ export default function LibraryClient({ user, profile }: LibraryClientProps) {
                     onClick={() => {
                       if (ad.mediaType === 'video') {
                         setSelectedVideo(ad)
+                      } else if (ad.mediaType === 'music') {
+                        setSelectedMusic(ad)
                       } else {
                         setSelectedImage(ad)
                       }
@@ -306,6 +357,30 @@ export default function LibraryClient({ user, profile }: LibraryClientProps) {
                             </span>
                           </div>
                         </div>
+                      ) : ad.mediaType === 'music' ? (
+                        <div className="w-full h-full bg-gradient-to-br from-purple-100 to-pink-100 flex items-center justify-center relative">
+                          {/* Music cover or default */}
+                          {ad.coverUrl ? (
+                            <Image
+                              src={ad.coverUrl}
+                              alt="Album cover"
+                              fill
+                              className="object-cover"
+                              sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 25vw"
+                            />
+                          ) : (
+                            <div className="flex flex-col items-center justify-center text-gray-600">
+                              <div className="bg-purple-200/50 rounded-full p-6 mb-2">
+                                <svg className="w-16 h-16 text-purple-600" fill="currentColor" viewBox="0 0 24 24">
+                                  <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
+                                </svg>
+                              </div>
+                              <span className="text-sm font-medium text-gray-700 bg-white/80 px-2 py-1 rounded">
+                                Music
+                              </span>
+                            </div>
+                          )}
+                        </div>
                       ) : (
                         <Image
                           src={ad.url}
@@ -336,6 +411,11 @@ export default function LibraryClient({ user, profile }: LibraryClientProps) {
                       {ad.mediaType === 'video' && (
                         <div className="absolute bottom-2 left-2 px-2 py-1 bg-black/70 text-white text-xs rounded-md">
                           🎬 Video
+                        </div>
+                      )}
+                      {ad.mediaType === 'music' && (
+                        <div className="absolute bottom-2 left-2 px-2 py-1 bg-purple-700 text-white text-xs rounded-md">
+                          🎵 Music
                         </div>
                       )}
                       
@@ -522,6 +602,79 @@ export default function LibraryClient({ user, profile }: LibraryClientProps) {
                   className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm sm:text-base"
                 >
                   Download Image
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Music Modal */}
+      {selectedMusic && (
+        <div 
+          className="fixed inset-0 bg-black/75 flex items-center justify-center z-50 p-2 sm:p-4"
+          onClick={() => setSelectedMusic(null)}
+        >
+          <div 
+            className="bg-white rounded-xl sm:rounded-2xl max-w-md w-full overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between p-4 border-b">
+              <h3 className="text-lg font-semibold text-gray-900">
+                {selectedMusic.name || 'Music Preview'}
+              </h3>
+              <button
+                onClick={() => setSelectedMusic(null)}
+                className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="p-4">
+              {/* Album Cover */}
+              {selectedMusic.coverUrl && (
+                <div className="relative rounded-lg overflow-hidden mb-4">
+                  <Image
+                    src={selectedMusic.coverUrl}
+                    alt="Album cover"
+                    width={400}
+                    height={400}
+                    className="w-full h-auto"
+                  />
+                </div>
+              )}
+              
+              {/* Audio Player */}
+              <audio
+                src={selectedMusic.url}
+                controls
+                autoPlay
+                className="w-full mb-4"
+              />
+              
+              {/* Lyrics if available */}
+              {selectedMusic.lyrics && (
+                <div className="mb-4 p-3 bg-gray-50 rounded-lg max-h-48 overflow-y-auto">
+                  <p className="text-xs font-medium text-gray-600 mb-2">Lyrics:</p>
+                  <p className="text-sm text-gray-700 whitespace-pre-wrap">{selectedMusic.lyrics}</p>
+                </div>
+              )}
+              
+              {/* Actions */}
+              <div className="flex flex-col gap-3">
+                <p className="text-sm text-gray-500">
+                  Created on {new Date(selectedMusic.created_at).toLocaleDateString()}
+                </p>
+                <button
+                  onClick={() => downloadMedia(selectedMusic)}
+                  className="w-full px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors text-sm sm:text-base flex items-center justify-center gap-2"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                  </svg>
+                  Download {selectedMusic.coverUrl ? 'Music + Cover' : 'Music'}
                 </button>
               </div>
             </div>

@@ -142,6 +142,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
   const [lyricsMode, setLyricsMode] = useState<'ai' | 'custom'>('ai') // 'ai' = AI generates lyrics, 'custom' = user provides
   const [customLyrics, setCustomLyrics] = useState('')
   const [musicDuration, setMusicDuration] = useState<10 | 30 | 60 | 120 | 180>(30) // Duration in seconds
+  const [coverPrompt, setCoverPrompt] = useState('') // Optional custom prompt for cover image
 
   const meta = TAB_META[gen.activeTab]
   const history = gen.histories[gen.activeTab]
@@ -568,7 +569,8 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
           tags: musicTags.trim() || undefined,
           lyrics_mode: lyricsMode,
           custom_lyrics: lyricsMode === 'custom' ? customLyrics.trim() : undefined,
-          duration: musicDuration
+          duration: musicDuration,
+          cover_prompt: coverPrompt.trim() || undefined
         }
       }
       
@@ -1130,8 +1132,9 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
         
         {/* Music-specific options */}
         {isMusicMode && (
-          <div className="flex flex-col gap-3 p-3 bg-gradient-to-r from-purple-50 to-pink-50 rounded-xl border border-purple-200">
-            <div className="flex items-center justify-between">
+          <div className="flex flex-col gap-3 p-4 bg-gradient-to-br from-purple-50 to-pink-50 rounded-xl border border-purple-200/50">
+            {/* Row 1: Instrumental Toggle & Duration */}
+            <div className="flex items-center justify-between gap-4">
               <label className="flex items-center gap-2 cursor-pointer group">
                 <div className="relative">
                   <input
@@ -1140,33 +1143,52 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
                     onChange={(e) => setMakeInstrumental(e.target.checked)}
                     className="sr-only peer"
                   />
-                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-purple-500 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
+                  <div className="w-10 h-5 bg-gray-300 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-purple-500 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-purple-600"></div>
                 </div>
-                <span className="text-sm font-medium text-gray-700 group-hover:text-purple-600 transition">
+                <span className="text-sm font-medium text-gray-700">
                   🎹 Instrumental Only (no vocals)
                 </span>
               </label>
+
+              {/* Duration selector inline */}
+              <div className="flex gap-1 items-center">
+                <span className="text-xs text-gray-600 font-medium mr-1">⏱️ Duration:</span>
+                {[10, 30, 60, 120, 180].map(duration => (
+                  <button
+                    key={duration}
+                    onClick={() => setMusicDuration(duration as 10 | 30 | 60 | 120 | 180)}
+                    className={`text-xs px-2.5 py-1 rounded-md transition ${
+                      musicDuration === duration 
+                        ? 'bg-purple-600 text-white font-semibold' 
+                        : 'bg-white/80 text-gray-600 hover:bg-white border border-purple-200'
+                    }`}
+                  >
+                    {duration < 60 ? `${duration}s` : `${duration / 60}m`}
+                  </button>
+                ))}
+              </div>
             </div>
             
-            <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-medium text-gray-600 flex items-center gap-1">
-                🏷️ Genre/Style Tags <span className="text-gray-400">(optional)</span>
+            {/* Row 2: Genre Tags */}
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-gray-600">
+                🏷️ Genre/Style Tags <span className="text-gray-400 font-normal">(optional)</span>
               </label>
               <input
                 type="text"
                 value={musicTags}
                 onChange={(e) => setMusicTags(e.target.value)}
                 placeholder="e.g., rock, pop, electronic, jazz, ambient"
-                className="text-sm border border-purple-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white"
+                className="text-sm border border-purple-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white/80 placeholder:text-gray-400"
               />
-              <p className="text-xs text-gray-500">
+              <p className="text-xs text-gray-500 mt-0.5">
                 Add specific genres or styles to guide the music generation
               </p>
             </div>
             
-            {/* Lyrics Options */}
-            <div className="flex flex-col gap-2">
-              <label className="text-xs font-medium text-gray-600 flex items-center gap-1">
+            {/* Row 3: Lyrics Mode Selection */}
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-medium text-gray-600">
                 ✍️ Lyrics
               </label>
               <div className="flex gap-2">
@@ -1175,8 +1197,8 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
                   onClick={() => setLyricsMode('ai')}
                   className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition ${
                     lyricsMode === 'ai'
-                      ? 'bg-purple-600 text-white shadow-md'
-                      : 'bg-white text-gray-600 hover:bg-purple-50 border border-purple-200'
+                      ? 'bg-purple-600 text-white shadow-sm'
+                      : 'bg-white/80 text-gray-600 hover:bg-white border border-purple-200'
                   }`}
                 >
                   🤖 AI Generate
@@ -1186,27 +1208,47 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
                   onClick={() => setLyricsMode('custom')}
                   className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition ${
                     lyricsMode === 'custom'
-                      ? 'bg-purple-600 text-white shadow-md'
-                      : 'bg-white text-gray-600 hover:bg-purple-50 border border-purple-200'
+                      ? 'bg-purple-600 text-white shadow-sm'
+                      : 'bg-white/80 text-gray-600 hover:bg-white border border-purple-200'
                   }`}
                 >
                   📝 Paste Your Own
                 </button>
               </div>
               
-              {lyricsMode === 'custom' && (
-                <textarea
-                  value={customLyrics}
-                  onChange={(e) => setCustomLyrics(e.target.value)}
-                  placeholder="Paste your lyrics here (verse, chorus, bridge, etc.)"
-                  className="text-sm border border-purple-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white resize-y min-h-[100px]"
-                />
+              {lyricsMode === 'ai' ? (
+                <p className="text-xs text-gray-500 mt-0.5">
+                  AI will generate lyrics based on your prompt and genre
+                </p>
+              ) : (
+                <>
+                  <textarea
+                    value={customLyrics}
+                    onChange={(e) => setCustomLyrics(e.target.value)}
+                    placeholder="Paste your lyrics here (verse, chorus, bridge, etc.)"
+                    className="text-sm border border-purple-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white/80 resize-y min-h-[80px] placeholder:text-gray-400 mt-1"
+                  />
+                  <p className="text-xs text-gray-500">
+                    Enter your own lyrics - the music will match your words
+                  </p>
+                </>
               )}
-              
-              <p className="text-xs text-gray-500">
-                {lyricsMode === 'ai' 
-                  ? 'AI will generate lyrics based on your prompt and genre' 
-                  : 'Enter your own lyrics (the music will match your words)'}
+            </div>
+            
+            {/* Row 4: Cover Image Prompt */}
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-gray-600">
+                🎨 Cover Image Prompt <span className="text-gray-400 font-normal">(optional)</span>
+              </label>
+              <input
+                type="text"
+                value={coverPrompt}
+                onChange={(e) => setCoverPrompt(e.target.value)}
+                placeholder="e.g., Sunset over ocean waves, vibrant colors..."
+                className="text-sm border border-purple-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white/80 placeholder:text-gray-400"
+              />
+              <p className="text-xs text-gray-500 mt-0.5">
+                Customize the cover art appearance (leave empty for automatic generation based on music style)
               </p>
             </div>
           </div>
@@ -1260,24 +1302,9 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
             </span>
           </button>
         </div>
-        {/* Quick controls */}
-        <div className="flex justify-center gap-4 mt-1 flex-wrap text-xs text-gray-500">
-          {isMusicMode ? (
-            // Duration selector for music
-            <div className="flex gap-2 items-center">
-              <span className="text-gray-600 font-medium">⏱️ Duration:</span>
-              {[10, 30, 60, 120, 180].map(duration => (
-                <button
-                  key={duration}
-                  onClick={() => setMusicDuration(duration as 10 | 30 | 60 | 120 | 180)}
-                  className={`${musicDuration === duration ? 'bg-purple-50 border border-purple-500 text-purple-600 font-semibold' : 'border border-gray-200 hover:bg-gray-50'} rounded-md px-2 py-1 transition`}
-                >
-                  {duration < 60 ? `${duration}s` : `${duration / 60}m`}
-                </button>
-              ))}
-            </div>
-          ) : (
-            // Aspect ratio for images/videos
+        {/* Quick controls - only show aspect ratio for images/videos */}
+        {!isMusicMode && (
+          <div className="flex justify-center gap-4 mt-1 flex-wrap text-xs text-gray-500">
             <div className="flex gap-2 items-center">
               {aspectOptions.map(opt => (
                 <button
@@ -1287,9 +1314,8 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
                 >{opt.label}</button>
               ))}
             </div>
-          )}
-          {/* Resolutions removed */}
-        </div>
+          </div>
+        )}
       </div>
     </div>
   )
