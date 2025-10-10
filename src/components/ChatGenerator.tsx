@@ -348,14 +348,35 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
     
     activePolling.current.add(jobId)
     const startTime = Date.now()
-    const maxDuration = tab.includes('video') ? 600000 : 300000 // 10 min for video, 5 min for image/music
+    
+    // Type-specific polling configuration
+    // Images: Fast (immediate, 3s interval, 5min timeout)
+    // Music: Medium (10s delay, 5s interval, 5min timeout)  
+    // Videos: Patient (30s delay, 15s interval, 10min timeout)
+    let maxDuration: number
+    let pollInterval: number
+    let initialDelay: number
+    
+    if (tab.includes('video')) {
+      maxDuration = 600000  // 10 minutes for videos
+      pollInterval = 15000   // Poll every 15 seconds
+      initialDelay = 30000   // Wait 30s before starting
+    } else if (tab.includes('music')) {
+      maxDuration = 300000   // 5 minutes for music
+      pollInterval = 5000    // Poll every 5 seconds
+      initialDelay = 10000   // Wait 10s before starting
+    } else {
+      maxDuration = 300000   // 5 minutes for images
+      pollInterval = 3000    // Poll every 3 seconds
+      initialDelay = 0       // Start immediately
+    }
     
     const pollJob = async () => {
       try {
         // Check if we've exceeded the maximum duration
         const elapsed = Date.now() - startTime
         if (elapsed > maxDuration) {
-          console.error(`⏱️ Polling timeout after ${elapsed}ms for job ${jobId}`)
+          console.error(`⏱️ Polling timeout after ${Math.round(elapsed/1000)}s for job ${jobId}`)
           gen.updateMessage(tab, messageId, { 
             status: 'error',
             content: 'Generation is taking longer than expected. Please check your library later.'
@@ -380,9 +401,10 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
           return
         }
 
-        console.log(`🔍 Polling job ${jobId}: status=${job.status}, elapsed=${elapsed}ms`)
+        console.log(`🔍 Polling job ${jobId}: status=${job.status}, elapsed=${Math.round(elapsed/1000)}s`)
 
         if (job.status === 'completed' && job.result_url) {
+          console.log(`✅ Job ${jobId} completed! Getting signed URL...`)
           // Get signed URL for the result
           const { data: signedUrl } = await supabase.storage
             .from('results')
@@ -414,7 +436,8 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
           activePolling.current.delete(jobId)
         } else {
           // Still processing, continue polling
-          const timeoutId = setTimeout(pollJob, 3000) // Poll every 3 seconds
+          console.log(`⏳ Job ${jobId} still ${job.status}, polling again in ${pollInterval/1000}s...`)
+          const timeoutId = setTimeout(pollJob, pollInterval)
           activeTimeouts.current.add(timeoutId)
         }
       } catch (error) {
@@ -427,9 +450,10 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
       }
     }
 
-    // Start polling immediately
-    console.log(`🚀 Starting polling for job ${jobId}, max duration: ${maxDuration}ms`)
-    pollJob()
+    // Start polling after initial delay
+    console.log(`🚀 Starting polling for job ${jobId} after ${initialDelay/1000}s delay, max duration: ${maxDuration/1000}s, poll interval: ${pollInterval/1000}s`)
+    const initialTimeoutId = setTimeout(pollJob, initialDelay)
+    activeTimeouts.current.add(initialTimeoutId)
   }
 
   const handleExample = (fullPrompt: string) => {

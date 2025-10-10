@@ -169,6 +169,28 @@ async function handler(req: Request) {
     if (!isComplete) {
       const currentStatus = taskState || taskStatus.toLowerCase() || 'queued';
       
+      // Check if job has been running too long (timeout check)
+      const jobAge = Date.now() - new Date(job.created_at).getTime();
+      const maxAge = job.result_type === 'video' ? 600000 : 300000; // 10min for video, 5min for others
+      
+      if (jobAge > maxAge) {
+        console.log(`[check-job-status] Job timeout! Age: ${jobAge}ms, max: ${maxAge}ms, state: "${taskState}"`)
+        await supabase.from('jobs').update({
+          status: 'failed',
+          error_message: `Generation timeout - Kie.ai task stuck in "${taskState}" state after ${Math.round(jobAge/1000)}s`,
+          updated_at: new Date().toISOString()
+        }).eq('id', jobId)
+        return new Response(
+          JSON.stringify({ 
+            success: false,
+            status: 'failed',
+            error: `Generation timeout after ${Math.round(jobAge/1000)} seconds`,
+            jobId
+          }),
+          { headers: { ...cors, 'Content-Type': 'application/json' } }
+        )
+      }
+      
       // Detect failure variants early
       if (['fail','failed','error'].includes(currentStatus)) {
         const failMsg = result.data?.failMsg || 'Generation failed'
