@@ -73,6 +73,18 @@ export async function createCheckoutSession({
       user_id: userId,
       plan: plan,
     },
+    // Enable automatic tax calculation if configured
+    automatic_tax: {
+      enabled: false, // Set to true if you've configured tax in Stripe
+    },
+    // Ensure payment methods support 3D Secure (SCA compliance)
+    payment_method_options: {
+      card: {
+        request_three_d_secure: 'automatic', // Automatically request 3DS when needed
+      },
+    },
+    // Set billing address collection
+    billing_address_collection: 'auto',
   };
 
   // If user has existing Stripe customer ID, use it
