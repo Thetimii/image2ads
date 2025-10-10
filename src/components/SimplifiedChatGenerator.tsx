@@ -25,7 +25,7 @@ const ENDPOINT_MAP: Record<string, string> = {
 }
 
 const TAB_META: Record<string, { title: string; subtitle: string; locked?: boolean; model: string; resultType: 'image' | 'video' }> = {
-  'text-to-image': { title: '🖼️ Text to Image', subtitle: 'Generate product-ready visuals from ideas', model: 'gemini', resultType: 'image' },
+  'text-to-image': { title: '📝 Text to Image', subtitle: 'Generate product-ready visuals from ideas', model: 'gemini', resultType: 'image' },
   'image-to-image': { title: '🌅 Image to Image', subtitle: 'Transform or restyle an input image', model: 'gemini', resultType: 'image' },
   'text-to-video': { title: '🎬 Text to Video', subtitle: 'Bring concepts to motion with AI video', locked: true, model: 'sora-2', resultType: 'video' },
   'image-to-video': { title: '🎥 Image to Video', subtitle: 'Animate a still into dynamic video', locked: true, model: 'sora-2', resultType: 'video' },

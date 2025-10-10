@@ -20,9 +20,9 @@ interface DashboardLayoutProps {
 
 interface NavItem { name: string; href: string; locked?: boolean }
 const navigation: NavItem[] = [
-  { name: '�️ Text to Image', href: '/dashboard/generate/text-to-image' },
-  { name: '🌅 Image to Image', href: '/dashboard/generate/image-to-image' },
-  { name: '� Text to Video', href: '/dashboard/generate/text-to-video', locked: true },
+  { name: '📝 Text to Image', href: '/dashboard/generate/text-to-image' },
+  { name: '🖼 Image to Image', href: '/dashboard/generate/image-to-image' },
+  { name: '🎬 Text to Video', href: '/dashboard/generate/text-to-video', locked: true },
   { name: '🎥 Image to Video', href: '/dashboard/generate/image-to-video', locked: true },
   { name: '🎵 Text to Music', href: '/dashboard/generate/text-to-music', locked: true },
   { name: '📚 Library', href: '/dashboard/library' },

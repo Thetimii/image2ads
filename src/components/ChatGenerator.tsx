@@ -41,8 +41,8 @@ const ENDPOINT_MAP: Record<string, string> = {
 const CHECK_JOB_STATUS_ENDPOINT = `${SUPABASE_FUNCTIONS_BASE}/check-job-status`
 
 const TAB_META: Record<string, { title: string; subtitle: string; locked?: boolean; model: string; resultType: 'image' | 'video' | 'music' }> = {
-  'text-to-image': { title: '🖼️ Text to Image', subtitle: 'Generate product-ready visuals from ideas', model: 'gemini', resultType: 'image' },
-  'image-to-image': { title: '🌅 Image to Image', subtitle: 'Transform or restyle an input image', model: 'gemini', resultType: 'image' },
+  'text-to-image': { title: '📝 Text to Image', subtitle: 'Generate product-ready visuals from ideas', model: 'gemini', resultType: 'image' },
+  'image-to-image': { title: '🖼 Image to Image', subtitle: 'Transform or restyle an input image', model: 'gemini', resultType: 'image' },
   'text-to-video': { title: '🎬 Text to Video', subtitle: 'Bring concepts to motion with AI video', locked: true, model: 'seedream', resultType: 'video' },
   'image-to-video': { title: '🎥 Image to Video', subtitle: 'Animate a still into dynamic video', locked: true, model: 'seedream', resultType: 'video' },
   'text-to-music': { title: '🎵 Text to Music', subtitle: 'Create original music from text descriptions', locked: true, model: 'suno', resultType: 'music' },
@@ -52,7 +52,7 @@ const EXAMPLES: Record<string, Array<{ short: string; full: string }>> = {
   'text-to-image': [
     {
       short: '☕ Coffee Cup on Wooden Table',
-      full: 'Ultra-detailed cinematic product photo of a double-walled glass coffee mug on a wet rustic wooden counter at sunrise, shallow depth of field, soft volumetric light through foggy window, micro droplets, 50mm photography, editorial, crisp reflections'
+full: 'Ultra-detailed cinematic product photo of a double-walled glass coffee mug filled with creamy latte topped with intricate heart-shaped latte art foam, placed on a wet rustic wooden counter at sunrise, soft volumetric light through a foggy café window, gentle steam rising, shallow depth of field (50mm f/1.8), realistic micro-droplets on the glass, warm morning tones, crisp reflections, professional food photography, editorial style'
     },
     {
       short: '💄 Skincare Bottle with Water Splash',
