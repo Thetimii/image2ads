@@ -7,6 +7,7 @@ import Image from 'next/image'
 import type { User } from '@supabase/supabase-js'
 import type { Profile } from '@/lib/validations'
 import PricingPlans from './PricingPlans'
+import { toast } from 'sonner'
 
 // Generate UUID that works on both server and client
 const generateId = () => {
@@ -405,6 +406,14 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
 
         if (job.status === 'completed' && job.result_url) {
           console.log(`✅ Job ${jobId} completed! Getting signed URL...`)
+          
+          // Show success toast notification
+          const contentType = tab.includes('video') ? 'Video' : tab.includes('music') ? 'Music' : 'Image'
+          toast.success(`${contentType} generated successfully! 🎉`, {
+            description: 'Your content is ready to view',
+            duration: 5000,
+          })
+          
           // Get signed URL for the result
           const { data: signedUrl } = await supabase.storage
             .from('results')
@@ -414,9 +423,9 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
             
             gen.updateMessage(tab, messageId, {
               status: 'complete',
-              content: `${tab.includes('video') ? 'Video' : 'Image'} generated ✅`,
+              content: `${tab.includes('video') ? 'Video' : tab.includes('music') ? 'Music' : 'Image'} generated ✅`,
               mediaUrl: signedUrl.signedUrl,
-              mediaType: tab.includes('video') ? 'video' : 'image'
+              mediaType: tab.includes('video') ? 'video' : tab.includes('music') ? 'music' : 'image'
             })
           } else {
             gen.updateMessage(tab, messageId, { 
@@ -428,6 +437,12 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
           // Remove from active polling
           activePolling.current.delete(jobId)
         } else if (job.status === 'failed' || job.status === 'error') {
+          // Show error toast notification
+          toast.error('Generation failed', {
+            description: job.error_message || 'An error occurred during generation',
+            duration: 5000,
+          })
+          
           gen.updateMessage(tab, messageId, { 
             status: 'error',
             content: job.error_message || 'Generation failed'
@@ -695,6 +710,13 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
           if (statusData.status === 'completed' && statusData.result_url) {
             console.log(`[ChatGenerator] 🎉 GENERATION COMPLETED! Result URL: ${statusData.result_url}`)
             
+            // Show success toast notification
+            const contentType = meta.resultType === 'image' ? 'Image' : meta.resultType === 'video' ? 'Video' : 'Music'
+            toast.success(`${contentType} generated successfully! 🎉`, {
+              description: 'Your content is ready to view',
+              duration: 5000,
+            })
+            
             // Create signed URL - same as library does
             console.log(`[ChatGenerator] 🔗 Creating signed URL...`)
             const { data: signedUrl } = await supabase.storage
@@ -763,6 +785,12 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
           }
 
           if (statusData.status === 'failed') {
+            // Show error toast notification
+            toast.error('Generation failed', {
+              description: statusData.error || 'An error occurred during generation',
+              duration: 5000,
+            })
+            
             // Clear all active timeouts
             activeTimeouts.current.forEach(timeoutId => clearTimeout(timeoutId))
             activeTimeouts.current.clear()

@@ -29,7 +29,7 @@ interface TaskResult {
 
 /**
  * Create a new task on Kie.ai
- * @param model - Model to use (e.g., "google/nano-banana", "sora-2-text-to-video")
+ * @param model - Model to use (e.g., "google/nano-banana", "sora-2-text-to-video", "suno-v3.5")
  * @param input - Model-specific input parameters
  * @param apiKey - Kie.ai API key
  * @returns taskId for polling
@@ -66,57 +66,150 @@ export async function createKieTask(
 }
 
 /**
- * Poll Kie.ai for task status and results
+ * Poll Kie.ai for task status and results using v1/generate/record-info endpoint
  * @param taskId - Task ID from createTask
  * @param apiKey - Kie.ai API key
- * @param maxAttempts - Maximum polling attempts (default: 60)
+ * @param maxAttempts - Maximum polling attempts (default: 120 = 10 minutes with 5s delay)
  * @param delayMs - Delay between polls in milliseconds (default: 5000 = 5s)
- * @returns URL of the generated result
+ * @returns Object with audioUrl and imageUrl of the generated result
  */
 export async function pollKieResult(
   taskId: string,
   apiKey: string,
-  maxAttempts = 60,
+  maxAttempts = 120, // 120 attempts * 5s = 10 minutes max (good for videos)
   delayMs = 5000
-): Promise<string> {
+): Promise<{ audioUrl: string; imageUrl?: string }> {
+  // Correct endpoint for Suno API is /api/v1/generate/record-info
+  const endpoint = `https://api.kie.ai/api/v1/generate/record-info?taskId=${taskId}`;
+  
+  let consecutiveErrors = 0;
+  const maxConsecutiveErrors = 3; // Allow 3 consecutive errors before giving up
+
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    const response = await fetch(`${KIE_BASE_URL}/recordInfo?taskId=${taskId}`, {
-      method: "GET",
-      headers: {
-        "Authorization": `Bearer ${apiKey}`,
-      },
-    });
+    try {
+      const response = await fetch(endpoint, {
+        method: "GET",
+        headers: {
+          "Authorization": `Bearer ${apiKey}`,
+        },
+      });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Kie.ai polling failed: ${response.status} - ${errorText}`);
-    }
-
-    const result: TaskResult = await response.json();
-
-    if (result.code !== 200) {
-      throw new Error(`Kie.ai polling error: ${result.msg || "Unknown error"}`);
-    }
-
-    const { status, resultJson, failMsg } = result.data;
-
-    if (status === "success") {
-      const resultUrl = resultJson?.resultUrls?.[0];
-      if (!resultUrl) {
-        throw new Error("Task succeeded but no result URL found");
+      // Handle timeout errors (522) and server errors (5xx) with retries
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`[pollKieResult] Attempt ${attempt + 1}/${maxAttempts} failed: ${response.status}`);
+        
+        // 5xx errors (including 522 timeout) are temporary - retry with backoff
+        if (response.status >= 500 && response.status < 600) {
+          consecutiveErrors++;
+          console.warn(`[pollKieResult] Server error ${response.status}, consecutive errors: ${consecutiveErrors}/${maxConsecutiveErrors}`);
+          
+          // If we've had too many consecutive errors, give up
+          if (consecutiveErrors >= maxConsecutiveErrors) {
+            throw new Error(`Kie.ai service unavailable after ${consecutiveErrors} consecutive errors: ${response.status}`);
+          }
+          
+          // Use exponential backoff for server errors
+          const backoffDelay = delayMs * Math.pow(2, consecutiveErrors - 1);
+          console.log(`[pollKieResult] Waiting ${backoffDelay}ms before retry due to server error...`);
+          await new Promise((resolve) => setTimeout(resolve, backoffDelay));
+          continue; // Skip to next attempt
+        }
+        
+        // For other errors (4xx), throw immediately
+        throw new Error(`Kie.ai polling failed: ${response.status} - ${errorText}`);
       }
-      return resultUrl;
-    }
 
-    if (status === "failed") {
-      throw new Error(`Kie.ai task failed: ${failMsg || "Unknown error"}`);
-    }
+      // Reset consecutive error counter on successful response
+      consecutiveErrors = 0;
 
-    // Still pending or processing, wait and retry
-    await new Promise((resolve) => setTimeout(resolve, delayMs));
+      const result = await response.json();
+    
+      // Log full response for debugging
+      console.log(`[pollKieResult] Attempt ${attempt + 1}/${maxAttempts} - Full response:`, JSON.stringify(result, null, 2));
+      
+      if (result.code !== 200) {
+        throw new Error(`Kie.ai polling error: ${result.msg || "Unknown error"}`);
+      }
+
+      const data = result.data;
+      const status = data?.status;
+
+      console.log(`[pollKieResult] Attempt ${attempt + 1}/${maxAttempts}: Status = ${status}`);
+
+      // Check for success status (SUCCESS means all tracks completed)
+      if (status === "SUCCESS") {
+        // Get the first audio URL from sunoData array
+        const sunoData = data?.response?.sunoData || [];
+        const trackWithAudio = sunoData.find((track: any) => track.audioUrl && track.audioUrl.trim() !== '');
+        
+        if (!trackWithAudio?.audioUrl) {
+          console.error(`[pollKieResult] Success response missing audioUrl:`, data);
+          throw new Error("Task succeeded but no audio URL found in response");
+        }
+        
+        console.log(`[pollKieResult] Task succeeded! Audio URL:`, trackWithAudio.audioUrl);
+        console.log(`[pollKieResult] Cover image URL:`, trackWithAudio.imageUrl);
+        
+        return {
+          audioUrl: trackWithAudio.audioUrl,
+          imageUrl: trackWithAudio.imageUrl
+        };
+      }
+
+      // Check for first track success (FIRST_SUCCESS means first track is ready)
+      if (status === "FIRST_SUCCESS") {
+        // Find the first track with a non-empty audioUrl
+        const sunoData = data?.response?.sunoData || [];
+        const trackWithAudio = sunoData.find((track: any) => track.audioUrl && track.audioUrl.trim() !== '');
+        
+        if (!trackWithAudio?.audioUrl) {
+          console.error(`[pollKieResult] First success response missing audioUrl:`, data);
+          throw new Error("First track succeeded but no audio URL found in response");
+        }
+        
+        console.log(`[pollKieResult] First track succeeded! Audio URL:`, trackWithAudio.audioUrl);
+        console.log(`[pollKieResult] Cover image URL:`, trackWithAudio.imageUrl);
+        
+        return {
+          audioUrl: trackWithAudio.audioUrl,
+          imageUrl: trackWithAudio.imageUrl
+        };
+      }
+
+      // Check for failure statuses
+      if (status === "CREATE_TASK_FAILED" || status === "GENERATE_AUDIO_FAILED" || status === "SENSITIVE_WORD_ERROR") {
+        const errorMsg = data?.errorMessage || "Unknown error";
+        console.error(`[pollKieResult] Task failed with status ${status}:`, errorMsg);
+        throw new Error(`Kie.ai task failed: ${errorMsg}`);
+      }
+
+      // Still pending or processing - wait and retry
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+      
+    } catch (error) {
+      // If this is a fetch error (network issue), treat it like a 5xx error
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        consecutiveErrors++;
+        console.warn(`[pollKieResult] Network error, consecutive errors: ${consecutiveErrors}/${maxConsecutiveErrors}`);
+        
+        if (consecutiveErrors >= maxConsecutiveErrors) {
+          throw new Error(`Network error after ${consecutiveErrors} consecutive attempts`);
+        }
+        
+        // Use exponential backoff for network errors
+        const backoffDelay = delayMs * Math.pow(2, consecutiveErrors - 1);
+        console.log(`[pollKieResult] Waiting ${backoffDelay}ms before retry due to network error...`);
+        await new Promise((resolve) => setTimeout(resolve, backoffDelay));
+        continue;
+      }
+      
+      // For any other error, rethrow
+      throw error;
+    }
   }
 
-  throw new Error(`Kie.ai task timed out after ${maxAttempts} attempts`);
+  throw new Error(`Kie.ai task timed out after ${maxAttempts} attempts (${maxAttempts * delayMs / 1000}s)`);
 }
 
 /**

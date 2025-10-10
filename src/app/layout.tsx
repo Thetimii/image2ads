@@ -4,6 +4,7 @@ import Script from "next/script";
 import CookieBanner from "@/components/CookieBanner";
 import AuthDebug from "@/components/AuthDebug";
 import { TutorialProvider } from "@/contexts/TutorialContext";
+import { Toaster } from 'sonner';
 import "./globals.css";
 
 const poppins = Poppins({
@@ -90,6 +91,7 @@ export default function RootLayout({
           {children}
           <CookieBanner />
           <AuthDebug />
+          <Toaster position="top-right" richColors closeButton />
         </TutorialProvider>
       </body>
     </html>
