@@ -166,7 +166,18 @@ async function handler(req: Request) {
     
     console.log(`[check-job-status] isComplete: ${isComplete}, resultJson empty: ${!result.data?.resultJson || result.data?.resultJson === ''}`);
     
-    if (!isComplete) {
+    // CRITICAL FIX: If we have resultUrls in resultJson, the task is complete even if state is still "waiting"
+    // This happens when Kie.ai updates resultJson before updating state
+    const hasResultUrls = parsedResults && (
+      (Array.isArray(parsedResults.resultUrls) && parsedResults.resultUrls.length > 0) ||
+      (Array.isArray(parsedResults.videoUrls) && parsedResults.videoUrls.length > 0)
+    );
+    
+    if (hasResultUrls && !isComplete) {
+      console.log(`[check-job-status] ⚠️ Task has result URLs but state still shows "${taskState}" - treating as complete!`);
+    }
+    
+    if (!isComplete && !hasResultUrls) {
       const currentStatus = taskState || taskStatus.toLowerCase() || 'queued';
       
       // Check if job has been running too long (timeout check)
