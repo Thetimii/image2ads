@@ -347,9 +347,23 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
     }
     
     activePolling.current.add(jobId)
+    const startTime = Date.now()
+    const maxDuration = tab.includes('video') ? 600000 : 300000 // 10 min for video, 5 min for image/music
     
     const pollJob = async () => {
       try {
+        // Check if we've exceeded the maximum duration
+        const elapsed = Date.now() - startTime
+        if (elapsed > maxDuration) {
+          console.error(`⏱️ Polling timeout after ${elapsed}ms for job ${jobId}`)
+          gen.updateMessage(tab, messageId, { 
+            status: 'error',
+            content: 'Generation is taking longer than expected. Please check your library later.'
+          })
+          activePolling.current.delete(jobId)
+          return
+        }
+        
         const { data: job, error } = await supabase
           .from('jobs')
           .select('*')
@@ -365,6 +379,8 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
           activePolling.current.delete(jobId)
           return
         }
+
+        console.log(`🔍 Polling job ${jobId}: status=${job.status}, elapsed=${elapsed}ms`)
 
         if (job.status === 'completed' && job.result_url) {
           // Get signed URL for the result
@@ -412,6 +428,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
     }
 
     // Start polling immediately
+    console.log(`🚀 Starting polling for job ${jobId}, max duration: ${maxDuration}ms`)
     pollJob()
   }
 

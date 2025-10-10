@@ -131,14 +131,48 @@ async function handler(req: Request) {
   const result = await response.json();
   console.log(`[check-job-status] Kie.ai response raw: ${JSON.stringify(result)}`);
 
-    // Kie.ai schema: earlier utilities expect data.status (pending|processing|success|failed)
-    // This function previously used data.state causing perpetual 'processing'. Support both for safety.
-    const taskStatus = (result.data?.status || result.data?.state || '').toLowerCase();
-    if (taskStatus !== 'success' && taskStatus !== 'completed') {
+    // Kie.ai schema: Check both 'state' (for images/video) and 'status' (for music)
+    // Images/video use /jobs/recordInfo endpoint - returns: state: "waiting" | "processing" | "completed" | "failed"  
+    // Music uses /generate/record-info endpoint - returns: status: "WAITING" | "FIRST_SUCCESS" | "SUCCESS" | "FAILED"
+    const taskState = (result.data?.state || '').toLowerCase();
+    const taskStatus = (result.data?.status || '').toUpperCase();
+    
+    // Check if resultJson has actual data
+    let parsedResults = null;
+    try {
+      const resultJson = result.data?.resultJson || '';
+      if (resultJson && resultJson !== '') {
+        parsedResults = typeof resultJson === 'string' ? JSON.parse(resultJson) : resultJson;
+      }
+    } catch (e) {
+      console.log(`[check-job-status] Could not parse resultJson:`, e);
+    }
+    
+    console.log(`[check-job-status] Parsed - state: "${taskState}", status: "${taskStatus}", hasResultJson: ${!!parsedResults}`);
+    
+    // Check for completion
+    // Kie.ai returns different states/statuses:
+    // - Images/Video (/jobs/recordInfo): state = "waiting" | "generating" | "completed" | "success" | "failed"  
+    // - Music (/generate/record-info): status = "WAITING" | "FIRST_SUCCESS" | "SUCCESS" | "FAILED"
+    const isComplete = Boolean(
+      taskState === 'completed' || 
+      taskState === 'success' || 
+      taskState === 'done' ||  // Some APIs use 'done'
+      taskStatus === 'SUCCESS' || 
+      taskStatus === 'FIRST_SUCCESS' ||
+      taskStatus === 'COMPLETED' ||
+      (parsedResults && (parsedResults.resultUrls || parsedResults.videoUrls || parsedResults.results))
+    );
+    
+    console.log(`[check-job-status] isComplete: ${isComplete}, resultJson empty: ${!result.data?.resultJson || result.data?.resultJson === ''}`);
+    
+    if (!isComplete) {
+      const currentStatus = taskState || taskStatus.toLowerCase() || 'queued';
+      
       // Detect failure variants early
-      if (['fail','failed','error'].includes(taskStatus)) {
+      if (['fail','failed','error'].includes(currentStatus)) {
         const failMsg = result.data?.failMsg || 'Generation failed'
-        console.log(`[check-job-status] Task reported failure state '${taskStatus}' failMsg='${failMsg}'`)
+        console.log(`[check-job-status] Task reported failure - state: "${taskState}", status: "${taskStatus}", failMsg: "${failMsg}"`)
         // Update job to failed
         await supabase.from('jobs').update({
           status: 'failed',
@@ -157,12 +191,12 @@ async function handler(req: Request) {
       }
       
       // Still processing - DON'T download/upload yet, just return status
-      console.log(`[check-job-status] Task still processing: ${taskStatus}`)
+      console.log(`[check-job-status] Task still processing - state: "${taskState}", status: "${taskStatus}", currentStatus: "${currentStatus}"`)
       return new Response(
         JSON.stringify({ 
           success: true, 
           status: 'processing', 
-          progress: taskStatus || 'queued',
+          progress: currentStatus,
           message: 'Generation in progress',
           jobId 
         }),
