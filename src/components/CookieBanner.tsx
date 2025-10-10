@@ -53,7 +53,7 @@ const CookieBanner = () => {
           const savedPrefs = profile.cookie_preferences as CookiePreferences;
           console.log('Loaded cookie preferences from database:', savedPrefs);
           setPreferences(savedPrefs);
-          applyPreferences(savedPrefs);
+          applyPreferences(savedPrefs, false); // Don't save to DB, just apply
           return; // Don't show banner if user has saved preferences
         } else {
           // User is logged in but no preferences in database
@@ -63,7 +63,7 @@ const CookieBanner = () => {
             const parsedPreferences = JSON.parse(savedPreferences);
             console.log('Syncing localStorage preferences to database for logged in user');
             setPreferences(parsedPreferences);
-            applyPreferences(parsedPreferences); // This will save to database
+            applyPreferences(parsedPreferences, true); // Save to DB this time
             return;
           }
         }
@@ -83,14 +83,14 @@ const CookieBanner = () => {
         // Apply saved preferences
         const parsedPreferences = JSON.parse(savedPreferences);
         setPreferences(parsedPreferences);
-        applyPreferences(parsedPreferences);
+        applyPreferences(parsedPreferences, false); // Don't save to DB during initial load
       }
     };
     
     checkPreferences();
-  }, [user]);
+  }, [user?.id]); // Only re-run when user ID changes
 
-  const applyPreferences = async (prefs: CookiePreferences) => {
+  const applyPreferences = async (prefs: CookiePreferences, saveToDb: boolean = true) => {
     if (typeof window === 'undefined') return;
 
     console.log('Applying cookie preferences:', prefs);
@@ -117,6 +117,12 @@ const CookieBanner = () => {
     // Store in localStorage for immediate access
     localStorage.setItem('cookiePreferences', JSON.stringify(prefs));
     console.log('Saved cookie preferences to localStorage:', prefs);
+    
+    // Only save to database if explicitly requested (not during initial load)
+    if (!saveToDb) {
+      console.log('Skipping database save (initial load)');
+      return;
+    }
     
     // Store in database if user is logged in - get fresh user data
     try {

@@ -155,6 +155,9 @@ async function handler(req: Request) {
           { headers: { ...cors, 'Content-Type': 'application/json' } }
         )
       }
+      
+      // Still processing - DON'T download/upload yet, just return status
+      console.log(`[check-job-status] Task still processing: ${taskStatus}`)
       return new Response(
         JSON.stringify({ 
           success: true, 
