@@ -52,17 +52,18 @@ const EXAMPLES: Record<string, Array<{ short: string; full: string }>> = {
   'text-to-image': [
     {
       short: '☕ Coffee Cup on Wooden Table',
-full: 'Ultra-detailed cinematic product photo of a double-walled glass coffee mug filled with creamy latte topped with intricate heart-shaped latte art foam, placed on a wet rustic wooden counter at sunrise, soft volumetric light through a foggy café window, gentle steam rising, shallow depth of field (50mm f/1.8), realistic micro-droplets on the glass, warm morning tones, crisp reflections, professional food photography, editorial style'
+      full: 'Ultra-detailed cinematic product photo of a double-walled glass coffee mug filled with creamy latte topped with intricate heart-shaped latte art foam, placed on a wet rustic wooden counter at sunrise, soft volumetric light through a foggy café window, gentle steam rising, shallow depth of field (50mm f/1.8), realistic micro-droplets on the glass, warm morning tones, crisp reflections, professional food photography, editorial style'
     },
     {
       short: '💄 Skincare Bottle with Water Splash',
-      full: 'Premium skincare bottle on rippled water surface, translucent gel splashes frozen mid-air, morning spa ambience, diffused natural daylight, soft muted pastel palette, luxury aesthetic, high resolution, studio macro lens'
+      full: 'Ultra-detailed cinematic product photo of a premium skincare serum bottle on a rippled water surface with crystal-clear gel splashes frozen mid-air, soft morning spa ambience, diffused natural daylight, gentle mist and reflections, elegant pastel tones, minimalist luxury aesthetic, studio macro photography, 85mm lens, ultra high resolution, editorial beauty lighting'
     },
     {
       short: '🏃‍♀️ Sport Bottle in Motion',
-      full: 'Dynamic sport water bottle mid-squeeze with engineered droplets suspended, stadium tunnel background with motion blur, dramatic rim lighting, energetic vibrant color grading'
+      full: 'Ultra-detailed cinematic action shot of a dynamic sport water bottle mid-squeeze, crystal droplets suspended in air, illuminated by dramatic rim and back lighting, stadium tunnel background with subtle motion blur, vibrant energetic color grading, high-speed photography, 85mm lens, ultra-sharp focus, professional commercial lighting, editorial sports aesthetic'
     }
   ],
+
   'image-to-image': [
     {
       short: '🌃 Moody Cyberpunk Neon Scene',
@@ -77,20 +78,22 @@ full: 'Ultra-detailed cinematic product photo of a double-walled glass coffee mu
       full: 'Convert to a bright summer beach lifestyle shot with warm golden hour lighting, subtle lens flare, airy composition'
     }
   ],
+
   'text-to-video': [
     {
-      short: '🛴 Eco Scooter Through Misty Forest',
-      full: '8 second cinematic dolly shot of a futuristic eco-friendly electric scooter gliding through a misty forest trail at dawn, soft god rays, particles in air, natural color grading, smooth motion, 4K film look'
+      short: '🎤 Street Interview in the City',
+      full: '10 second cinematic street interview scene with a friendly reporter holding a microphone, asking a smiling passerby “What makes you happiest in life?” on a busy urban sidewalk. The passerby laughs and replies warmly, mentioning spending time with family. Natural city ambience with footsteps, crowd chatter, and light traffic. Soft daylight, shallow depth of field, authentic handheld motion, realistic dialogue audio, subtle background blur.'
     },
     {
-      short: '🌸 Perfume Bottle with Silk Fabric',
-      full: 'Slow rotating hero shot of a luxury perfume bottle emerging from swirling translucent silk fabric, macro lens depth, sparkling dust motes, dramatic lighting shifts'
+      short: '🦊 Talking Fox in Forest',
+      full: '8 second whimsical cinematic shot of a red fox sitting in a misty forest clearing at sunrise, softly speaking in a calm, expressive voice about appreciating nature and peace — saying “Every dawn feels like a fresh start.” Gentle lip-sync animation, warm forest ambience with birds chirping and rustling leaves, soft golden-hour lighting, shallow depth of field, gentle camera dolly-in, natural color grading.'
     },
     {
-      short: '🌊 Aerial Coastline with Waves',
-      full: 'Dynamic aerial push-in over rugged coastline with powerful turquoise waves crashing, seagulls crossing frame, cinematic stabilization, crisp atmospheric depth'
+      short: '🍃 Misty Mountain Valley at Sunrise',
+      full: '10 second ultra-realistic cinematic nature shot of a misty mountain valley at sunrise. Soft fog rolling through pine trees, sunlight beams scattering through clouds, occasional birds gliding through frame. No human sound — only gentle wind, distant birds, and ambient nature echo. Wide aerial view, natural color grading, cinematic stabilization, 8K film look.'
     }
   ],
+
   'image-to-video': [
     {
       short: '✨ Parallax Depth Reveal',
@@ -105,18 +108,19 @@ full: 'Ultra-detailed cinematic product photo of a double-walled glass coffee mu
       full: 'Add dynamic atmospheric motion: drifting fog layers, gentle light shifts, subtle camera push forward, premium film tone'
     }
   ],
+
   'text-to-music': [
     {
-      short: '🎸 Upbeat Rock Energy',
-      full: 'Upbeat energetic rock track with driving electric guitars, powerful drums, perfect for action scenes and high-energy moments'
+      short: '🤠 Country Love Song – Sunset Bar',
+      full: 'Country-style song about a man and woman falling in love at a small-town bar during sunset. Start soft with acoustic guitar and warm vocals, build up to a heartfelt chorus with fiddle and drums, then fade into gentle steel guitar. Include romantic storytelling lyrics like: “She smiled through the dust and neon light.”'
     },
     {
-      short: '🎹 Chill Lo-Fi Beats',
-      full: 'Relaxing lo-fi hip hop with smooth piano melodies, vinyl crackle, mellow beats, ideal for background ambiance and focus'
+      short: '🎸 Country Duet – Long Drive Home',
+      full: 'Country duet between a man and woman driving home under moonlight after their first date. Begin with slow acoustic strumming, add light percussion and harmony on the second verse, final chorus introduces pedal steel and vocal layering. Include simple love lyrics like: “Every mile, your hand in mine feels like forever.”'
     },
     {
-      short: '🎺 Cinematic Epic Orchestral',
-      full: 'Epic orchestral piece with soaring strings, powerful brass, dramatic percussion, building to an inspiring crescendo'
+      short: '🎶 Image2Ad.com Jingle – One Click Creation',
+      full: 'Upbeat catchy commercial jingle for Image2Ad.com. Fun pop-country rhythm with claps, guitar, and light synths. Vocals sing a short memorable hook: “At Image2Ad dot com — make your vision come alive, with just one click and you’re ready to shine!” Include cheerful melody, tagline repeats at the end, and smooth beat transitions showing the AI can create images, videos, and songs in seconds.'
     }
   ]
 }
