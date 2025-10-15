@@ -20,6 +20,9 @@ export default function GeneratorPageWrapper({ user, profile }: GeneratorPageWra
     setShowUpgrade(true)
   }
 
+  // Lock navigation if tutorial not completed
+  const isNavigationLocked = !profile.tutorial_completed
+
   const handleSubscribe = async (plan: 'starter' | 'pro' | 'business') => {
     setIsUpgrading(plan)
     try {
@@ -53,7 +56,7 @@ export default function GeneratorPageWrapper({ user, profile }: GeneratorPageWra
   }
 
   return (
-    <DashboardLayout user={user} profile={profile}>
+    <DashboardLayout user={user} profile={profile} isNavigationLocked={isNavigationLocked}>
       <ChatGenerator 
         user={user} 
         profile={profile} 

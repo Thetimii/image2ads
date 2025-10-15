@@ -3,11 +3,15 @@
 import { useEffect, useRef, useState } from 'react'
 import { useGenerator, ChatMessage } from '@/contexts/GeneratorContext'
 import { createClient } from '@/lib/supabase/client'
+import { useRouter } from 'next/navigation'
 import Image from 'next/image'
 import type { User } from '@supabase/supabase-js'
 import type { Profile } from '@/lib/validations'
 import PricingPlans from './PricingPlans'
 import { toast } from 'sonner'
+import FirstTimeOnboarding from './FirstTimeOnboarding'
+import UpgradePrompt from './UpgradePrompt'
+import { useOnboarding } from '@/hooks/useOnboarding'
 
 // Generate UUID that works on both server and client
 const generateId = () => {
@@ -129,6 +133,7 @@ const EXAMPLES: Record<string, Array<{ short: string; full: string }>> = {
 export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGeneratorProps) {
   const gen = useGenerator()
   const supabase = createClient()
+  const router = useRouter()
   const [input, setInput] = useState('')
   const bottomRef = useRef<HTMLDivElement | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
@@ -140,6 +145,32 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
   const activePolling = useRef<Set<string>>(new Set()) // Track active polling jobs
   const [showCreditPopup, setShowCreditPopup] = useState(false)
   const [isUpgrading, setIsUpgrading] = useState<string | null>(null)
+
+  // Onboarding integration
+  const {
+    shouldShowOnboarding,
+    shouldHighlightGenerate,
+    shouldShowUpgrade,
+    prefillPrompt,
+    handleOnboardingComplete,
+    handleFirstGeneration,
+    checkCreditsAndShowUpgrade,
+    closeUpgradePrompt
+  } = useOnboarding(user, profile)
+
+  // Auto-fill prompt when onboarding completes
+  useEffect(() => {
+    if (prefillPrompt && !input) {
+      setInput(prefillPrompt)
+      // Auto-resize textarea
+      setTimeout(() => {
+        if (textareaRef.current) {
+          textareaRef.current.style.height = 'auto'
+          textareaRef.current.style.height = Math.min(120, Math.max(40, textareaRef.current.scrollHeight)) + 'px'
+        }
+      }, 100)
+    }
+  }, [prefillPrompt, input])
 
   // Music-specific options
   const [makeInstrumental, setMakeInstrumental] = useState(false)
@@ -155,6 +186,23 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
   const isMusicMode = gen.activeTab === 'text-to-music'
   // Check if feature is locked: only locked if marked as locked AND user doesn't have stripe customer ID
   const isLocked = !!meta.locked && !profile?.stripe_customer_id
+  
+  // Helper to get credit text based on user type
+  const isFreeUser = !profile?.stripe_customer_id
+  const getCreditText = () => {
+    if (isFreeUser) {
+      return profile.credits === 1 ? '1 free image remaining' : `${profile.credits} free images remaining`
+    }
+    return `${profile.credits} credits`
+  }
+  
+  const getButtonCreditText = () => {
+    const count = meta.resultType === 'music' ? 3 : meta.resultType === 'video' ? 8 : 1
+    if (isFreeUser) {
+      return count === 1 ? '1 free image' : `${count} free images`
+    }
+    return `${count} credit${count > 1 ? 's' : ''}`
+  }
   
   const handleSubscribe = async (plan: 'starter' | 'pro' | 'business') => {
     setIsUpgrading(plan)
@@ -539,6 +587,14 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
     const requiredCredits = meta.resultType === 'video' ? 8 : meta.resultType === 'music' ? 3 : 1
     if (profile.credits < requiredCredits) {
       console.log(`[ChatGenerator] Blocked: Insufficient credits (have: ${profile.credits}, need: ${requiredCredits})`)
+      
+      // Check if this is a free user who ran out of credits - show upgrade prompt
+      if (checkCreditsAndShowUpgrade()) {
+        // Upgrade prompt will be shown
+        return
+      }
+      
+      // Otherwise show regular credit popup
       setShowCreditPopup(true)
       return
     }
@@ -564,11 +620,31 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
     const assistantPlaceholder: ChatMessage = {
       id: generateId(),
       role: 'assistant',
-      content: 'Generating…',
+      content: shouldHighlightGenerate ? '☕ Brewing your ad...' : 'Generating…',
       createdAt: Date.now(),
       status: 'pending'
     }
     gen.pushMessage(gen.activeTab, assistantPlaceholder)
+
+    // If this is the first generation, show animated progress messages
+    if (shouldHighlightGenerate) {
+      const messages = [
+        '☕ Brewing your ad...',
+        '🎨 Adding the perfect lighting...',
+        '📸 Capturing the final shot...',
+        '✨ Almost ready...'
+      ]
+      let messageIndex = 0
+      const progressInterval = setInterval(() => {
+        messageIndex = (messageIndex + 1) % messages.length
+        gen.updateMessage(gen.activeTab, assistantPlaceholder.id, {
+          content: messages[messageIndex]
+        })
+      }, 4000)
+      
+      // Store interval to clear it later
+      activeTimeouts.current.add(progressInterval as any)
+    }
 
     setInput('')
     
@@ -718,12 +794,23 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
           if (statusData.status === 'completed' && statusData.result_url) {
             console.log(`[ChatGenerator] 🎉 GENERATION COMPLETED! Result URL: ${statusData.result_url}`)
             
-            // Show success toast notification
+            // Show success toast notification with special message for first-time users
             const contentType = meta.resultType === 'image' ? 'Image' : meta.resultType === 'video' ? 'Video' : 'Music'
-            toast.success(`${contentType} generated successfully! 🎉`, {
-              description: 'Your content is ready to view',
-              duration: 5000,
-            })
+            
+            if (shouldHighlightGenerate && !profile.tutorial_completed) {
+              // First-time user - show special encouragement message
+              const remainingCredits = profile.credits - 1 // They just used 1
+              toast.success('🔥 That\'s your first AI-generated ad!', {
+                description: `Try another — you've got ${remainingCredits} free ${remainingCredits === 1 ? 'image' : 'images'} left.`,
+                duration: 6000,
+              })
+            } else {
+              // Regular success message
+              toast.success(`${contentType} generated successfully! 🎉`, {
+                description: 'Your content is ready to view',
+                duration: 5000,
+              })
+            }
             
             // Create signed URL - same as library does
             console.log(`[ChatGenerator] 🔗 Creating signed URL...`)
@@ -781,6 +868,24 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
             
             console.log(`[ChatGenerator] ✅ MESSAGE UPDATE COMPLETED!`)
             console.log(`[ChatGenerator] 🎯 Final message should show image with URL: ${mediaUrl}`)
+            
+            // Refresh profile to get updated credit count
+            console.log(`[ChatGenerator] 💳 Refreshing profile to get updated credits...`)
+            try {
+              const { data: updatedProfile } = await supabase
+                .from('profiles')
+                .select('*')
+                .eq('id', user.id)
+                .single()
+              
+              if (updatedProfile) {
+                console.log(`[ChatGenerator] 💳 Credits updated: ${profile.credits} → ${updatedProfile.credits}`)
+                // Update the local profile object to reflect new credit count
+                Object.assign(profile, updatedProfile)
+              }
+            } catch (err) {
+              console.error(`[ChatGenerator] Failed to refresh profile:`, err)
+            }
             
             // Clear all active timeouts
             activeTimeouts.current.forEach(timeoutId => clearTimeout(timeoutId))
@@ -906,7 +1011,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
           <p className="text-xs text-gray-500 mt-0.5">{meta.subtitle}</p>
         </div>
         <div className="text-xs bg-gradient-to-r from-purple-500 to-pink-500 text-white px-3 py-1.5 rounded-full font-medium shadow-sm">
-          ⭐ {profile.credits} credits
+          ⭐ {getCreditText()}
         </div>
       </div>
 
@@ -1373,13 +1478,24 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
             style={{ height: '40px' }}
           />
           <button
-            onClick={sendPrompt}
+            id="generateButton"
+            onClick={async () => {
+              if (shouldHighlightGenerate) {
+                await handleFirstGeneration()
+                // Refresh to get updated profile with tutorial_completed = true
+                router.refresh()
+              }
+              sendPrompt()
+            }}
             disabled={gen.isGenerating || isSubmitting || (requiresImage && !localFile) || !input.trim()}
-            className="bg-gradient-to-r from-purple-500 to-pink-500 text-white px-5 py-2 rounded-full text-sm font-semibold hover:scale-[1.03] active:scale-[0.97] transition disabled:opacity-50 disabled:hover:scale-100 flex items-center gap-2"
+            className={`bg-gradient-to-r from-purple-500 to-pink-500 text-white px-5 py-2 rounded-full text-sm font-semibold hover:scale-[1.03] active:scale-[0.97] transition disabled:opacity-50 disabled:hover:scale-100 flex items-center gap-2`}
+            style={shouldHighlightGenerate ? {
+              animation: 'soft-glow-pulse 2s ease-in-out infinite'
+            } : undefined}
           >
             <span>⚡ Generate</span>
             <span className="bg-white/20 px-2 py-0.5 rounded-full text-xs">
-              {meta.resultType === 'music' ? '3' : meta.resultType === 'video' ? '8' : '1'} credit{meta.resultType === 'music' || meta.resultType === 'video' ? 's' : ''}
+              {getButtonCreditText()}
             </span>
           </button>
         </div>
@@ -1398,6 +1514,25 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
           </div>
         )}
       </div>
+
+      {/* First-Time Onboarding */}
+      {shouldShowOnboarding && (
+        <FirstTimeOnboarding
+          user={user}
+          profile={profile}
+          onCompleteAction={handleOnboardingComplete}
+        />
+      )}
+
+      {/* Upgrade Prompt */}
+      <UpgradePrompt
+        isOpen={shouldShowUpgrade}
+        onCloseAction={closeUpgradePrompt}
+        onOpenPricingAction={() => {
+          closeUpgradePrompt()
+          setShowCreditPopup(true)
+        }}
+      />
     </div>
   )
 }

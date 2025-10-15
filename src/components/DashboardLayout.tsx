@@ -16,6 +16,7 @@ interface DashboardLayoutProps {
   profile: Profile
   children: ReactNode
   onDemoOpen?: () => void
+  isNavigationLocked?: boolean
 }
 
 interface NavItem { name: string; href: string; locked?: boolean }
@@ -39,7 +40,7 @@ const bottomNavigation = [
   },
 ]
 
-export default function DashboardLayout({ user, profile, children, onDemoOpen }: DashboardLayoutProps) {
+export default function DashboardLayout({ user, profile, children, onDemoOpen, isNavigationLocked = false }: DashboardLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [isSafari, setIsSafari] = useState(false)
   const [loadingPath, setLoadingPath] = useState<string | null>(null)
@@ -206,17 +207,21 @@ export default function DashboardLayout({ user, profile, children, onDemoOpen }:
           <nav className="flex-1 px-4 py-4 space-y-1">
             {navigation.map((item) => {
               const isLocked = item.locked && !hasPro
+              const isDisabledByOnboarding = isNavigationLocked && item.href !== pathname
+              const shouldDisable = isLocked || isDisabledByOnboarding
+              
               return (
                 <button
                   key={item.name}
-                  onClick={() => handleNavigation(item.href)}
-                  disabled={loadingPath === item.href}
+                  onClick={() => !shouldDisable && handleNavigation(item.href)}
+                  disabled={loadingPath === item.href || shouldDisable}
                   className={`relative group flex items-center px-3 py-2.5 text-sm font-medium rounded-xl transition-all duration-150 w-full text-left
                     ${isCurrentPath(item.href)
                       ? 'bg-gradient-to-r from-purple-50 to-pink-50 text-purple-700'
                       : 'text-gray-700 hover:bg-purple-50/50 hover:text-purple-600'}
                     ${loadingPath === item.href ? 'opacity-75' : ''}
                     ${isLocked ? 'opacity-60 blur-[0.2px] cursor-not-allowed' : ''}
+                    ${isDisabledByOnboarding && !isLocked ? 'cursor-not-allowed' : ''}
                   `}
                 >
                   <span>{item.name}{isLocked && ' 🔒'}</span>
@@ -243,8 +248,8 @@ export default function DashboardLayout({ user, profile, children, onDemoOpen }:
             {bottomNavigation.map((item) => (
               <button
                 key={item.name}
-                onClick={() => handleNavigation(item.href)}
-                disabled={loadingPath === item.href}
+                onClick={() => !isNavigationLocked && handleNavigation(item.href)}
+                disabled={loadingPath === item.href || isNavigationLocked}
                 className={`
                   group flex items-center px-3 py-2.5 text-sm font-medium rounded-xl transition-all duration-150 w-full text-left
                   ${isCurrentPath(item.href)
@@ -252,6 +257,7 @@ export default function DashboardLayout({ user, profile, children, onDemoOpen }:
                     : 'text-gray-700 hover:bg-purple-50/50 hover:text-purple-600'
                   }
                   ${loadingPath === item.href ? 'opacity-75' : ''}
+                  ${isNavigationLocked ? 'cursor-not-allowed' : ''}
                 `}
               >
                 {loadingPath === item.href ? (

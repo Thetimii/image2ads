@@ -911,8 +911,11 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
     }
   }
 
+  // Lock navigation if tutorial not completed
+  const isNavigationLocked = !profile.tutorial_completed
+
   return (
-    <DashboardLayout user={user} profile={profile}>
+    <DashboardLayout user={user} profile={profile} isNavigationLocked={isNavigationLocked}>
       <ToastContainer toasts={toasts} onCloseAction={removeToast} />
       <div className="p-6 lg:p-8">
         {/* Header */}

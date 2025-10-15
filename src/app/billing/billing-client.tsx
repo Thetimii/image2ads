@@ -120,8 +120,11 @@ export default function BillingClient({ user, profile }: BillingClientProps) {
     }
   }
 
+  // Lock navigation if tutorial not completed
+  const isNavigationLocked = !profile.tutorial_completed
+
   return (
-    <DashboardLayout user={user} profile={profile}>
+    <DashboardLayout user={user} profile={profile} isNavigationLocked={isNavigationLocked}>
       <div className="p-6 lg:p-8">
         {/* Header */}
         <div className="mb-8">
