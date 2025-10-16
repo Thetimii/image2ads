@@ -92,24 +92,31 @@ async function handler(req: Request) {
     if (jobErr || !job)
       return new Response("Job not found", { status: 404, headers: cors });
 
-    // Get reference image
+    // Get reference image(s) - support multiple images
     const imageIds = Array.isArray(job.image_ids) ? job.image_ids : [];
     if (imageIds.length === 0) {
       return new Response("No reference image provided", { status: 400, headers: cors });
     }
 
-    const { data: img } = await supabase
+    // Fetch all images
+    const { data: images, error: imagesError } = await supabase
       .from("images")
       .select("file_path")
-      .eq("id", imageIds[0])
-      .single();
+      .in("id", imageIds);
     
-    if (!img) {
-      return new Response("Reference image not found", { status: 404, headers: cors });
+    if (imagesError || !images || images.length === 0) {
+      return new Response("Reference images not found", { status: 404, headers: cors });
     }
 
-    // Get signed URL for the image (private bucket)
-    const imageUrl = await getImageUrl(img.file_path);
+    // Get signed URLs for all images (private bucket)
+    const imageUrls: string[] = [];
+    for (const img of images) {
+      const signedUrl = await getImageUrl(img.file_path);
+      imageUrls.push(signedUrl);
+    }
+
+    console.log(`[generate-image-image] Processing ${imageUrls.length} image(s)`);
+    console.log(`[generate-image-image] Image URLs:`, imageUrls);
 
     // Check and consume credits
     const { data: creditResult, error: creditError } = await supabase.rpc("consume_credit", {
@@ -127,24 +134,25 @@ async function handler(req: Request) {
     // Update job status to processing
     await supabase.from("jobs").update({ status: "processing" }).eq("id", jobId);
 
-    // Determine image size from model
-    let imageSize = "1:1";
-    if (job.model?.includes("-landscape")) imageSize = "16:9";
-    else if (job.model?.includes("-portrait")) imageSize = "9:16";
+    // Determine image size from aspect_ratio field
+    let imageSize = "16:9"; // Default to landscape
+    if (job.aspect_ratio === 'portrait') imageSize = "9:16";
+    else if (job.aspect_ratio === 'landscape') imageSize = "16:9";
+    else if (job.aspect_ratio === 'square') imageSize = "1:1";
 
     console.log(`[generate-image-image] Raw job data:`, JSON.stringify(job, null, 2));
     console.log(`[generate-image-image] Job prompt value: "${job.prompt}"`);
-    console.log(`[generate-image-image] Image URL: ${imageUrl}`);
-    console.log(`[generate-image-image] Image size: ${imageSize}`);
+    console.log(`[generate-image-image] Image URLs:`, imageUrls);
+    console.log(`[generate-image-image] Aspect ratio: ${job.aspect_ratio}, Image size: ${imageSize}`);
 
     // Make sure we use the actual user prompt, with a fallback if needed
     const userPrompt = job.prompt && job.prompt.trim() !== '' ? job.prompt : "Transform this image";
     console.log(`[generate-image-image] Using prompt: "${userPrompt}"`);
 
-    // Create Kie.ai task using nano-banana-edit
+    // Create Kie.ai task using nano-banana-edit with multiple images
     const taskPayload = {
       prompt: userPrompt,
-      image_urls: [imageUrl],
+      image_urls: imageUrls,
       output_format: "png",
       image_size: imageSize
     };

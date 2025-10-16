@@ -74,12 +74,14 @@ async function handler(req: Request) {
     // Update job status to processing
     await supabase.from("jobs").update({ status: "processing" }).eq("id", jobId);
 
-    // Determine image size from model
-    let imageSize = "1:1";
-    if (job.model?.includes("-landscape")) imageSize = "16:9";
-    else if (job.model?.includes("-portrait")) imageSize = "9:16";
+    // Determine image size from aspect_ratio field
+    let imageSize = "16:9"; // Default to landscape
+    if (job.aspect_ratio === 'portrait') imageSize = "9:16";
+    else if (job.aspect_ratio === 'landscape') imageSize = "16:9";
+    else if (job.aspect_ratio === 'square') imageSize = "1:1";
 
     console.log(`[generate-text-image] Creating task for job ${jobId} with prompt: ${job.prompt}`);
+    console.log(`[generate-text-image] Aspect ratio: ${job.aspect_ratio}, Image size: ${imageSize}`);
 
     // Create Kie.ai task
     const taskId = await createKieTask(

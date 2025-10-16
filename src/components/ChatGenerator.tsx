@@ -138,8 +138,8 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
   const bottomRef = useRef<HTMLDivElement | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
-  const [localFile, setLocalFile] = useState<File | null>(null)
-  const [localPreview, setLocalPreview] = useState<string | null>(null)
+  const [localFiles, setLocalFiles] = useState<File[]>([])
+  const [localPreviews, setLocalPreviews] = useState<string[]>([])
   const [isSubmitting, setIsSubmitting] = useState(false)
   const activeTimeouts = useRef<Set<NodeJS.Timeout>>(new Set())
   const activePolling = useRef<Set<string>>(new Set()) // Track active polling jobs
@@ -548,15 +548,24 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
   const handleUploadClick = () => fileInputRef.current?.click()
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const f = e.target.files?.[0]
-    if (f) {
-      setLocalFile(f)
-      setLocalPreview(URL.createObjectURL(f))
+    const files = Array.from(e.target.files || [])
+    if (files.length > 0) {
+      setLocalFiles(prevFiles => [...prevFiles, ...files])
+      const newPreviews = files.map(f => URL.createObjectURL(f))
+      setLocalPreviews(prevPreviews => [...prevPreviews, ...newPreviews])
     }
   }
 
-  const aspectOptions: { label: string; value: typeof gen.aspectRatio; ratio: string }[] = [
+  const removeFile = (index: number) => {
+    setLocalFiles(prevFiles => prevFiles.filter((_, i) => i !== index))
+    setLocalPreviews(prevPreviews => {
+      // Revoke the URL to free memory
+      URL.revokeObjectURL(prevPreviews[index])
+      return prevPreviews.filter((_, i) => i !== index)
+    })
+  }
 
+  const aspectOptions: { label: string; value: typeof gen.aspectRatio; ratio: string }[] = [
     { label: '16:9', value: 'landscape', ratio: '16:9' },
     { label: '9:16', value: 'portrait', ratio: '9:16' },
   ]
@@ -571,7 +580,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
     console.log(`[ChatGenerator] Is submitting: ${isSubmitting}`)
     console.log(`[ChatGenerator] Is locked: ${isLocked}`)
     console.log(`[ChatGenerator] Requires image: ${requiresImage}`)
-    console.log(`[ChatGenerator] Local file: ${localFile ? 'present' : 'none'}`)
+    console.log(`[ChatGenerator] Local files: ${localFiles.length} file(s)`)
     
     if (!input.trim() || isSubmitting) {
       console.log(`[ChatGenerator] Blocked: No input or already submitting`)
@@ -599,7 +608,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
       return
     }
     
-    if (requiresImage && !localFile) {
+    if (requiresImage && localFiles.length === 0) {
       console.log(`[ChatGenerator] Blocked: Image required but not provided`)
       onLockedFeature?.()
       return
@@ -648,49 +657,55 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
 
     setInput('')
     
-    // Clear the local file and preview after sending
-    setLocalFile(null)
-    setLocalPreview(null)
+    // Clear the local files and previews after sending
+    localPreviews.forEach(url => URL.revokeObjectURL(url)) // Free memory
+    setLocalFiles([])
+    setLocalPreviews([])
 
     try {
       console.log(`[ChatGenerator] Setting isGenerating to true`)
       gen.setIsGenerating(true)
 
-      // Upload image if needed
-      let imageId: string | null = null
-      if (requiresImage && localFile) {
-        console.log(`[ChatGenerator] Starting image upload...`)
-        console.log(`[ChatGenerator] File details:`, { name: localFile.name, size: localFile.size, type: localFile.type })
+      // Upload images if needed
+      const imageIds: string[] = []
+      if (requiresImage && localFiles.length > 0) {
+        console.log(`[ChatGenerator] Starting upload of ${localFiles.length} image(s)...`)
         
-        const fileName = `${user.id}/${Date.now()}-${localFile.name}`
-        console.log(`[ChatGenerator] Upload filename: ${fileName}`)
-        
-        const { data: uploadData, error: uploadErr } = await supabase.storage.from('uploads').upload(fileName, localFile)
-        
-        if (uploadErr) {
-          console.error(`[ChatGenerator] Upload error:`, uploadErr)
-          throw new Error(`Upload failed: ${uploadErr.message}`)
+        for (let i = 0; i < localFiles.length; i++) {
+          const file = localFiles[i]
+          console.log(`[ChatGenerator] Uploading image ${i + 1}/${localFiles.length}:`, { name: file.name, size: file.size, type: file.type })
+          
+          const fileName = `${user.id}/${Date.now()}-${i}-${file.name}`
+          console.log(`[ChatGenerator] Upload filename: ${fileName}`)
+          
+          const { data: uploadData, error: uploadErr } = await supabase.storage.from('uploads').upload(fileName, file)
+          
+          if (uploadErr) {
+            console.error(`[ChatGenerator] Upload error:`, uploadErr)
+            throw new Error(`Upload failed: ${uploadErr.message}`)
+          }
+          console.log(`[ChatGenerator] Upload successful:`, uploadData)
+          
+          console.log(`[ChatGenerator] Creating image record in database...`)
+          const { data: imageData, error: imageDbErr } = await supabase.from('images').insert({
+            user_id: user.id,
+            file_path: uploadData.path,
+            original_name: file.name,
+            folder_id: null
+          }).select().single()
+          
+          if (imageDbErr) {
+            console.error(`[ChatGenerator] Image DB error:`, imageDbErr)
+            // Clean up uploaded file if DB insert fails
+            await supabase.storage.from('uploads').remove([uploadData.path])
+            throw new Error(`Database error: ${imageDbErr.message}`)
+          }
+          console.log(`[ChatGenerator] Image record created:`, imageData)
+          imageIds.push(imageData.id)
         }
-        console.log(`[ChatGenerator] Upload successful:`, uploadData)
-        
-        console.log(`[ChatGenerator] Creating image record in database...`)
-        const { data: imageData, error: imageDbErr } = await supabase.from('images').insert({
-          user_id: user.id,
-          file_path: uploadData.path,
-          original_name: localFile.name,
-          folder_id: null
-        }).select().single()
-        
-        if (imageDbErr) {
-          console.error(`[ChatGenerator] Image DB error:`, imageDbErr)
-          // Clean up uploaded file if DB insert fails
-          await supabase.storage.from('uploads').remove([uploadData.path])
-          throw new Error(`Database error: ${imageDbErr.message}`)
-        }
-        console.log(`[ChatGenerator] Image record created:`, imageData)
-        imageId = imageData.id
+        console.log(`[ChatGenerator] All ${imageIds.length} images uploaded successfully`)
       } else {
-        console.log(`[ChatGenerator] No image upload required (requiresImage: ${requiresImage}, localFile: ${!!localFile})`)
+        console.log(`[ChatGenerator] No image upload required (requiresImage: ${requiresImage}, localFiles: ${localFiles.length})`)
       }
 
       // Create job
@@ -701,10 +716,13 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
         prompt: userMsg.content,
         status: 'pending',
         result_type: meta.resultType,
-        has_images: !!imageId,
-        image_ids: imageId ? [imageId] : [],
-        image_id: imageId || null
+        has_images: imageIds.length > 0,
+        image_ids: imageIds,
+        image_id: imageIds.length > 0 ? imageIds[0] : null,
+        aspect_ratio: gen.aspectRatio // Add aspect ratio to job payload
       }
+      
+      console.log(`[ChatGenerator] Aspect ratio: ${gen.aspectRatio}, Model: ${jobPayload.model}`)
       
       // Add music-specific parameters
       if (isMusicMode) {
@@ -1024,10 +1042,11 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
           e.preventDefault();
           if (!requiresImage) return;
           setIsDragging(false);
-          const file = e.dataTransfer.files?.[0];
-          if (file && file.type.startsWith('image/')) {
-            setLocalFile(file)
-            setLocalPreview(URL.createObjectURL(file))
+          const files = Array.from(e.dataTransfer.files || []).filter(f => f.type.startsWith('image/'));
+          if (files.length > 0) {
+            setLocalFiles(prevFiles => [...prevFiles, ...files])
+            const newPreviews = files.map(f => URL.createObjectURL(f))
+            setLocalPreviews(prevPreviews => [...prevPreviews, ...newPreviews])
           }
         }}
       >
@@ -1440,6 +1459,34 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
           </div>
         )}
         
+        {/* Quick controls - only show aspect ratio for images/videos */}
+        {!isMusicMode && (
+          <div className="flex justify-center gap-4 mb-3 flex-wrap">
+            <div className="flex gap-3 items-center">
+              {aspectOptions.map(opt => (
+                <button
+                  key={opt.value}
+                  onClick={() => gen.setAspectRatio(opt.value)}
+                  className={`flex items-center justify-center p-3 rounded-lg transition ${
+                    gen.aspectRatio === opt.value 
+                      ? 'bg-purple-50 border-2 border-purple-500' 
+                      : 'border-2 border-gray-200 hover:bg-gray-50'
+                  }`}
+                >
+                  {/* Visual aspect ratio box */}
+                  <div 
+                    className={`rounded border-2 ${
+                      gen.aspectRatio === opt.value ? 'border-purple-500 bg-purple-200' : 'border-gray-400 bg-gray-200'
+                    } ${
+                      opt.value === 'landscape' ? 'w-10 h-6' : 'w-6 h-10'
+                    }`}
+                  />
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+        
         {/* Prompt Row */}
         <div className="flex items-center gap-2">
           {requiresImage && (
@@ -1447,24 +1494,23 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
               <button
                 onClick={handleUploadClick}
                 className="text-xl hover:opacity-80 cursor-pointer"
-                title="Upload reference image"
+                title="Upload reference images"
               >📎</button>
-              <input ref={fileInputRef} onChange={handleFileChange} type="file" accept="image/*" className="hidden" />
-              {localPreview && (
-                <div className="relative group">
-                  <Image src={localPreview} alt="preview" width={40} height={40} className="rounded-md object-cover" />
-                  <button
-                    onClick={() => {
-                      setLocalFile(null)
-                      setLocalPreview(null)
-                    }}
-                    className="absolute -top-1 -right-1 bg-red-500 hover:bg-red-600 text-white rounded-full w-4 h-4 flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition-opacity"
-                    title="Remove image"
-                  >
-                    ×
-                  </button>
-                </div>
-              )}
+              <input ref={fileInputRef} onChange={handleFileChange} type="file" accept="image/*" multiple className="hidden" />
+              <div className="flex gap-2 flex-wrap">
+                {localPreviews.map((preview, index) => (
+                  <div key={index} className="relative group">
+                    <Image src={preview} alt={`preview ${index + 1}`} width={40} height={40} className="rounded-md object-cover" />
+                    <button
+                      onClick={() => removeFile(index)}
+                      className="absolute -top-1 -right-1 bg-red-500 hover:bg-red-600 text-white rounded-full w-4 h-4 flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition-opacity"
+                      title="Remove image"
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
             </>
           )}
           <textarea
@@ -1487,7 +1533,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
               }
               sendPrompt()
             }}
-            disabled={gen.isGenerating || isSubmitting || (requiresImage && !localFile) || !input.trim()}
+            disabled={gen.isGenerating || isSubmitting || (requiresImage && localFiles.length === 0) || !input.trim()}
             className={`bg-gradient-to-r from-purple-500 to-pink-500 text-white px-5 py-2 rounded-full text-sm font-semibold hover:scale-[1.03] active:scale-[0.97] transition disabled:opacity-50 disabled:hover:scale-100 flex items-center gap-2`}
             style={shouldHighlightGenerate ? {
               animation: 'soft-glow-pulse 2s ease-in-out infinite'
@@ -1499,20 +1545,6 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
             </span>
           </button>
         </div>
-        {/* Quick controls - only show aspect ratio for images/videos */}
-        {!isMusicMode && (
-          <div className="flex justify-center gap-4 mt-1 flex-wrap text-xs text-gray-500">
-            <div className="flex gap-2 items-center">
-              {aspectOptions.map(opt => (
-                <button
-                  key={opt.value}
-                  onClick={() => gen.setAspectRatio(opt.value)}
-                  className={`${gen.aspectRatio === opt.value ? 'bg-purple-50 border border-purple-500 text-purple-600 font-semibold' : 'border border-gray-200 hover:bg-gray-50'} rounded-md px-2 py-1 transition`}
-                >{opt.label}</button>
-              ))}
-            </div>
-          </div>
-        )}
       </div>
 
       {/* First-Time Onboarding */}
