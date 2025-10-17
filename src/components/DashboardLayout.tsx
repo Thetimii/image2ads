@@ -184,7 +184,11 @@ export default function DashboardLayout({ user, profile, children, onDemoOpen, i
           </div>
 
           {/* User info */}
-          <div className="px-6 py-4 border-b border-gray-200 flex-shrink-0">
+          <button
+            onClick={() => setShowUpgrade(true)}
+            className="w-full px-6 py-4 border-b border-gray-200 flex-shrink-0 hover:bg-purple-50/30 transition-colors cursor-pointer text-left group"
+            title="Click to get more credits"
+          >
             <div className="flex items-center space-x-3">
               <div className="w-14 h-9 bg-gradient-to-r from-blue-500 to-purple-500 rounded-2xl flex items-center justify-center">
                 <span className="text-white font-semibold text-sm">
@@ -195,11 +199,7 @@ export default function DashboardLayout({ user, profile, children, onDemoOpen, i
                 <p className="text-sm font-medium text-gray-900 truncate">
                   {profile.full_name || 'User'}
                 </p>
-                <button
-                  onClick={() => setShowUpgrade(true)}
-                  className="flex items-center space-x-1 hover:opacity-80 transition-opacity cursor-pointer group"
-                  title="Click to get more credits"
-                >
+                <div className="flex items-center space-x-1">
                   <div className="w-2 h-2 bg-green-400 rounded-full"></div>
                   <p className="text-xs text-gray-500 group-hover:text-purple-600 transition-colors">
                     {profile.credits} credits
@@ -207,10 +207,10 @@ export default function DashboardLayout({ user, profile, children, onDemoOpen, i
                   <span className="text-xs text-purple-500 opacity-0 group-hover:opacity-100 transition-opacity">
                     +
                   </span>
-                </button>
+                </div>
               </div>
             </div>
-          </div>
+          </button>
 
           {/* Main navigation - Fixed height, no scrolling */}
           <nav className="flex-1 px-4 py-4 space-y-1">

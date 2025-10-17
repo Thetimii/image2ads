@@ -1028,9 +1028,13 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
           <h1 className="text-base font-semibold text-gray-800">{meta.title}</h1>
           <p className="text-xs text-gray-500 mt-0.5">{meta.subtitle}</p>
         </div>
-        <div className="text-xs bg-gradient-to-r from-purple-500 to-pink-500 text-white px-3 py-1.5 rounded-full font-medium shadow-sm">
+        <button
+          onClick={() => setShowCreditPopup(true)}
+          className="text-xs bg-gradient-to-r from-purple-500 to-pink-500 text-white px-3 py-1.5 rounded-full font-medium shadow-sm hover:shadow-lg hover:scale-105 transition-all cursor-pointer"
+          title="Click to get more credits"
+        >
           ⭐ {getCreditText()}
-        </div>
+        </button>
       </div>
 
       {/* Chat scroll area */}
