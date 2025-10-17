@@ -195,10 +195,19 @@ export default function DashboardLayout({ user, profile, children, onDemoOpen, i
                 <p className="text-sm font-medium text-gray-900 truncate">
                   {profile.full_name || 'User'}
                 </p>
-                <div className="flex items-center space-x-1">
+                <button
+                  onClick={() => setShowUpgrade(true)}
+                  className="flex items-center space-x-1 hover:opacity-80 transition-opacity cursor-pointer group"
+                  title="Click to get more credits"
+                >
                   <div className="w-2 h-2 bg-green-400 rounded-full"></div>
-                  <p className="text-xs text-gray-500">{profile.credits} credits</p>
-                </div>
+                  <p className="text-xs text-gray-500 group-hover:text-purple-600 transition-colors">
+                    {profile.credits} credits
+                  </p>
+                  <span className="text-xs text-purple-500 opacity-0 group-hover:opacity-100 transition-opacity">
+                    +
+                  </span>
+                </button>
               </div>
             </div>
           </div>
@@ -208,20 +217,28 @@ export default function DashboardLayout({ user, profile, children, onDemoOpen, i
             {navigation.map((item) => {
               const isLocked = item.locked && !hasPro
               const isDisabledByOnboarding = isNavigationLocked && item.href !== pathname
-              const shouldDisable = isLocked || isDisabledByOnboarding
+              const shouldDisable = isDisabledByOnboarding && !isLocked
               
               return (
                 <button
                   key={item.name}
-                  onClick={() => !shouldDisable && handleNavigation(item.href)}
+                  onClick={() => {
+                    if (isLocked) {
+                      setShowUpgrade(true)
+                      return
+                    }
+                    if (!shouldDisable) {
+                      handleNavigation(item.href)
+                    }
+                  }}
                   disabled={loadingPath === item.href || shouldDisable}
                   className={`relative group flex items-center px-3 py-2.5 text-sm font-medium rounded-xl transition-all duration-150 w-full text-left
                     ${isCurrentPath(item.href)
                       ? 'bg-gradient-to-r from-purple-50 to-pink-50 text-purple-700'
                       : 'text-gray-700 hover:bg-purple-50/50 hover:text-purple-600'}
                     ${loadingPath === item.href ? 'opacity-75' : ''}
-                    ${isLocked ? 'opacity-60 blur-[0.2px] cursor-not-allowed' : ''}
-                    ${isDisabledByOnboarding && !isLocked ? 'cursor-not-allowed' : ''}
+                    ${isLocked ? 'opacity-60 blur-[0.2px] cursor-pointer' : ''}
+                    ${shouldDisable ? 'cursor-not-allowed' : ''}
                   `}
                 >
                   <span>{item.name}{isLocked && ' 🔒'}</span>
@@ -293,9 +310,12 @@ export default function DashboardLayout({ user, profile, children, onDemoOpen, i
                 {/* Header */}
                 <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex justify-between items-center rounded-t-2xl">
                   <div>
-                    <h2 className="text-xl font-bold text-gray-900">🎬 Unlock Video Generation</h2>
+                    <h2 className="text-xl font-bold text-gray-900">✨ Upgrade Your Plan</h2>
                     <p className="text-sm text-gray-500 mt-1">
-                      Video features require a Pro or Business subscription. Choose a plan to get started:
+                      {hasPro 
+                        ? 'Get more credits with a higher tier plan'
+                        : 'Unlock video generation, music creation, and get more credits. Choose a plan to get started:'
+                      }
                     </p>
                   </div>
                   <button
