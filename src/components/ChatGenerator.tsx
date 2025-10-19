@@ -145,6 +145,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
   const activePolling = useRef<Set<string>>(new Set()) // Track active polling jobs
   const [showCreditPopup, setShowCreditPopup] = useState(false)
   const [isUpgrading, setIsUpgrading] = useState<string | null>(null)
+  const hasShownLastCreditModal = useRef(false) // Prevent multiple modals in same session
 
   // Onboarding integration
   const {
@@ -900,6 +901,19 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
                 console.log(`[ChatGenerator] 💳 Credits updated: ${profile.credits} → ${updatedProfile.credits}`)
                 // Update the local profile object to reflect new credit count
                 Object.assign(profile, updatedProfile)
+                
+                // Refresh the router to update credits display in sidebar and other components
+                router.refresh()
+                
+                // Check if user just used their last credit and show upgrade modal
+                if (updatedProfile.credits === 0 && !hasShownLastCreditModal.current) {
+                  console.log(`[ChatGenerator] 🎉 Last free credit used! Showing upgrade modal after delay...`)
+                  hasShownLastCreditModal.current = true
+                  // Wait 2 seconds to let the success animation play, then show upgrade modal
+                  setTimeout(() => {
+                    setShowCreditPopup(true)
+                  }, 2000)
+                }
               }
             } catch (err) {
               console.error(`[ChatGenerator] Failed to refresh profile:`, err)
@@ -985,6 +999,11 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
 
   return (
     <div className="flex flex-col h-full">
+      {/* Tutorial Dark Overlay - covers everything except generate button */}
+      {shouldHighlightGenerate && (
+        <div className="fixed inset-0 bg-black/50 z-[9997] pointer-events-none" />
+      )}
+      
       {/* Credit Popup */}
       {showCreditPopup && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -992,10 +1011,23 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
             {/* Header */}
             <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex justify-between items-center rounded-t-2xl">
               <div>
-                <h2 className="text-xl font-bold text-gray-900">⚠️ Insufficient Credits</h2>
-                <p className="text-sm text-gray-500 mt-1">
-                  You need {meta.resultType === 'video' ? '8' : meta.resultType === 'music' ? '3' : '1'} credits but only have {profile.credits}. Choose a plan to continue:
-                </p>
+                {profile.credits === 0 && hasShownLastCreditModal.current ? (
+                  // Success message after last free credit
+                  <>
+                    <h2 className="text-xl font-bold text-gray-900">🎉 You've Used Your 2 Free Credits!</h2>
+                    <p className="text-sm text-gray-500 mt-1">
+                      Upgrade now to unlock unlimited HD generations, faster rendering, and access to video & music creation.
+                    </p>
+                  </>
+                ) : (
+                  // Insufficient credits message
+                  <>
+                    <h2 className="text-xl font-bold text-gray-900">⚠️ Insufficient Credits</h2>
+                    <p className="text-sm text-gray-500 mt-1">
+                      You need {meta.resultType === 'video' ? '8' : meta.resultType === 'music' ? '3' : '1'} credits but only have {profile.credits}. Choose a plan to continue:
+                    </p>
+                  </>
+                )}
               </div>
               <button
                 onClick={() => setShowCreditPopup(false)}
@@ -1538,7 +1570,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
               sendPrompt()
             }}
             disabled={gen.isGenerating || isSubmitting || (requiresImage && localFiles.length === 0) || !input.trim()}
-            className={`bg-gradient-to-r from-purple-500 to-pink-500 text-white px-5 py-2 rounded-full text-sm font-semibold hover:scale-[1.03] active:scale-[0.97] transition disabled:opacity-50 disabled:hover:scale-100 flex items-center gap-2`}
+            className={`bg-gradient-to-r from-purple-500 to-pink-500 text-white px-5 py-2 rounded-full text-sm font-semibold hover:scale-[1.03] active:scale-[0.97] transition disabled:opacity-50 disabled:hover:scale-100 flex items-center gap-2 ${shouldHighlightGenerate ? 'relative z-[9998]' : ''}`}
             style={shouldHighlightGenerate ? {
               animation: 'soft-glow-pulse 2s ease-in-out infinite'
             } : undefined}

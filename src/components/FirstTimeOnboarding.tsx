@@ -79,8 +79,8 @@ export default function FirstTimeOnboarding({ user, profile, onCompleteAction }:
 
   return (
     <>
-      {/* Backdrop */}
-      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[9998] animate-in fade-in duration-300" />
+      {/* Backdrop with dark overlay - everything will be darkened */}
+      <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[9998] animate-in fade-in duration-300" />
       
       {/* Welcome Modal */}
       <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
