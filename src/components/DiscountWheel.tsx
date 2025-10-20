@@ -32,6 +32,7 @@ export default function DiscountWheel({ onCloseAction, onClaimAction }: Discount
     // Randomly pick one of the segments by index
     const segmentIndex = Math.floor(Math.random() * SEGMENTS.length)
     const pick = SEGMENTS[segmentIndex]
+    console.log('🎯 Wheel spinning to:', { segmentIndex, discount: pick.value, coupon: pick.coupon })
     // Calculate rotation so the wheel lands on the chosen segment
     const baseRotations = 6 // number of full spins
     const randomOffset = Math.random() * 20 - 10 // small offset
