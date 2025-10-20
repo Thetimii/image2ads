@@ -29,6 +29,7 @@ export async function createCheckoutSession({
   cancelUrl,
   customerEmail,
   stripeCustomerId,
+  couponId,
 }: {
   userId: string;
   plan: StripePlan;
@@ -36,6 +37,7 @@ export async function createCheckoutSession({
   cancelUrl: string;
   customerEmail?: string;
   stripeCustomerId?: string;
+  couponId?: string;
 }) {
   console.log('createCheckoutSession called with:', {
     userId,
@@ -60,7 +62,6 @@ export async function createCheckoutSession({
   const sessionOptions: Stripe.Checkout.SessionCreateParams = {
     mode: "subscription",
     payment_method_types: ["card"],
-    allow_promotion_codes: true,
     line_items: [
       {
         price: planData.priceId,
@@ -87,6 +88,19 @@ export async function createCheckoutSession({
     billing_address_collection: 'auto',
   };
 
+  // If a couponId is provided, add it to the session as discounts
+  // Otherwise, allow promotion codes (cannot have both)
+  if (couponId) {
+    // Stripe v2025 supports discounts param; use discounts with coupon
+    // Note: coupon must exist in Stripe dashboard
+    // Cannot use allow_promotion_codes when discounts is specified
+    console.log('Applying coupon to checkout session:', couponId);
+    (sessionOptions as any).discounts = [{ coupon: couponId }]
+  } else {
+    // Only allow promotion codes if NO coupon is provided (Stripe doesn't allow both)
+    sessionOptions.allow_promotion_codes = true;
+  }
+
   // If user has existing Stripe customer ID, use it
   if (stripeCustomerId) {
     console.log('Using existing Stripe customer:', stripeCustomerId);
@@ -105,7 +119,7 @@ export async function createCheckoutSession({
   });
 
   try {
-    const session = await stripe.checkout.sessions.create(sessionOptions);
+    const session = await stripe.checkout.sessions.create(sessionOptions as any);
     console.log('Stripe session created successfully:', session.id);
     return session;
   } catch (stripeError) {

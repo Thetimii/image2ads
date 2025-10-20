@@ -41,7 +41,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { plan, successUrl, cancelUrl } = validation.data
+  const { plan, successUrl, cancelUrl, couponId } = validation.data
 
     console.log('Creating checkout session with:', {
       userId: user.id,
@@ -59,6 +59,7 @@ export async function POST(request: NextRequest) {
       cancelUrl,
       customerEmail: user.email || undefined, // Pass user's email to prefill if no existing customer
       stripeCustomerId: stripeCustomerId || undefined, // Use existing customer ID if available
+      couponId: couponId || undefined,
     })
 
     return NextResponse.json({ 

@@ -121,6 +121,7 @@ export const createCheckoutSessionSchema = z.object({
   plan: z.enum(["starter", "pro", "business"]),
   successUrl: z.string().url(),
   cancelUrl: z.string().url(),
+  couponId: z.string().optional(),
 });
 
 // Usage event schema
