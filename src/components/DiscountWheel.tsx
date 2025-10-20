@@ -29,7 +29,7 @@ export default function DiscountWheel({ onCloseAction, onClaimAction }: Discount
   const spin = () => {
     if (spinning) return
     setSpinning(true)
-    // Randomly pick one of the segments by index
+    // Randomly pick one of the segments by index (ensures visual matches discount)
     const segmentIndex = Math.floor(Math.random() * SEGMENTS.length)
     const pick = SEGMENTS[segmentIndex]
     console.log('🎯 Wheel spinning to:', { segmentIndex, discount: pick.value, coupon: pick.coupon })
