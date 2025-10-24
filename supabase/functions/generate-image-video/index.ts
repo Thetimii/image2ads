@@ -126,15 +126,14 @@ async function handler(req: Request) {
     // Update job status to processing
     await supabase.from("jobs").update({ status: "processing" }).eq("id", jobId);
 
-  // Determine aspect ratio from model suffix (-landscape, -portrait, default landscape)
-  let aspectRatio = 'landscape'  // Try lowercase
-  if (job.model?.includes('-landscape')) aspectRatio = 'landscape'
-  else if (job.model?.includes('-portrait')) aspectRatio = 'portrait'
+    // Get aspect ratio from job.aspect_ratio field (landscape or portrait)
+    console.log(`[generate-image-video] RAW job.aspect_ratio value:`, job.aspect_ratio, `(type: ${typeof job.aspect_ratio})`)
+    const aspectRatio = job.aspect_ratio || 'landscape'  // Default to landscape
 
     console.log(`[generate-image-video] Creating task for job ${jobId}`);
     console.log(`[generate-image-video] Reference image: ${imageUrl}`);
     console.log(`[generate-image-video] Original prompt from job: "${job.prompt}"`);
-    console.log(`[generate-image-video] Aspect ratio: ${aspectRatio}`);
+    console.log(`[generate-image-video] Aspect ratio from job: ${aspectRatio}`);
 
     const finalPrompt = job.prompt || "Animate this image";
     console.log(`[generate-image-video] Final prompt to send: "${finalPrompt}"`);

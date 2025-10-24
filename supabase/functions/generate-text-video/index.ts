@@ -84,13 +84,13 @@ async function handler(req: Request) {
     // Update job status to processing
     await supabase.from("jobs").update({ status: "processing" }).eq("id", jobId);
 
-  // Determine aspect ratio from model suffix (-landscape, -portrait, default landscape)
-  let aspectRatio = 'landscape'  // Try lowercase
-  if (job.model?.includes('-landscape')) aspectRatio = 'landscape'
-  else if (job.model?.includes('-portrait')) aspectRatio = 'portrait'
-
+    // Get aspect ratio from job.aspect_ratio field (landscape or portrait)
+    console.log(`[generate-text-video] RAW job.aspect_ratio value:`, job.aspect_ratio, `(type: ${typeof job.aspect_ratio})`)
+    const aspectRatio = job.aspect_ratio || 'landscape'  // Default to landscape
+    
     console.log(`[generate-text-video] Creating task for job ${jobId} with prompt: ${job.prompt}`);
-  console.log(`[generate-text-video] Job model stored: ${job.model}`)
+    console.log(`[generate-text-video] Job model stored: ${job.model}`)
+    console.log(`[generate-text-video] Aspect ratio from job: ${aspectRatio}`)
 
     const kieModel = 'sora-2-text-to-video'
     const taskInput = {

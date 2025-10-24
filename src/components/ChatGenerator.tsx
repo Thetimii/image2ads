@@ -51,8 +51,8 @@ const CHECK_JOB_STATUS_ENDPOINT = `${SUPABASE_FUNCTIONS_BASE}/check-job-status`
 const TAB_META: Record<string, { title: string; subtitle: string; locked?: boolean; model: string; resultType: 'image' | 'video' | 'music' }> = {
   'text-to-image': { title: '📝 Text to Image', subtitle: 'Generate product-ready visuals from ideas', model: 'gemini', resultType: 'image' },
   'image-to-image': { title: '🖼 Image to Image', subtitle: 'Transform or restyle an input image', model: 'gemini', resultType: 'image' },
-  'text-to-video': { title: '🎬 Text to Video', subtitle: 'Bring concepts to motion with AI video', locked: true, model: 'seedream', resultType: 'video' },
-  'image-to-video': { title: '🎥 Image to Video', subtitle: 'Animate a still into dynamic video', locked: true, model: 'seedream', resultType: 'video' },
+  'text-to-video': { title: '🎬 Text to Video', subtitle: 'Bring concepts to motion with AI video', locked: true, model: 'sora-2', resultType: 'video' },
+  'image-to-video': { title: '🎥 Image to Video', subtitle: 'Animate a still into dynamic video', locked: true, model: 'sora-2', resultType: 'video' },
   'text-to-music': { title: '🎵 Text to Music', subtitle: 'Create original music from text descriptions', locked: true, model: 'suno', resultType: 'music' },
 }
 
@@ -717,6 +717,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
 
       // Create job
       console.log(`[ChatGenerator] Creating job record...`)
+      console.log(`[ChatGenerator] 🎯 ASPECT RATIO CHECK - gen.aspectRatio value:`, gen.aspectRatio)
       const jobPayload: any = {
         user_id: user.id,
         model: meta.model,
@@ -726,10 +727,12 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
         has_images: imageIds.length > 0,
         image_ids: imageIds,
         image_id: imageIds.length > 0 ? imageIds[0] : null,
-        aspect_ratio: gen.aspectRatio // Add aspect ratio to job payload
+        aspect_ratio: gen.aspectRatio // Aspect ratio passed separately for all modes
       }
       
-      console.log(`[ChatGenerator] Aspect ratio: ${gen.aspectRatio}, Model: ${jobPayload.model}`)
+      console.log(`[ChatGenerator] 🎯 Job payload aspect_ratio:`, jobPayload.aspect_ratio)
+      console.log(`[ChatGenerator] Full job payload:`, JSON.stringify(jobPayload, null, 2))
+
       
       // Add music-specific parameters
       if (isMusicMode) {
@@ -1624,7 +1627,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
                 <button
                   key={opt.value}
                   onClick={() => gen.setAspectRatio(opt.value)}
-                  className={`flex items-center justify-center p-3 rounded-lg transition ${
+                  className={`flex flex-col items-center justify-center gap-2 p-3 rounded-lg transition ${
                     gen.aspectRatio === opt.value 
                       ? 'bg-purple-50 border-2 border-purple-500' 
                       : 'border-2 border-gray-200 hover:bg-gray-50'
@@ -1638,6 +1641,12 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
                       opt.value === 'landscape' ? 'w-10 h-6' : 'w-6 h-10'
                     }`}
                   />
+                  {/* Label */}
+                  <span className={`text-xs font-medium ${
+                    gen.aspectRatio === opt.value ? 'text-purple-700' : 'text-gray-600'
+                  }`}>
+                    {opt.label}
+                  </span>
                 </button>
               ))}
             </div>
