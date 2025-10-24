@@ -39,20 +39,25 @@ export async function createKieTask(
   input: Record<string, any>,
   apiKey: string
 ): Promise<string> {
+  const payload = {
+    model,
+    input,
+  };
+  
+  console.log('[kieClient] 🚀 EXACT PAYLOAD BEING SENT TO KIE.AI:', JSON.stringify(payload, null, 2));
+  
   const response = await fetch(`${KIE_BASE_URL}/createTask`, {
     method: "POST",
     headers: {
       "Authorization": `Bearer ${apiKey}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({
-      model,
-      input,
-    }),
+    body: JSON.stringify(payload),
   });
 
   if (!response.ok) {
     const errorText = await response.text();
+    console.error('[kieClient] ❌ KIE.AI ERROR RESPONSE:', errorText);
     throw new Error(`Kie.ai createTask failed: ${response.status} - ${errorText}`);
   }
 
