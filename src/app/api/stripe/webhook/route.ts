@@ -2,6 +2,7 @@ import Stripe from "stripe";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { STRIPE_PLANS } from "@/lib/stripe-plans";
+import { trackPurchase } from "@/lib/tiktok-events";
 
 export const runtime = "nodejs"; // raw body + crypto
 
@@ -229,6 +230,38 @@ export async function POST(req: NextRequest) {
           if (creditsToAdd > 0) {
             await addCreditsToCustomer(customerId, creditsToAdd);
             console.log(`Added ${creditsToAdd} credits for plan: ${planName}`);
+          }
+
+          // Track TikTok purchase event
+          if (customer.email && planName) {
+            try {
+              // Get profile for user ID
+              const { data: profile } = await supabaseAdmin
+                .from("profiles")
+                .select("id")
+                .eq("stripe_customer_id", customerId)
+                .single();
+
+              if (profile) {
+                const amount = (session.amount_total || 0) / 100; // Convert cents to dollars
+                const currency = session.currency || 'usd';
+                
+                await trackPurchase({
+                  email: customer.email,
+                  userId: profile.id,
+                  value: amount,
+                  currency: currency.toUpperCase(),
+                  contentId: planName,
+                  contentName: `${planName.charAt(0).toUpperCase() + planName.slice(1)} Plan`,
+                  url: `${process.env.NEXT_PUBLIC_SITE_URL || 'https://image2ad.com'}/billing`,
+                });
+                
+                console.log(`✅ TikTok Purchase event tracked for ${customer.email}, plan: ${planName}, amount: ${amount} ${currency}`);
+              }
+            } catch (error) {
+              console.error('❌ Failed to track TikTok Purchase event:', error);
+              // Don't fail the webhook if TikTok tracking fails
+            }
           }
         }
         break;

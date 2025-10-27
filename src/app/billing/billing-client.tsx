@@ -62,6 +62,22 @@ export default function BillingClient({ user, profile }: BillingClientProps) {
   const handleSubscribe = async (plan: StripePlan) => {
     setIsLoading(plan)
     try {
+      // 🚀 Track TikTok InitiateCheckout event
+      try {
+        await fetch('/api/tiktok-event', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            event: 'InitiateCheckout',
+            contentId: plan,
+            contentName: `${plan.charAt(0).toUpperCase() + plan.slice(1)} Plan`,
+          }),
+        });
+        console.log(`✅ TikTok InitiateCheckout event tracked for ${plan} plan`);
+      } catch (tikTokError) {
+        console.error('❌ Failed to track TikTok InitiateCheckout:', tikTokError);
+      }
+
       // Create checkout session via API
       const response = await fetch('/api/stripe/create-checkout-session', {
         method: 'POST',

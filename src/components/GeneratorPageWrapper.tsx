@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import DashboardLayout from '@/components/DashboardLayout'
 import ChatGenerator from '@/components/ChatGenerator'
 import type { User } from '@supabase/supabase-js'
@@ -16,6 +16,28 @@ export default function GeneratorPageWrapper({ user, profile }: GeneratorPageWra
   const [showUpgrade, setShowUpgrade] = useState(false)
   const [isUpgrading, setIsUpgrading] = useState<string | null>(null)
 
+  // 🚀 Track TikTok ViewContent on page load
+  useEffect(() => {
+    const trackViewContent = async () => {
+      try {
+        await fetch('/api/tiktok-event', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            event: 'ViewContent',
+            contentId: 'generator',
+            contentName: 'AI Generator Dashboard',
+          }),
+        });
+        console.log('✅ TikTok ViewContent event tracked');
+      } catch (error) {
+        console.error('❌ Failed to track TikTok ViewContent:', error);
+      }
+    };
+    
+    trackViewContent();
+  }, []); // Only run once on mount
+
   const handleLockedFeature = () => {
     setShowUpgrade(true)
   }
@@ -26,6 +48,22 @@ export default function GeneratorPageWrapper({ user, profile }: GeneratorPageWra
   const handleSubscribe = async (plan: 'starter' | 'pro' | 'business') => {
     setIsUpgrading(plan)
     try {
+      // 🚀 Track TikTok InitiateCheckout event
+      try {
+        await fetch('/api/tiktok-event', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            event: 'InitiateCheckout',
+            contentId: plan,
+            contentName: `${plan.charAt(0).toUpperCase() + plan.slice(1)} Plan`,
+          }),
+        });
+        console.log(`✅ TikTok InitiateCheckout event tracked for ${plan} plan`);
+      } catch (tikTokError) {
+        console.error('❌ Failed to track TikTok InitiateCheckout:', tikTokError);
+      }
+
       // Create checkout session via API
       const response = await fetch('/api/stripe/create-checkout-session', {
         method: 'POST',

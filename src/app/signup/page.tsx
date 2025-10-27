@@ -71,6 +71,26 @@ export default function SignUpPage() {
           console.log('Meta Pixel: CompleteRegistration event fired for email signup');
         }
       }
+
+      // 🚀 Track TikTok CompleteRegistration event (server-side)
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          await fetch('/api/tiktok-event', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              event: 'CompleteRegistration',
+              email: user.email,
+              userId: user.id,
+            }),
+          });
+          console.log('✅ TikTok CompleteRegistration event tracked');
+        }
+      } catch (tikTokError) {
+        console.error('❌ Failed to track TikTok event:', tikTokError);
+        // Don't block signup flow if TikTok tracking fails
+      }
       
       setLoadingMessage('Setting up your dashboard...')
       setIsRedirecting(true)
