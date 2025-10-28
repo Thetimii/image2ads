@@ -1,9 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import type { User } from '@supabase/supabase-js'
 import type { Profile } from '@/lib/validations'
-import { type StripePlan } from '@/lib/stripe-plans'
+import { type StripePlan, STRIPE_PLANS } from '@/lib/stripe-plans'
 import DashboardLayout from '@/components/DashboardLayout'
 import PricingPlans from '@/components/PricingPlans'
 
@@ -14,6 +14,48 @@ interface BillingClientProps {
 
 export default function BillingClient({ user, profile }: BillingClientProps) {
   const [isLoading, setIsLoading] = useState<string | null>(null)
+
+  // Track successful purchase when user returns from Stripe
+  useEffect(() => {
+    const searchParams = new URLSearchParams(window.location.search)
+    const isSuccess = searchParams.get('success')
+    
+    if (isSuccess === 'true') {
+      // Determine which plan was purchased based on profile
+      const planName = profile.subscription_id?.toLowerCase() || ''
+      let planValue = 0
+      let planDisplayName = 'Subscription'
+      
+      if (planName.includes('starter')) {
+        planValue = STRIPE_PLANS.starter.price
+        planDisplayName = 'Starter Plan'
+      } else if (planName.includes('pro')) {
+        planValue = STRIPE_PLANS.pro.price
+        planDisplayName = 'Pro Plan'
+      } else if (planName.includes('business')) {
+        planValue = STRIPE_PLANS.business.price
+        planDisplayName = 'Business Plan'
+      }
+      
+      // Fire Meta Pixel Purchase event
+      if (typeof window !== 'undefined' && (window as any).fbq) {
+        const cookieConsent = localStorage.getItem('cookieConsent')
+        if (cookieConsent === 'accepted' && planValue > 0) {
+          (window as any).fbq('track', 'Purchase', {
+            value: planValue,
+            currency: 'USD',
+            content_name: planDisplayName,
+            content_type: 'product',
+            content_ids: [planName || 'subscription'],
+          })
+          console.log(`🔥 Meta Pixel: Purchase event fired for ${planDisplayName} ($${planValue})`)
+        }
+      }
+      
+      // Clean up URL (remove success parameter)
+      window.history.replaceState({}, '', '/billing')
+    }
+  }, [profile.subscription_id])
 
   // Function to determine plan display name based on subscription_id (which now contains product ID)
   const getPlanDisplayName = () => {
