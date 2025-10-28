@@ -1,6 +1,7 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useSearchParams } from 'next/navigation'
 import type { User } from '@supabase/supabase-js'
 import type { Profile } from '@/lib/validations'
 import { type StripePlan } from '@/lib/stripe-plans'
@@ -14,6 +15,48 @@ interface BillingClientProps {
 
 export default function BillingClient({ user, profile }: BillingClientProps) {
   const [isLoading, setIsLoading] = useState<string | null>(null)
+  const searchParams = useSearchParams()
+
+  // Track Meta Pixel Purchase event when returning from successful checkout
+  useEffect(() => {
+    const success = searchParams.get('success')
+    
+    if (success === 'true') {
+      // Fire Meta Pixel Purchase event
+      if (typeof window !== 'undefined' && (window as any).fbq) {
+        const cookieConsent = localStorage.getItem('cookieConsent')
+        if (cookieConsent === 'accepted') {
+          const fbq = (window as any).fbq
+          
+          // Determine plan details from profile
+          const planName = getPlanDisplayName()
+          const planId = profile.subscription_id?.toLowerCase() || 'unknown'
+          
+          // Get plan value
+          let value = 0
+          if (planId.includes('starter')) value = 9.99
+          else if (planId.includes('pro')) value = 29.99
+          else if (planId.includes('business')) value = 99.99
+          
+          fbq('track', 'Purchase', {
+            value: value,
+            currency: 'USD',
+            content_type: 'product',
+            content_ids: [planId],
+            content_name: planName,
+            num_items: 1
+          })
+          
+          console.log(`🔥 Meta Pixel Purchase event tracked: ${planName} ($${value})`)
+        }
+      }
+      
+      // Clean up URL by removing success parameter
+      const url = new URL(window.location.href)
+      url.searchParams.delete('success')
+      window.history.replaceState({}, '', url.pathname)
+    }
+  }, [searchParams, profile.subscription_id])
 
   // Function to determine plan display name based on subscription_id (which now contains product ID)
   const getPlanDisplayName = () => {
@@ -62,7 +105,31 @@ export default function BillingClient({ user, profile }: BillingClientProps) {
   const handleSubscribe = async (plan: StripePlan) => {
     setIsLoading(plan)
     try {
-      // 🚀 Track TikTok InitiateCheckout event
+      // � Track Meta Pixel InitiateCheckout event
+      if (typeof window !== 'undefined' && (window as any).fbq) {
+        const cookieConsent = localStorage.getItem('cookieConsent')
+        if (cookieConsent === 'accepted') {
+          const fbq = (window as any).fbq
+          
+          let value = 0
+          if (plan === 'starter') value = 9.99
+          else if (plan === 'pro') value = 29.99
+          else if (plan === 'business') value = 99.99
+          
+          fbq('track', 'InitiateCheckout', {
+            value: value,
+            currency: 'USD',
+            content_type: 'product',
+            content_ids: [plan],
+            content_name: `${plan.charAt(0).toUpperCase() + plan.slice(1)} Plan`,
+            num_items: 1
+          })
+          
+          console.log(`🔥 Meta Pixel InitiateCheckout tracked: ${plan} ($${value})`)
+        }
+      }
+
+      // �🚀 Track TikTok InitiateCheckout event
       try {
         await fetch('/api/tiktok-event', {
           method: 'POST',
