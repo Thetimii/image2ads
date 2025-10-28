@@ -57,32 +57,43 @@ export default function BillingClient({ user, profile }: BillingClientProps) {
     const success = searchParams.get('success')
     
     if (success === 'true') {
-      // Fire Meta Pixel Purchase event
-      if (typeof window !== 'undefined' && (window as any).fbq) {
-        const cookieConsent = localStorage.getItem('cookieConsent')
-        if (cookieConsent === 'accepted') {
-          const fbq = (window as any).fbq
-          
-          // Determine plan details from profile
-          const planName = getPlanDisplayName()
-          const planId = profile.subscription_id?.toLowerCase() || 'unknown'
-          
-          // Get plan value
-          let value = 0
-          if (planId.includes('starter')) value = 9.99
-          else if (planId.includes('pro')) value = 19.99
-          else if (planId.includes('business')) value = 49.99
-          
-          fbq('track', 'Purchase', {
-            value: value,
-            currency: 'USD',
-            content_type: 'product',
-            content_ids: [planId],
-            content_name: planName,
-            num_items: 1
-          })
-          
-          console.log(`🔥 Meta Pixel Purchase event tracked: ${planName} ($${value})`)
+      // Check if we already tracked this purchase (prevent duplicates)
+      const purchaseTracked = sessionStorage.getItem('purchase_tracked')
+      
+      if (!purchaseTracked) {
+        // Fire Meta Pixel Purchase event
+        if (typeof window !== 'undefined' && (window as any).fbq) {
+          const cookieConsent = localStorage.getItem('cookieConsent')
+          if (cookieConsent === 'accepted') {
+            const fbq = (window as any).fbq
+            
+            // Determine plan details from profile
+            const planName = getPlanDisplayName()
+            const planId = profile.subscription_id?.toLowerCase() || 'unknown'
+            
+            // Get plan value
+            let value = 0
+            if (planId.includes('starter')) value = 9.99
+            else if (planId.includes('pro')) value = 19.99
+            else if (planId.includes('business')) value = 49.99
+            
+            // Only track if we have a valid value
+            if (value > 0) {
+              fbq('track', 'Purchase', {
+                value: value,
+                currency: 'USD',
+                content_type: 'product',
+                content_ids: [planId],
+                content_name: planName,
+                num_items: 1
+              })
+              
+              console.log(`🔥 Meta Pixel Purchase event tracked: ${planName} ($${value})`)
+              
+              // Mark as tracked to prevent duplicates
+              sessionStorage.setItem('purchase_tracked', 'true')
+            }
+          }
         }
       }
       
