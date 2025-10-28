@@ -17,6 +17,41 @@ export default function BillingClient({ user, profile }: BillingClientProps) {
   const [isLoading, setIsLoading] = useState<string | null>(null)
   const searchParams = useSearchParams()
 
+  // Function to determine plan display name based on subscription_id (which now contains product ID)
+  const getPlanDisplayName = () => {
+    // Debug: Log the current subscription info
+    console.log('Debug - Profile subscription info:', {
+      subscription_status: profile.subscription_status,
+      subscription_id: profile.subscription_id,
+      stripe_customer_id: profile.stripe_customer_id
+    })
+
+    if (profile.subscription_status === 'active' || profile.subscription_status === 'trialing') {
+      // Check if subscription_id contains a product ID
+      if (profile.subscription_id) {
+        const subId = profile.subscription_id.toLowerCase()
+        console.log('Debug - Checking subscription_id:', subId)
+        
+        switch (subId) {
+          case 'starter':
+          case 'prod_t2wztl6zmyzqda': // Stripe product ID for starter
+            return 'Starter Plan'
+          case 'pro':
+          case 'prod_t2x00jxheiyfr4': // Stripe product ID for pro  
+            return 'Pro Plan'
+          case 'business':
+          case 'prod_t2x1ll9q9hicqr': // Stripe product ID for business
+            return 'Business Plan'
+          default:
+            console.log('Debug - No match found for subscription_id:', subId)
+            return `Subscribed Plan (${profile.subscription_id})` // Show the actual value for debugging
+        }
+      }
+      return 'Subscribed Plan'
+    }
+    return 'Free Plan'
+  }
+
   // Track Meta Pixel Purchase event when returning from successful checkout
   useEffect(() => {
     const success = searchParams.get('success')
@@ -52,46 +87,13 @@ export default function BillingClient({ user, profile }: BillingClientProps) {
       }
       
       // Clean up URL by removing success parameter
-      const url = new URL(window.location.href)
-      url.searchParams.delete('success')
-      window.history.replaceState({}, '', url.pathname)
+      if (typeof window !== 'undefined') {
+        const url = new URL(window.location.href)
+        url.searchParams.delete('success')
+        window.history.replaceState({}, '', url.pathname)
+      }
     }
   }, [searchParams, profile.subscription_id])
-
-  // Function to determine plan display name based on subscription_id (which now contains product ID)
-  const getPlanDisplayName = () => {
-    // Debug: Log the current subscription info
-    console.log('Debug - Profile subscription info:', {
-      subscription_status: profile.subscription_status,
-      subscription_id: profile.subscription_id,
-      stripe_customer_id: profile.stripe_customer_id
-    })
-
-    if (profile.subscription_status === 'active' || profile.subscription_status === 'trialing') {
-      // Check if subscription_id contains a product ID
-      if (profile.subscription_id) {
-        const subId = profile.subscription_id.toLowerCase()
-        console.log('Debug - Checking subscription_id:', subId)
-        
-        switch (subId) {
-          case 'starter':
-          case 'prod_t2wztl6zmyzqda': // Stripe product ID for starter
-            return 'Starter Plan'
-          case 'pro':
-          case 'prod_t2x00jxheiyfr4': // Stripe product ID for pro  
-            return 'Pro Plan'
-          case 'business':
-          case 'prod_t2x1ll9q9hicqr': // Stripe product ID for business
-            return 'Business Plan'
-          default:
-            console.log('Debug - No match found for subscription_id:', subId)
-            return `Subscribed Plan (${profile.subscription_id})` // Show the actual value for debugging
-        }
-      }
-      return 'Subscribed Plan'
-    }
-    return 'Free Plan'
-  }
 
   const getSubscriptionStatus = () => {
     if (profile.subscription_status === 'active' || profile.subscription_status === 'trialing') {

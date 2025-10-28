@@ -1,3 +1,4 @@
+import { Suspense } from 'react'
 import { createClient } from '@/lib/supabase/server'
 import { getUserProfile } from '@/lib/database'
 import { redirect } from 'next/navigation'
@@ -19,9 +20,11 @@ export default async function BillingPage() {
   }
 
   return (
-    <BillingClient 
-      user={user} 
-      profile={profile} 
-    />
+    <Suspense fallback={<div>Loading...</div>}>
+      <BillingClient 
+        user={user} 
+        profile={profile} 
+      />
+    </Suspense>
   )
 }
