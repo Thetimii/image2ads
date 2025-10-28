@@ -222,8 +222,8 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
           
           let value = 0
           if (plan === 'starter') value = 9.99
-          else if (plan === 'pro') value = 29.99
-          else if (plan === 'business') value = 99.99
+          else if (plan === 'pro') value = 19.99
+          else if (plan === 'business') value = 49.99
           
           fbq('track', 'InitiateCheckout', {
             value: value,

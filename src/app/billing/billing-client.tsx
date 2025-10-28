@@ -35,8 +35,8 @@ export default function BillingClient({ user, profile }: BillingClientProps) {
           // Get plan value
           let value = 0
           if (planId.includes('starter')) value = 9.99
-          else if (planId.includes('pro')) value = 29.99
-          else if (planId.includes('business')) value = 99.99
+          else if (planId.includes('pro')) value = 19.99
+          else if (planId.includes('business')) value = 49.99
           
           fbq('track', 'Purchase', {
             value: value,
@@ -105,7 +105,7 @@ export default function BillingClient({ user, profile }: BillingClientProps) {
   const handleSubscribe = async (plan: StripePlan) => {
     setIsLoading(plan)
     try {
-      // � Track Meta Pixel InitiateCheckout event
+      // 🔥 Track Meta Pixel InitiateCheckout event
       if (typeof window !== 'undefined' && (window as any).fbq) {
         const cookieConsent = localStorage.getItem('cookieConsent')
         if (cookieConsent === 'accepted') {
@@ -113,8 +113,8 @@ export default function BillingClient({ user, profile }: BillingClientProps) {
           
           let value = 0
           if (plan === 'starter') value = 9.99
-          else if (plan === 'pro') value = 29.99
-          else if (plan === 'business') value = 99.99
+          else if (plan === 'pro') value = 19.99
+          else if (plan === 'business') value = 49.99
           
           fbq('track', 'InitiateCheckout', {
             value: value,
