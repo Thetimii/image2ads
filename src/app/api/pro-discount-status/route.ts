@@ -99,6 +99,9 @@ export async function POST(req: NextRequest) {
     const expiresAt = new Date()
     expiresAt.setMinutes(expiresAt.getMinutes() + 15)
 
+    console.log('💾 Activating Pro discount for user:', user.id)
+    console.log('⏰ Expiry time will be:', expiresAt.toISOString())
+
     const { error: updateError } = await supabase
       .from('profiles')
       .update({ 
@@ -107,12 +110,14 @@ export async function POST(req: NextRequest) {
       .eq('id', user.id)
 
     if (updateError) {
-      console.error('Error activating discount:', updateError)
+      console.error('❌ Error activating discount:', updateError)
       return NextResponse.json(
         { error: 'Failed to activate discount' },
         { status: 500 }
       )
     }
+
+    console.log('✅ Pro discount activated successfully')
 
     return NextResponse.json({
       success: true,

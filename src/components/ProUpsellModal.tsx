@@ -19,16 +19,21 @@ export default function ProUpsellModal({ onCloseAction, onUpgradeAction, isUpgra
   useEffect(() => {
     const startTimer = async () => {
       try {
+        console.log('🚀 Starting Pro discount timer...')
         const response = await fetch('/api/pro-discount-status', {
           method: 'POST',
         })
         
         if (response.ok) {
-          console.log('✅ Pro discount timer started')
+          const data = await response.json()
+          console.log('✅ Pro discount timer started:', data)
+          setIsStarting(false)
+        } else {
+          console.error('❌ Failed to start timer:', response.status, response.statusText)
           setIsStarting(false)
         }
       } catch (error) {
-        console.error('Failed to start discount timer:', error)
+        console.error('❌ Failed to start discount timer:', error)
         setIsStarting(false)
       }
     }

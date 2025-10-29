@@ -1,6 +1,11 @@
 -- Add Pro Plan discount popup tracking columns to profiles table
 -- These columns track the 15-minute limited-time discount offer
 
+-- Drop old columns if they exist (we're switching to a simpler approach)
+ALTER TABLE profiles DROP COLUMN IF EXISTS pro_discount_popup_shown_at;
+ALTER TABLE profiles DROP COLUMN IF EXISTS pro_discount_popup_expired;
+DROP INDEX IF EXISTS idx_profiles_pro_discount_popup;
+
 -- Store the expiry timestamp (current_time + 15 minutes when discount is activated)
 ALTER TABLE profiles 
 ADD COLUMN IF NOT EXISTS pro_discount_expires_at timestamptz DEFAULT NULL;
@@ -8,6 +13,9 @@ ADD COLUMN IF NOT EXISTS pro_discount_expires_at timestamptz DEFAULT NULL;
 -- Add index for efficient queries on expiry
 CREATE INDEX IF NOT EXISTS idx_profiles_pro_discount_expires 
 ON profiles(pro_discount_expires_at);
+
+-- Drop old function if it exists (return type changed)
+DROP FUNCTION IF EXISTS check_pro_discount_validity(uuid);
 
 -- Function to check if Pro discount is still valid
 CREATE OR REPLACE FUNCTION check_pro_discount_validity(user_id uuid)
