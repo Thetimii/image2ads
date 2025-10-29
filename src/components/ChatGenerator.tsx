@@ -149,7 +149,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
   const [showProUpsellModal, setShowProUpsellModal] = useState(false)
   const [isUpgrading, setIsUpgrading] = useState<string | null>(null)
   const hasShownLastCreditModal = useRef(false) // Prevent multiple modals in same session
-  const hasShownProUpsell = useRef(false) // Prevent showing Pro upsell multiple times
+  const hasCheckedProUpsell = useRef(false) // Track if we've checked for pro upsell eligibility
 
   // Onboarding integration
   const {
@@ -929,9 +929,9 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
                 router.refresh()
                 
                 // Check if user has 1 credit left (trigger Pro upsell modal)
-                if (updatedProfile.credits === 1 && profile.tutorial_completed && !hasShownProUpsell.current) {
+                if (updatedProfile.credits === 1 && profile.tutorial_completed && !hasCheckedProUpsell.current) {
                   console.log(`[ChatGenerator] 🎯 User has 1 credit left! Checking Pro upsell eligibility...`)
-                  hasShownProUpsell.current = true
+                  hasCheckedProUpsell.current = true
                   
                   // Check if they're eligible for the discount (hasn't expired)
                   setTimeout(async () => {
@@ -1119,7 +1119,24 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
           <p className="text-xs text-gray-500 mt-0.5">{meta.subtitle}</p>
         </div>
         <button
-          onClick={() => setShowCreditPopup(true)}
+          onClick={async () => {
+            // Check if there's an active 15-minute discount window
+            try {
+              const response = await fetch('/api/pro-discount-status')
+              const data = await response.json()
+              
+              // If discount is valid and within 15 minutes, show discount modal
+              if (data.is_valid && !data.popup_never_shown) {
+                setShowProUpsellModal(true)
+              } else {
+                // Otherwise show normal credit popup
+                setShowCreditPopup(true)
+              }
+            } catch (err) {
+              // On error, show normal popup
+              setShowCreditPopup(true)
+            }
+          }}
           className="text-xs bg-gradient-to-r from-purple-500 to-pink-500 text-white px-3 py-1.5 rounded-full font-medium shadow-sm hover:shadow-lg hover:scale-105 transition-all cursor-pointer"
           title="Click to get more credits"
         >

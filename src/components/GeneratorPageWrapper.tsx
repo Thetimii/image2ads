@@ -6,6 +6,7 @@ import ChatGenerator from '@/components/ChatGenerator'
 import type { User } from '@supabase/supabase-js'
 import type { Profile } from '@/lib/validations'
 import PricingPlans from '@/components/PricingPlans'
+import ProUpsellModal from '@/components/ProUpsellModal'
 
 interface GeneratorPageWrapperProps {
   user: User
@@ -14,6 +15,7 @@ interface GeneratorPageWrapperProps {
 
 export default function GeneratorPageWrapper({ user, profile }: GeneratorPageWrapperProps) {
   const [showUpgrade, setShowUpgrade] = useState(false)
+  const [showProUpsellModal, setShowProUpsellModal] = useState(false)
   const [isUpgrading, setIsUpgrading] = useState<string | null>(null)
 
   // 🚀 Track TikTok ViewContent on page load
@@ -38,8 +40,23 @@ export default function GeneratorPageWrapper({ user, profile }: GeneratorPageWra
     trackViewContent();
   }, []); // Only run once on mount
 
-  const handleLockedFeature = () => {
-    setShowUpgrade(true)
+  const handleLockedFeature = async () => {
+    // Check if there's an active 15-minute discount window
+    try {
+      const response = await fetch('/api/pro-discount-status')
+      const data = await response.json()
+      
+      // If discount is valid and within 15 minutes, show discount modal
+      if (data.is_valid && !data.popup_never_shown) {
+        setShowProUpsellModal(true)
+      } else {
+        // Otherwise show normal upgrade popup
+        setShowUpgrade(true)
+      }
+    } catch (err) {
+      // On error, show normal popup
+      setShowUpgrade(true)
+    }
   }
 
   // Lock navigation if tutorial not completed
@@ -101,7 +118,15 @@ export default function GeneratorPageWrapper({ user, profile }: GeneratorPageWra
         onLockedFeature={handleLockedFeature}
       />
       
-      {/* Upgrade Modal */}
+      {/* Pro Upsell Modal with discount */}
+      {showProUpsellModal && (
+        <ProUpsellModal
+          onCloseAction={() => setShowProUpsellModal(false)}
+          isUpgrading={isUpgrading}
+        />
+      )}
+      
+      {/* Normal Upgrade Modal */}
       {showUpgrade && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
           <div className="bg-white rounded-2xl shadow-2xl max-w-5xl w-full max-h-[90vh] overflow-y-auto">
