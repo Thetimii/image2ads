@@ -122,6 +122,7 @@ export const createCheckoutSessionSchema = z.object({
   successUrl: z.string().url(),
   cancelUrl: z.string().url(),
   couponId: z.string().optional(),
+  applyProDiscount: z.boolean().optional(), // For the 20% Pro discount offer
 });
 
 // Usage event schema

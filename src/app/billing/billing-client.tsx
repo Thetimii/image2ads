@@ -15,6 +15,59 @@ interface BillingClientProps {
 export default function BillingClient({ user, profile }: BillingClientProps) {
   const [isLoading, setIsLoading] = useState<string | null>(null)
 
+  // Check for promo parameter and redirect to Pro checkout with discount
+  useEffect(() => {
+    const searchParams = new URLSearchParams(window.location.search)
+    const promo = searchParams.get('promo')
+    
+    if (promo === 'pro20limited') {
+      // Verify discount is still valid before redirecting
+      const checkAndRedirect = async () => {
+        try {
+          const response = await fetch('/api/pro-discount-status')
+          const data = await response.json()
+          
+          if (data.is_valid) {
+            console.log('✨ Pro 20% discount is valid, redirecting to checkout...')
+            setIsLoading('pro')
+            
+            // Create checkout with discount
+            const checkoutResponse = await fetch('/api/stripe/create-checkout-session', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                plan: 'pro',
+                applyProDiscount: true, // Special flag for 20% discount
+                successUrl: `${window.location.origin}/billing?success=true`,
+                cancelUrl: `${window.location.origin}/billing`,
+              }),
+            })
+            
+            if (checkoutResponse.ok) {
+              const { url } = await checkoutResponse.json()
+              window.location.href = url
+            } else {
+              console.error('Failed to create checkout session')
+              setIsLoading(null)
+              // Clear promo parameter if checkout fails
+              window.history.replaceState({}, '', '/billing')
+            }
+          } else {
+            console.log('⏰ Pro discount expired or not available')
+            // Clear promo parameter if expired
+            window.history.replaceState({}, '', '/billing')
+          }
+        } catch (error) {
+          console.error('Error checking Pro discount:', error)
+          setIsLoading(null)
+          window.history.replaceState({}, '', '/billing')
+        }
+      }
+      
+      checkAndRedirect()
+    }
+  }, [])
+
   // Track successful purchase when user returns from Stripe
   useEffect(() => {
     const searchParams = new URLSearchParams(window.location.search)

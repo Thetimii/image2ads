@@ -3,17 +3,23 @@
 import { STRIPE_PLANS } from '@/lib/stripe-plans'
 
 interface PricingPlansProps {
-  onSubscribeAction: (plan: 'starter' | 'pro' | 'business') => void
+  // onSubscribeAction may optionally receive a couponId when available
+  onSubscribeAction: (plan: 'starter' | 'pro' | 'business', couponId?: string) => void
   isLoading?: string | null
   variant?: 'popup' | 'page'
   showAllPlans?: boolean
+  // Optional discount used to render discounted prices client-side for preview
+  discountPercentage?: number
+  couponId?: string
 }
 
 export default function PricingPlans({ 
   onSubscribeAction, 
   isLoading, 
   variant = 'popup',
-  showAllPlans = true 
+  showAllPlans = true,
+  discountPercentage,
+  couponId,
 }: PricingPlansProps) {
   const plans = showAllPlans 
     ? ['starter', 'pro', 'business'] as const
@@ -56,8 +62,23 @@ export default function PricingPlans({
               <div className={`text-center mb-4 ${isPro ? 'pt-2' : ''}`}>
                 <h3 className="text-lg font-bold text-gray-900">{plan.name}</h3>
                 <div className="mt-2">
-                  <span className="text-3xl font-bold text-gray-900">${plan.price}</span>
-                  <span className="text-gray-500 text-sm">/month</span>
+                  {isPro && discountPercentage && discountPercentage > 0 ? (
+                    <div className="flex flex-col items-center">
+                      <div className="flex items-baseline gap-2">
+                        <span className="text-2xl font-bold text-gray-400 line-through">${plan.price}</span>
+                        <span className="text-3xl font-bold text-gray-900">${(plan.price * (1 - discountPercentage / 100)).toFixed(2)}</span>
+                      </div>
+                      <div className="flex items-center gap-2 mt-1">
+                        <span className="text-gray-500 text-sm">/month</span>
+                        <span className="bg-pink-500 text-white text-xs px-2 py-0.5 rounded-full font-semibold">-{discountPercentage}%</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <span className="text-3xl font-bold text-gray-900">${plan.price}</span>
+                      <span className="text-gray-500 text-sm">/month</span>
+                    </>
+                  )}
                 </div>
                 <p className="text-sm text-gray-600 mt-1">{equivalentText}</p>
               </div>
@@ -117,7 +138,7 @@ export default function PricingPlans({
               </ul>
 
               <button
-                onClick={() => onSubscribeAction(key)}
+                onClick={() => onSubscribeAction(key, couponId)}
                 disabled={!!isLoading}
                 className={`block w-full text-center py-3 rounded-lg font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed ${
                   isPro

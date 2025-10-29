@@ -41,15 +41,41 @@ export async function POST(request: NextRequest) {
       )
     }
 
-  const { plan, successUrl, cancelUrl, couponId } = validation.data
+  const { plan, successUrl, cancelUrl, couponId, applyProDiscount } = validation.data
 
     console.log('Creating checkout session with:', {
       userId: user.id,
       plan,
       hasStripeCustomerId: !!stripeCustomerId,
       stripeCustomerId: stripeCustomerId,
-      userEmail: user.email
+      userEmail: user.email,
+      applyProDiscount,
     })
+
+    // If applyProDiscount is true and plan is Pro, use the special 20% discount coupon
+    let finalCouponId = couponId
+    if (applyProDiscount && plan === 'pro') {
+      // Verify the discount is still valid
+      const { data: discountProfile } = await supabase
+        .from('profiles')
+        .select('pro_discount_popup_shown_at, pro_discount_popup_expired')
+        .eq('id', user.id)
+        .single()
+
+      if (discountProfile && discountProfile.pro_discount_popup_shown_at && !discountProfile.pro_discount_popup_expired) {
+        const shownAt = new Date(discountProfile.pro_discount_popup_shown_at)
+        const now = new Date()
+        const diffMinutes = (now.getTime() - shownAt.getTime()) / 60000
+
+        if (diffMinutes < 15) {
+          // Use environment variable for the Pro 20% discount coupon
+          finalCouponId = process.env.STRIPE_PRO_DISCOUNT_COUPON_ID || 'VbLhruZu'
+          console.log('✨ Applying Pro 20% discount coupon:', finalCouponId)
+        } else {
+          console.log('⏰ Pro discount expired (>15 minutes)')
+        }
+      }
+    }
 
     // Create Stripe checkout session
     const session = await createCheckoutSession({
@@ -59,7 +85,7 @@ export async function POST(request: NextRequest) {
       cancelUrl,
       customerEmail: user.email || undefined, // Pass user's email to prefill if no existing customer
       stripeCustomerId: stripeCustomerId || undefined, // Use existing customer ID if available
-      couponId: couponId || undefined,
+      couponId: finalCouponId || undefined,
     })
 
     return NextResponse.json({ 

@@ -13,8 +13,7 @@ import FirstTimeOnboarding from './FirstTimeOnboarding'
 import UpgradePrompt from './UpgradePrompt'
 import { useOnboarding } from '@/hooks/useOnboarding'
 import dynamic from 'next/dynamic'
-import DiscountWheel from './DiscountWheel'
-import DiscountPricingPlans from './DiscountPricingPlans'
+import ProUpsellModal from './ProUpsellModal'
 
 // Generate UUID that works on both server and client
 const generateId = () => {
@@ -147,11 +146,10 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
   const activeTimeouts = useRef<Set<NodeJS.Timeout>>(new Set())
   const activePolling = useRef<Set<string>>(new Set()) // Track active polling jobs
   const [showCreditPopup, setShowCreditPopup] = useState(false)
+  const [showProUpsellModal, setShowProUpsellModal] = useState(false)
   const [isUpgrading, setIsUpgrading] = useState<string | null>(null)
-  const [showWheel, setShowWheel] = useState(false)
-  const [wonDiscount, setWonDiscount] = useState<{percentage: number, couponId: string} | null>(null)
-  const WHEEL_STORAGE_KEY = `discountWheelShown:${user.id}`
   const hasShownLastCreditModal = useRef(false) // Prevent multiple modals in same session
+  const hasShownProUpsell = useRef(false) // Prevent showing Pro upsell multiple times
 
   // Onboarding integration
   const {
@@ -930,35 +928,38 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
                 // Refresh the router to update credits display in sidebar and other components
                 router.refresh()
                 
-                // Check if user just used their last credit and show wheel or upgrade modal
-                if (updatedProfile.credits === 0 && !hasShownLastCreditModal.current) {
-                  console.log(`[ChatGenerator] 🎉 Last free credit used! Checking wheel status...`)
-                  console.log(`[ChatGenerator] 🔍 Storage key: ${WHEEL_STORAGE_KEY}`)
-                  hasShownLastCreditModal.current = true
-                  // Wait 3 seconds (after toast appears) then show the discount wheel (once per user)
-                  const hasSeenWheel = typeof window !== 'undefined' ? localStorage.getItem(WHEEL_STORAGE_KEY) : null
-                  console.log(`[ChatGenerator] 🎡 Has seen wheel before: ${hasSeenWheel}`)
-                  console.log(`[ChatGenerator] 🎡 Will show wheel: ${!hasSeenWheel}`)
-                  if (!hasSeenWheel) {
-                    console.log(`[ChatGenerator] 🎉 Setting timeout to show discount wheel in 3 seconds...`)
-                    setTimeout(() => {
-                      console.log(`[ChatGenerator] 🎡 Timeout fired! Calling setShowWheel(true)...`)
-                      setShowWheel(true)
-                      console.log(`[ChatGenerator] 🎡 setShowWheel called, setting localStorage...`)
-                      try { 
-                        localStorage.setItem(WHEEL_STORAGE_KEY, '1')
-                        console.log(`[ChatGenerator] ✅ localStorage flag set`)
-                      } catch (e) { 
-                        console.error(`[ChatGenerator] ❌ localStorage error:`, e)
+                // Check if user has 1 credit left (trigger Pro upsell modal)
+                if (updatedProfile.credits === 1 && profile.tutorial_completed && !hasShownProUpsell.current) {
+                  console.log(`[ChatGenerator] 🎯 User has 1 credit left! Checking Pro upsell eligibility...`)
+                  hasShownProUpsell.current = true
+                  
+                  // Check if they're eligible for the discount (hasn't expired)
+                  setTimeout(async () => {
+                    try {
+                      const response = await fetch('/api/pro-discount-status')
+                      const data = await response.json()
+                      
+                      if (data.should_show_popup && data.popup_never_shown) {
+                        console.log(`[ChatGenerator] ✨ Showing Pro upsell modal with 20% discount`)
+                        setShowProUpsellModal(true)
+                      } else {
+                        console.log(`[ChatGenerator] ⏰ Pro discount not available or already shown`)
                       }
-                    }, 3000)
-                  } else {
-                    console.log(`[ChatGenerator] ⚠️ User already saw wheel (flag=${hasSeenWheel}), showing upgrade popup instead`)
-                    setTimeout(() => {
-                      console.log(`[ChatGenerator] 💳 Showing upgrade popup`)
-                      setShowCreditPopup(true)
-                    }, 3000)
-                  }
+                    } catch (err) {
+                      console.error(`[ChatGenerator] Failed to check Pro discount status:`, err)
+                    }
+                  }, 2000)
+                }
+                
+                // Check if user just used their last credit and show upgrade modal
+                if (updatedProfile.credits === 0 && !hasShownLastCreditModal.current) {
+                  console.log(`[ChatGenerator] 🎉 Last free credit used! Showing upgrade popup...`)
+                  hasShownLastCreditModal.current = true
+                  // Wait 3 seconds (after toast appears) then show the upgrade modal
+                  setTimeout(() => {
+                    console.log(`[ChatGenerator] 💳 Showing upgrade popup`)
+                    setShowCreditPopup(true)
+                  }, 3000)
                 }
               }
             } catch (err) {
@@ -1043,9 +1044,6 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
     }
   }
 
-  // Debug logging for render
-  console.log(`[ChatGenerator] Render - showWheel: ${showWheel}, showCreditPopup: ${showCreditPopup}, wonDiscount:`, wonDiscount)
-
   return (
     <div className="flex flex-col h-full">
       {/* Tutorial Dark Overlay - covers everything except generate button */}
@@ -1053,99 +1051,19 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
         <div className="fixed inset-0 bg-black/50 z-[9997] pointer-events-none" />
       )}
       
-      {/* Discount Wheel */}
-      {showWheel && (
-        <DiscountWheel
-          onCloseAction={() => {
-            setShowWheel(false)
-            // if user closes wheel without claiming, show upgrade popup
-            setTimeout(() => setShowCreditPopup(true), 500)
-          }}
-          onClaimAction={(discount: number, couponId: string) => {
-            // Store the discount and show pricing modal
-            setWonDiscount({ percentage: discount, couponId })
-            setShowWheel(false)
-            setShowCreditPopup(true)
+      {/* Pro Upsell Modal (20% discount for 15 minutes) */}
+      {showProUpsellModal && (
+        <ProUpsellModal
+          onCloseAction={() => setShowProUpsellModal(false)}
+          onUpgradeAction={async () => {
+            // Redirect to billing page with promo parameter
+            window.location.href = '/billing?promo=pro20limited'
           }}
         />
       )}
       
-      {/* Credit Popup - with or without discount */}
-      {showCreditPopup && wonDiscount && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-5xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
-            {/* Header with Discount Badge */}
-            <div className="sticky top-0 bg-gradient-to-r from-purple-600 to-pink-600 px-6 py-4 flex justify-between items-center rounded-t-2xl">
-              <div>
-                <div className="flex items-center gap-3">
-                  <span className="text-3xl">🎉</span>
-                  <div>
-                    <h2 className="text-xl font-bold text-white">Your {wonDiscount.percentage}% Discount is Active!</h2>
-                    <p className="text-sm text-white/90 mt-1">
-                      Choose a plan below — your discount will be applied at checkout
-                    </p>
-                  </div>
-                </div>
-              </div>
-              <button
-                onClick={() => {
-                  setShowCreditPopup(false)
-                  setWonDiscount(null)
-                }}
-                className="text-white hover:text-white/80 text-2xl leading-none"
-              >
-                ×
-              </button>
-            </div>
-
-            {/* Discount Pricing Plans with pre-calculated prices */}
-            <DiscountPricingPlans
-              discountPercentage={wonDiscount.percentage}
-              couponId={wonDiscount.couponId}
-              onSubscribeAction={async (plan, couponId) => {
-                setIsUpgrading(plan)
-                try {
-                  const response = await fetch('/api/stripe/create-checkout-session', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                      plan,
-                      successUrl: `${window.location.origin}/billing?success=true`,
-                      cancelUrl: `${window.location.origin}${window.location.pathname}`,
-                      couponId
-                    }),
-                  })
-
-                  if (response.ok) {
-                    const { url } = await response.json()
-                    window.location.href = url
-                  } else {
-                    const err = await response.json().catch(() => ({}))
-                    console.error('Failed to create checkout session with coupon:', err)
-                    alert('Failed to start checkout. Please try again.')
-                    setIsUpgrading(null)
-                  }
-                } catch (err) {
-                  console.error('Error creating checkout session:', err)
-                  alert('Failed to start checkout. Please try again.')
-                  setIsUpgrading(null)
-                }
-              }}
-              isLoading={isUpgrading}
-            />
-
-            {/* Footer */}
-            <div className="border-t border-gray-200 px-6 py-4 bg-gray-50 rounded-b-2xl">
-              <p className="text-xs text-gray-500 text-center">
-                💳 Secure payment powered by Stripe • {wonDiscount.percentage}% discount applied automatically • Cancel anytime
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Credit Popup - WITHOUT discount (fallback) */}
-      {showCreditPopup && !wonDiscount && (
+      {/* Credit Popup */}
+      {showCreditPopup && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-5xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
             {/* Header */}
