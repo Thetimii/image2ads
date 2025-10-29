@@ -939,7 +939,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
                       const response = await fetch('/api/pro-discount-status')
                       const data = await response.json()
                       
-                      if (data.should_show_popup && data.popup_never_shown) {
+                      if (data.should_show_popup && data.discount_never_activated) {
                         console.log(`[ChatGenerator] ✨ Showing Pro upsell modal with 20% discount`)
                         setShowProUpsellModal(true)
                       } else {
@@ -1126,7 +1126,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
               const data = await response.json()
               
               // If discount is valid and within 15 minutes, show discount modal
-              if (data.is_valid && !data.popup_never_shown) {
+              if (data.is_valid && !data.discount_never_activated) {
                 setShowProUpsellModal(true)
               } else {
                 // Otherwise show normal credit popup

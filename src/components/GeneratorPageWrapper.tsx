@@ -47,7 +47,7 @@ export default function GeneratorPageWrapper({ user, profile }: GeneratorPageWra
       const data = await response.json()
       
       // If discount is valid and within 15 minutes, show discount modal
-      if (data.is_valid && !data.popup_never_shown) {
+      if (data.is_valid && !data.discount_never_activated) {
         setShowProUpsellModal(true)
       } else {
         // Otherwise show normal upgrade popup

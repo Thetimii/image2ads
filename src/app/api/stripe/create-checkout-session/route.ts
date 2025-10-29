@@ -55,24 +55,23 @@ export async function POST(request: NextRequest) {
     // If applyProDiscount is true and plan is Pro, use the special 20% discount coupon
     let finalCouponId = couponId
     if (applyProDiscount && plan === 'pro') {
-      // Verify the discount is still valid
+      // Verify the discount is still valid (check if expiry time is in the future)
       const { data: discountProfile } = await supabase
         .from('profiles')
-        .select('pro_discount_popup_shown_at, pro_discount_popup_expired')
+        .select('pro_discount_expires_at')
         .eq('id', user.id)
         .single()
 
-      if (discountProfile && discountProfile.pro_discount_popup_shown_at && !discountProfile.pro_discount_popup_expired) {
-        const shownAt = new Date(discountProfile.pro_discount_popup_shown_at)
+      if (discountProfile && discountProfile.pro_discount_expires_at) {
+        const expiresAt = new Date(discountProfile.pro_discount_expires_at)
         const now = new Date()
-        const diffMinutes = (now.getTime() - shownAt.getTime()) / 60000
 
-        if (diffMinutes < 15) {
-          // Use environment variable for the Pro 20% discount coupon
+        if (now < expiresAt) {
+          // Discount still valid - use the coupon
           finalCouponId = process.env.STRIPE_PRO_DISCOUNT_COUPON_ID || 'VbLhruZu'
           console.log('✨ Applying Pro 20% discount coupon:', finalCouponId)
         } else {
-          console.log('⏰ Pro discount expired (>15 minutes)')
+          console.log('⏰ Pro discount expired')
         }
       }
     }
