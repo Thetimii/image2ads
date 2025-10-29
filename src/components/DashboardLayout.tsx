@@ -9,6 +9,7 @@ import type { User } from '@supabase/supabase-js'
 import type { Profile } from '@/lib/validations'
 import { STRIPE_PLANS } from '@/lib/stripe-plans'
 import PricingPlans from '@/components/PricingPlans'
+import ProUpsellModal from '@/components/ProUpsellModal'
 
 
 interface DashboardLayoutProps {
@@ -45,6 +46,7 @@ export default function DashboardLayout({ user, profile, children, onDemoOpen, i
   const [isSafari, setIsSafari] = useState(false)
   const [loadingPath, setLoadingPath] = useState<string | null>(null)
   const [showUpgrade, setShowUpgrade] = useState(false)
+  const [showProUpsellModal, setShowProUpsellModal] = useState(false)
   const [isUpgrading, setIsUpgrading] = useState<string | null>(null)
   const router = useRouter()
   const pathname = usePathname()
@@ -99,13 +101,31 @@ export default function DashboardLayout({ user, profile, children, onDemoOpen, i
   // Determine if user has pro (stripe customer ID)
   const hasPro = !!profile.stripe_customer_id
 
-  const handleNavigation = (href: string) => {
+  const handleNavigation = async (href: string) => {
     if (href === pathname) return
 
     // Check locked
     const navItem = navigation.find(n => n.href === href)
     if (navItem?.locked && !hasPro) {
-      setShowUpgrade(true)
+      console.log('🔒 Locked nav clicked, checking discount status...')
+      // Check if there's an active discount
+      try {
+        const response = await fetch('/api/pro-discount-status')
+        const data = await response.json()
+        console.log('📊 Discount status:', data)
+        
+        // Show discount modal if discount is active (is_valid = true)
+        if (data.is_valid) {
+          console.log('✅ Showing discount modal')
+          setShowProUpsellModal(true)
+        } else {
+          console.log('❌ Showing normal upgrade modal')
+          setShowUpgrade(true)
+        }
+      } catch (err) {
+        console.error('❌ Error checking discount:', err)
+        setShowUpgrade(true)
+      }
       return
     }
     
@@ -185,7 +205,22 @@ export default function DashboardLayout({ user, profile, children, onDemoOpen, i
 
           {/* User info */}
           <button
-            onClick={() => setShowUpgrade(true)}
+            onClick={async () => {
+              // Check if there's an active discount
+              try {
+                const response = await fetch('/api/pro-discount-status')
+                const data = await response.json()
+                
+                // Show discount modal if discount is active (is_valid = true)
+                if (data.is_valid) {
+                  setShowProUpsellModal(true)
+                } else {
+                  setShowUpgrade(true)
+                }
+              } catch (err) {
+                setShowUpgrade(true)
+              }
+            }}
             className="w-full px-6 py-4 border-b border-gray-200 flex-shrink-0 hover:bg-purple-50/30 transition-colors cursor-pointer text-left group"
             title="Click to get more credits"
           >
@@ -222,9 +257,27 @@ export default function DashboardLayout({ user, profile, children, onDemoOpen, i
               return (
                 <button
                   key={item.name}
-                  onClick={() => {
+                  onClick={async () => {
                     if (isLocked) {
-                      setShowUpgrade(true)
+                      console.log('🔒 Locked nav clicked, checking discount status...')
+                      // Check if there's an active discount
+                      try {
+                        const response = await fetch('/api/pro-discount-status')
+                        const data = await response.json()
+                        console.log('📊 Discount status:', data)
+                        
+                        // Show discount modal if discount is active (is_valid = true)
+                        if (data.is_valid) {
+                          console.log('✅ Showing discount modal')
+                          setShowProUpsellModal(true)
+                        } else {
+                          console.log('❌ Showing normal upgrade modal')
+                          setShowUpgrade(true)
+                        }
+                      } catch (err) {
+                        console.error('❌ Error checking discount:', err)
+                        setShowUpgrade(true)
+                      }
                       return
                     }
                     if (!shouldDisable) {
@@ -304,6 +357,15 @@ export default function DashboardLayout({ user, profile, children, onDemoOpen, i
 
       {/* Main content */}
       <div className="flex-1 flex flex-col h-screen overflow-hidden lg:ml-64">
+          {/* Pro Upsell Modal with discount */}
+          {showProUpsellModal && (
+            <ProUpsellModal
+              onCloseAction={() => setShowProUpsellModal(false)}
+              isUpgrading={isUpgrading}
+            />
+          )}
+          
+          {/* Normal Upgrade Modal */}
           {showUpgrade && (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
               <div className="bg-white rounded-2xl shadow-2xl max-w-5xl w-full max-h-[90vh] overflow-y-auto">

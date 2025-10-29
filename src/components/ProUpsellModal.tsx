@@ -10,26 +10,50 @@ interface ProUpsellModalProps {
 }
 
 export default function ProUpsellModal({ onCloseAction, onUpgradeAction, isUpgrading }: ProUpsellModalProps) {
-  const [timeLeft, setTimeLeft] = useState({ minutes: 15, seconds: 0 })
+  const [timeLeft, setTimeLeft] = useState({ minutes: 0, seconds: 0 })
   const [isExpired, setIsExpired] = useState(false)
   const [isStarting, setIsStarting] = useState(true)
   const [isUpgradingLocal, setIsUpgradingLocal] = useState<string | null>(null)
 
-  // Initialize timer by calling API to start it
+  // Initialize timer by calling API to start it OR get remaining time
   useEffect(() => {
     const startTimer = async () => {
       try {
-        console.log('🚀 Starting Pro discount timer...')
-        const response = await fetch('/api/pro-discount-status', {
-          method: 'POST',
-        })
+        console.log('🚀 Checking/starting Pro discount timer...')
         
-        if (response.ok) {
-          const data = await response.json()
-          console.log('✅ Pro discount timer started:', data)
+        // First check if already activated
+        const checkResponse = await fetch('/api/pro-discount-status')
+        const checkData = await checkResponse.json()
+        
+        if (checkData.is_valid) {
+          // Already activated, use the remaining time
+          console.log('⏰ Discount already active, syncing time:', checkData)
+          setTimeLeft({
+            minutes: checkData.minutes_left,
+            seconds: checkData.seconds_left,
+          })
           setIsStarting(false)
+        } else if (checkData.discount_never_activated) {
+          // Not activated yet, activate it now
+          console.log('🆕 Activating discount for first time')
+          const response = await fetch('/api/pro-discount-status', {
+            method: 'POST',
+          })
+          
+          if (response.ok) {
+            const data = await response.json()
+            console.log('✅ Pro discount timer started:', data)
+            // Set initial time to 15:00
+            setTimeLeft({ minutes: 15, seconds: 0 })
+            setIsStarting(false)
+          } else {
+            console.error('❌ Failed to start timer:', response.status, response.statusText)
+            setIsStarting(false)
+          }
         } else {
-          console.error('❌ Failed to start timer:', response.status, response.statusText)
+          // Expired
+          console.log('⏱️ Discount expired')
+          setIsExpired(true)
           setIsStarting(false)
         }
       } catch (error) {

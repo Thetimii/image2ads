@@ -14,6 +14,28 @@ interface BillingClientProps {
 
 export default function BillingClient({ user, profile }: BillingClientProps) {
   const [isLoading, setIsLoading] = useState<string | null>(null)
+  const [hasActiveDiscount, setHasActiveDiscount] = useState(false)
+  const [discountPercentage, setDiscountPercentage] = useState(0)
+
+  // Check if Pro discount is active
+  useEffect(() => {
+    const checkDiscount = async () => {
+      try {
+        const response = await fetch('/api/pro-discount-status')
+        const data = await response.json()
+        
+        if (data.is_valid) {
+          console.log('✅ Active 20% discount detected on billing page')
+          setHasActiveDiscount(true)
+          setDiscountPercentage(20)
+        }
+      } catch (error) {
+        console.error('Error checking discount:', error)
+      }
+    }
+    
+    checkDiscount()
+  }, [])
 
   // Check for promo parameter and redirect to Pro checkout with discount
   useEffect(() => {
@@ -183,6 +205,8 @@ export default function BillingClient({ user, profile }: BillingClientProps) {
           plan,
           successUrl: `${window.location.origin}/billing?success=true`,
           cancelUrl: `${window.location.origin}/billing?cancelled=true`,
+          // Apply discount if active and user is selecting Pro plan
+          ...(hasActiveDiscount && plan === 'pro' && { applyProDiscount: true }),
         }),
       })
 
@@ -372,6 +396,8 @@ export default function BillingClient({ user, profile }: BillingClientProps) {
             isLoading={isLoading}
             variant="page"
             showAllPlans={true}
+            discountPercentage={hasActiveDiscount ? discountPercentage : undefined}
+            couponId={hasActiveDiscount ? 'VbLhruZu' : undefined}
           />
         </div>
 

@@ -150,6 +150,26 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
   const [isUpgrading, setIsUpgrading] = useState<string | null>(null)
   const hasShownLastCreditModal = useRef(false) // Prevent multiple modals in same session
   const hasCheckedProUpsell = useRef(false) // Track if we've checked for pro upsell eligibility
+  const [hasActiveDiscount, setHasActiveDiscount] = useState(false)
+
+  // Check for active discount on mount
+  useEffect(() => {
+    const checkDiscount = async () => {
+      try {
+        const response = await fetch('/api/pro-discount-status')
+        const data = await response.json()
+        setHasActiveDiscount(data.is_valid && !data.discount_never_activated)
+      } catch (err) {
+        console.error('Failed to check discount:', err)
+      }
+    }
+    
+    checkDiscount()
+    
+    // Re-check every 30 seconds
+    const interval = setInterval(checkDiscount, 30000)
+    return () => clearInterval(interval)
+  }, [])
 
   // Onboarding integration
   const {
@@ -238,6 +258,8 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
           plan,
           successUrl: `${window.location.origin}/billing?success=true`,
           cancelUrl: `${window.location.origin}${window.location.pathname}`,
+          // Apply discount if active and Pro plan
+          ...(hasActiveDiscount && plan === 'pro' && { applyProDiscount: true })
         }),
       })
 
@@ -1100,6 +1122,8 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
               onSubscribeAction={handleSubscribe}
               isLoading={isUpgrading}
               variant="popup"
+              discountPercentage={hasActiveDiscount ? 20 : undefined}
+              couponId={hasActiveDiscount ? 'VbLhruZu' : undefined}
             />
 
             {/* Footer */}
@@ -1125,8 +1149,8 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
               const response = await fetch('/api/pro-discount-status')
               const data = await response.json()
               
-              // If discount is valid and within 15 minutes, show discount modal
-              if (data.is_valid && !data.discount_never_activated) {
+              // Show discount modal if discount is active (is_valid = true)
+              if (data.is_valid) {
                 setShowProUpsellModal(true)
               } else {
                 // Otherwise show normal credit popup

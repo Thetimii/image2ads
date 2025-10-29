@@ -17,6 +17,49 @@ export default function GeneratorPageWrapper({ user, profile }: GeneratorPageWra
   const [showUpgrade, setShowUpgrade] = useState(false)
   const [showProUpsellModal, setShowProUpsellModal] = useState(false)
   const [isUpgrading, setIsUpgrading] = useState<string | null>(null)
+  const [hasActiveDiscount, setHasActiveDiscount] = useState(false)
+  const [discountMinutes, setDiscountMinutes] = useState(0)
+  const [discountSeconds, setDiscountSeconds] = useState(0)
+
+  // Check for active discount on mount and update timer
+  useEffect(() => {
+    const checkDiscount = async () => {
+      try {
+        const response = await fetch('/api/pro-discount-status')
+        const data = await response.json()
+        
+        if (data.is_valid) {
+          setHasActiveDiscount(true)
+          setDiscountMinutes(data.minutes_left)
+          setDiscountSeconds(data.seconds_left)
+        }
+      } catch (err) {
+        console.error('Failed to check discount:', err)
+      }
+    }
+    
+    checkDiscount()
+    
+    // Update discount timer every second if active
+    const interval = setInterval(async () => {
+      try {
+        const response = await fetch('/api/pro-discount-status')
+        const data = await response.json()
+        
+        if (data.is_valid) {
+          setHasActiveDiscount(true)
+          setDiscountMinutes(data.minutes_left)
+          setDiscountSeconds(data.seconds_left)
+        } else {
+          setHasActiveDiscount(false)
+        }
+      } catch (err) {
+        console.error('Failed to update discount:', err)
+      }
+    }, 30000) // Check every 30 seconds
+    
+    return () => clearInterval(interval)
+  }, [])
 
   // 🚀 Track TikTok ViewContent on page load
   useEffect(() => {
@@ -46,8 +89,8 @@ export default function GeneratorPageWrapper({ user, profile }: GeneratorPageWra
       const response = await fetch('/api/pro-discount-status')
       const data = await response.json()
       
-      // If discount is valid and within 15 minutes, show discount modal
-      if (data.is_valid && !data.discount_never_activated) {
+      // Show discount modal if discount is active (is_valid = true)
+      if (data.is_valid) {
         setShowProUpsellModal(true)
       } else {
         // Otherwise show normal upgrade popup
@@ -91,6 +134,8 @@ export default function GeneratorPageWrapper({ user, profile }: GeneratorPageWra
           plan,
           successUrl: `${window.location.origin}/billing?success=true`,
           cancelUrl: `${window.location.origin}${window.location.pathname}`,
+          // Apply discount if active and Pro plan
+          ...(hasActiveDiscount && plan === 'pro' && { applyProDiscount: true })
         }),
       })
 
@@ -151,6 +196,8 @@ export default function GeneratorPageWrapper({ user, profile }: GeneratorPageWra
               onSubscribeAction={handleSubscribe}
               isLoading={isUpgrading}
               variant="popup"
+              discountPercentage={hasActiveDiscount ? 20 : undefined}
+              couponId={hasActiveDiscount ? 'VbLhruZu' : undefined}
             />
 
             {/* Footer */}
