@@ -952,23 +952,38 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
                 
                 // Check if user has 1 credit left (trigger Pro upsell modal)
                 if (updatedProfile.credits === 1 && profile.tutorial_completed && !hasCheckedProUpsell.current) {
-                  console.log(`[ChatGenerator] 🎯 User has 1 credit left! Checking Pro upsell eligibility...`)
+                  console.log(`[ChatGenerator] 🎯 User has 1 credit left! Activating Pro discount...`)
                   hasCheckedProUpsell.current = true
                   
-                  // Check if they're eligible for the discount (hasn't expired)
+                  // IMMEDIATELY activate the discount by calling POST
                   setTimeout(async () => {
                     try {
-                      const response = await fetch('/api/pro-discount-status')
-                      const data = await response.json()
+                      // First check if discount already exists
+                      const checkResponse = await fetch('/api/pro-discount-status')
+                      const checkData = await checkResponse.json()
                       
-                      if (data.should_show_popup && data.discount_never_activated) {
-                        console.log(`[ChatGenerator] ✨ Showing Pro upsell modal with 20% discount`)
+                      if (checkData.discount_never_activated) {
+                        // Activate discount NOW (set expiry timestamp in Supabase)
+                        console.log(`[ChatGenerator] 🎬 Activating Pro discount for the first time!`)
+                        const activateResponse = await fetch('/api/pro-discount-status', {
+                          method: 'POST'
+                        })
+                        
+                        if (activateResponse.ok) {
+                          console.log(`[ChatGenerator] ✅ Pro discount activated! Showing modal...`)
+                          setShowProUpsellModal(true)
+                        } else {
+                          console.error(`[ChatGenerator] ❌ Failed to activate discount`)
+                        }
+                      } else if (checkData.is_valid) {
+                        // Discount already active and still valid
+                        console.log(`[ChatGenerator] ⏰ Pro discount already active, showing modal...`)
                         setShowProUpsellModal(true)
                       } else {
-                        console.log(`[ChatGenerator] ⏰ Pro discount not available or already shown`)
+                        console.log(`[ChatGenerator] ⏱️ Pro discount expired, not showing modal`)
                       }
                     } catch (err) {
-                      console.error(`[ChatGenerator] Failed to check Pro discount status:`, err)
+                      console.error(`[ChatGenerator] Failed to activate Pro discount:`, err)
                     }
                   }, 2000)
                 }
