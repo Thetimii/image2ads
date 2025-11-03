@@ -113,8 +113,17 @@ async function handler(req: Request) {
     // Poll Kie.ai for result
     console.log(`[check-job-status] Checking task ${job.task_id} for job ${jobId}`);
     
+    // Determine which API endpoint to use based on model
+    // Veo models (from task_id prefix or job metadata) use different endpoint
+    const isVeoTask = job.task_id.startsWith('veo_') || job.model?.includes('veo3');
+    const endpoint = isVeoTask
+      ? `https://api.kie.ai/api/v1/veo/get-task-info?taskId=${job.task_id}`
+      : `https://api.kie.ai/api/v1/jobs/recordInfo?taskId=${job.task_id}`;
+    
+    console.log(`[check-job-status] Using endpoint: ${endpoint} (isVeoTask: ${isVeoTask})`);
+    
     const response = await fetch(
-      `https://api.kie.ai/api/v1/jobs/recordInfo?taskId=${job.task_id}`,
+      endpoint,
       {
         method: "GET",
         headers: {
@@ -131,13 +140,14 @@ async function handler(req: Request) {
   const result = await response.json();
   console.log(`[check-job-status] Kie.ai response raw: ${JSON.stringify(result)}`);
 
-    // Kie.ai schema: Check both 'state' (for images/video) and 'status' (for music)
-    // Images/video use /jobs/recordInfo endpoint - returns: state: "waiting" | "processing" | "completed" | "failed"  
-    // Music uses /generate/record-info endpoint - returns: status: "WAITING" | "FIRST_SUCCESS" | "SUCCESS" | "FAILED"
+    // Kie.ai schema differs by endpoint:
+    // - Legacy /jobs/recordInfo: state: "waiting" | "generating" | "completed" | "failed"  
+    // - Music /generate/record-info: status: "WAITING" | "FIRST_SUCCESS" | "SUCCESS" | "FAILED"
+    // - Veo /veo/get-task-info: status: "pending" | "processing" | "success" | "failed"
     const taskState = (result.data?.state || '').toLowerCase();
-    const taskStatus = (result.data?.status || '').toUpperCase();
+    const taskStatus = (result.data?.status || '').toLowerCase(); // Veo uses lowercase
     
-    // Check if resultJson has actual data
+    // Check if resultJson has actual data (legacy format)
     let parsedResults = null;
     try {
       const resultJson = result.data?.resultJson || '';
@@ -148,30 +158,32 @@ async function handler(req: Request) {
       console.log(`[check-job-status] Could not parse resultJson:`, e);
     }
     
-    console.log(`[check-job-status] Parsed - state: "${taskState}", status: "${taskStatus}", hasResultJson: ${!!parsedResults}`);
+    // For Veo tasks, check data.resultUrls directly (not in resultJson)
+    const veoResultUrls = result.data?.resultUrls;
+    
+    console.log(`[check-job-status] Parsed - state: "${taskState}", status: "${taskStatus}", hasResultJson: ${!!parsedResults}, veoResultUrls: ${veoResultUrls?.length || 0}`);
     
     // Check for completion
-    // Kie.ai returns different states/statuses:
-    // - Images/Video (/jobs/recordInfo): state = "waiting" | "generating" | "completed" | "success" | "failed"  
-    // - Music (/generate/record-info): status = "WAITING" | "FIRST_SUCCESS" | "SUCCESS" | "FAILED"
     const isComplete = Boolean(
       taskState === 'completed' || 
       taskState === 'success' || 
-      taskState === 'done' ||  // Some APIs use 'done'
-      taskStatus === 'SUCCESS' || 
+      taskState === 'done' ||
+      taskStatus === 'success' ||  // Veo uses lowercase 'success'
+      taskStatus === 'SUCCESS' ||  // Music uses uppercase
       taskStatus === 'FIRST_SUCCESS' ||
       taskStatus === 'COMPLETED' ||
-      (parsedResults && (parsedResults.resultUrls || parsedResults.videoUrls || parsedResults.results))
+      taskStatus === 'completed' ||
+      (veoResultUrls && Array.isArray(veoResultUrls) && veoResultUrls.length > 0) || // Veo format
+      (parsedResults && (parsedResults.resultUrls || parsedResults.videoUrls || parsedResults.results)) // Legacy format
     );
     
     console.log(`[check-job-status] isComplete: ${isComplete}, resultJson empty: ${!result.data?.resultJson || result.data?.resultJson === ''}`);
     
-    // CRITICAL FIX: If we have resultUrls in resultJson, the task is complete even if state is still "waiting"
-    // This happens when Kie.ai updates resultJson before updating state
-    const hasResultUrls = parsedResults && (
+    // CRITICAL FIX: If we have resultUrls in resultJson OR Veo's direct resultUrls, the task is complete
+    const hasResultUrls = (parsedResults && (
       (Array.isArray(parsedResults.resultUrls) && parsedResults.resultUrls.length > 0) ||
       (Array.isArray(parsedResults.videoUrls) && parsedResults.videoUrls.length > 0)
-    );
+    )) || (veoResultUrls && Array.isArray(veoResultUrls) && veoResultUrls.length > 0);
     
     if (hasResultUrls && !isComplete) {
       console.log(`[check-job-status] ⚠️ Task has result URLs but state still shows "${taskState}" - treating as complete!`);
@@ -240,28 +252,38 @@ async function handler(req: Request) {
     // Task completed successfully - extract result URL(s)
     let resultUrl: string | null = null;
     let allUrls: string[] = []
-    try {
-      const raw = result.data?.resultJson
-      const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw
-      if (parsed?.resultUrls && Array.isArray(parsed.resultUrls)) {
-        allUrls = parsed.resultUrls
+    
+    // Veo tasks return resultUrls directly in data (not in resultJson)
+    if (veoResultUrls && Array.isArray(veoResultUrls)) {
+      allUrls = veoResultUrls;
+      console.log('[check-job-status] Found Veo resultUrls:', allUrls);
+    } else {
+      // Legacy format: parse resultJson
+      try {
+        const raw = result.data?.resultJson
+        const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw
+        if (parsed?.resultUrls && Array.isArray(parsed.resultUrls)) {
+          allUrls = parsed.resultUrls
+        }
+        if (parsed?.videoUrls && Array.isArray(parsed.videoUrls)) {
+          // Some providers might return videoUrls specifically
+          allUrls = allUrls.concat(parsed.videoUrls)
+        }
+        if (parsed?.results && Array.isArray(parsed.results)) {
+          // Generic fallback list
+          allUrls = allUrls.concat(parsed.results.map((r: any) => r.url).filter(Boolean))
+        }
+      } catch (e) {
+        console.log('[check-job-status] resultJson parse warning:', e)
       }
-      if (parsed?.videoUrls && Array.isArray(parsed.videoUrls)) {
-        // Some providers might return videoUrls specifically
-        allUrls = allUrls.concat(parsed.videoUrls)
-      }
-      if (parsed?.results && Array.isArray(parsed.results)) {
-        // Generic fallback list
-        allUrls = allUrls.concat(parsed.results.map((r: any) => r.url).filter(Boolean))
-      }
-    } catch (e) {
-      console.log('[check-job-status] resultJson parse warning:', e)
+      // Direct fallbacks
+      if (result.data?.resultUrl) allUrls.push(result.data.resultUrl)
+      if (result.data?.videoUrl) allUrls.push(result.data.videoUrl)
     }
-    // Direct fallbacks
-    if (result.data?.resultUrl) allUrls.push(result.data.resultUrl)
-    if (result.data?.videoUrl) allUrls.push(result.data.videoUrl)
+    
     // Deduplicate
     allUrls = [...new Set(allUrls.filter(Boolean))]
+    
     // Prefer mp4 if job expects video
     if (job.result_type === 'video') {
       resultUrl = allUrls.find(u => /\.mp4(\?|$)/i.test(u)) || allUrls[0] || null

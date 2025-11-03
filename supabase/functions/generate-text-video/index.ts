@@ -85,19 +85,25 @@ async function handler(req: Request) {
     await supabase.from("jobs").update({ status: "processing" }).eq("id", jobId);
 
     // Get aspect ratio from job.aspect_ratio field (landscape or portrait)
+    // Convert to Veo 3.1 format: landscape -> 16:9, portrait -> 9:16
     console.log(`[generate-text-video] RAW job.aspect_ratio value:`, job.aspect_ratio, `(type: ${typeof job.aspect_ratio})`)
-    const aspectRatio = job.aspect_ratio || 'landscape'  // Default to landscape
+    const rawAspectRatio = job.aspect_ratio || 'landscape'  // Default to landscape
+    const aspectRatio = rawAspectRatio === 'portrait' ? '9:16' : '16:9'; // Convert to Veo format
     
     console.log(`[generate-text-video] Creating task for job ${jobId} with prompt: ${job.prompt}`);
     console.log(`[generate-text-video] Job model stored: ${job.model}`)
-    console.log(`[generate-text-video] Aspect ratio from job: ${aspectRatio}`)
+    console.log(`[generate-text-video] Aspect ratio from job: ${rawAspectRatio} -> Veo format: ${aspectRatio}`)
 
-    const kieModel = 'sora-2-text-to-video'
+    // Veo 3.1 Fast model configuration
+    const kieModel = 'veo3_fast'
     const taskInput = {
       prompt: job.prompt || 'A beautiful scene',
-      aspect_ratio: aspectRatio
+      model: kieModel,
+      generationType: 'TEXT_2_VIDEO',
+      aspectRatio: aspectRatio,
+      enableTranslation: true, // Auto-translate prompts to English for better results
     }
-    console.log('[generate-text-video] Kie model:', kieModel, 'input:', taskInput)
+    console.log('[generate-text-video] Veo 3.1 model:', kieModel, 'input:', taskInput)
     const taskId = await createKieTask(kieModel, taskInput, KIE_API_KEY)
 
     console.log(`[generate-text-video] Task created: ${taskId}`);

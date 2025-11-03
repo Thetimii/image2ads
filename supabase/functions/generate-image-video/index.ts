@@ -127,27 +127,32 @@ async function handler(req: Request) {
     await supabase.from("jobs").update({ status: "processing" }).eq("id", jobId);
 
     // Get aspect ratio from job.aspect_ratio field (landscape or portrait)
+    // Convert to Veo 3.1 format: landscape -> 16:9, portrait -> 9:16
     console.log(`[generate-image-video] RAW job.aspect_ratio value:`, job.aspect_ratio, `(type: ${typeof job.aspect_ratio})`)
-    const aspectRatio = job.aspect_ratio || 'landscape'  // Default to landscape
+    const rawAspectRatio = job.aspect_ratio || 'landscape'  // Default to landscape
+    const aspectRatio = rawAspectRatio === 'portrait' ? '9:16' : '16:9'; // Convert to Veo format
 
     console.log(`[generate-image-video] Creating task for job ${jobId}`);
     console.log(`[generate-image-video] Reference image: ${imageUrl}`);
     console.log(`[generate-image-video] Original prompt from job: "${job.prompt}"`);
-    console.log(`[generate-image-video] Aspect ratio from job: ${aspectRatio}`);
+    console.log(`[generate-image-video] Aspect ratio from job: ${rawAspectRatio} -> Veo format: ${aspectRatio}`);
 
     const finalPrompt = job.prompt || "Animate this image";
     console.log(`[generate-image-video] Final prompt to send: "${finalPrompt}"`);
 
-    // Create Kie.ai task for Sora 2 image-to-video
+    // Create Kie.ai task for Veo 3.1 Fast image-to-video
     const taskPayload = {
       prompt: finalPrompt,
-      image_urls: [imageUrl],
-      aspect_ratio: aspectRatio
+      imageUrls: [imageUrl], // Note: camelCase for Veo API
+      model: 'veo3_fast',
+      generationType: 'FIRST_AND_LAST_FRAMES_2_VIDEO',
+      aspectRatio: aspectRatio,
+      enableTranslation: true, // Auto-translate prompts to English for better results
     };
     console.log(`[generate-image-video] Task payload:`, taskPayload);
 
-    const kieModel = 'sora-2-image-to-video'
-    console.log('[generate-image-video] Kie model:', kieModel, 'payload:', taskPayload)
+    const kieModel = 'veo3_fast'
+    console.log('[generate-image-video] Veo 3.1 model:', kieModel, 'payload:', taskPayload)
     const taskId = await createKieTask(kieModel, taskPayload, KIE_API_KEY)
 
     console.log(`[generate-image-video] Task created: ${taskId}`);

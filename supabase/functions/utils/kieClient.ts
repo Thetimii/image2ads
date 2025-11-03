@@ -29,7 +29,7 @@ interface TaskResult {
 
 /**
  * Create a new task on Kie.ai
- * @param model - Model to use (e.g., "google/nano-banana", "sora-2-text-to-video", "suno-v3.5")
+ * @param model - Model to use (e.g., "google/nano-banana", "veo3_fast", "suno-v3.5")
  * @param input - Model-specific input parameters
  * @param apiKey - Kie.ai API key
  * @returns taskId for polling
@@ -39,14 +39,32 @@ export async function createKieTask(
   input: Record<string, any>,
   apiKey: string
 ): Promise<string> {
-  const payload = {
-    model,
-    input,
-  };
+  // Veo 3.1 models use a different endpoint and payload structure
+  const isVeoModel = model === "veo3" || model === "veo3_fast";
+  
+  let endpoint: string;
+  let payload: any;
+  
+  if (isVeoModel) {
+    // Veo 3.1 uses /api/v1/veo/generate endpoint with flat payload structure
+    endpoint = "https://api.kie.ai/api/v1/veo/generate";
+    payload = {
+      model,
+      ...input, // Spread input directly (prompt, imageUrls, aspectRatio, generationType, etc.)
+    };
+  } else {
+    // Legacy models use /api/v1/jobs/createTask endpoint with nested structure
+    endpoint = `${KIE_BASE_URL}/createTask`;
+    payload = {
+      model,
+      input,
+    };
+  }
   
   console.log('[kieClient] 🚀 EXACT PAYLOAD BEING SENT TO KIE.AI:', JSON.stringify(payload, null, 2));
+  console.log('[kieClient] 📍 Endpoint:', endpoint);
   
-  const response = await fetch(`${KIE_BASE_URL}/createTask`, {
+  const response = await fetch(endpoint, {
     method: "POST",
     headers: {
       "Authorization": `Bearer ${apiKey}`,
