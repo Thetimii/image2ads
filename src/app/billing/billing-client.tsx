@@ -342,28 +342,22 @@ export default function BillingClient({ user, profile }: BillingClientProps) {
               <div>
                 <p className="text-sm font-medium text-gray-600">Next Billing</p>
                 <p className="text-lg font-bold text-gray-900">
-                  {(profile.subscription_status === 'active' || profile.subscription_status === 'trialing') ? 
+                  {(profile.subscription_status === 'active' || profile.subscription_status === 'trialing') && profile.updated_at ? 
                     (() => {
-                      // If trialing, use trial_end_at for next billing date
-                      if (profile.subscription_status === 'trialing' && profile.trial_end_at) {
-                        const trialEndDate = new Date(profile.trial_end_at);
-                        return trialEndDate.toLocaleDateString('en-US', { 
-                          month: 'short', 
-                          day: 'numeric',
-                          year: 'numeric'
-                        });
-                      }
-                      // If active, calculate 30 days from last update
-                      else if (profile.updated_at) {
-                        const nextBilling = new Date(profile.updated_at);
+                      const nextBilling = new Date(profile.updated_at);
+                      // If trialing, add 3 days from updated_at
+                      if (profile.subscription_status === 'trialing') {
+                        nextBilling.setDate(nextBilling.getDate() + 3);
+                      } 
+                      // If active, add 30 days from updated_at
+                      else {
                         nextBilling.setDate(nextBilling.getDate() + 30);
-                        return nextBilling.toLocaleDateString('en-US', { 
-                          month: 'short', 
-                          day: 'numeric',
-                          year: 'numeric'
-                        });
                       }
-                      return 'N/A';
+                      return nextBilling.toLocaleDateString('en-US', { 
+                        month: 'short', 
+                        day: 'numeric',
+                        year: 'numeric'
+                      });
                     })()
                     : 'N/A'}
                 </p>
