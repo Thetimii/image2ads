@@ -7,15 +7,18 @@ import type { User } from '@supabase/supabase-js'
 import type { Profile } from '@/lib/validations'
 import PricingPlans from '@/components/PricingPlans'
 import ProUpsellModal from '@/components/ProUpsellModal'
+import ProTrialModal from '@/components/ProTrialModal'
 
 interface GeneratorPageWrapperProps {
   user: User
   profile: Profile
+  onShowUpgrade?: () => void
 }
 
-export default function GeneratorPageWrapper({ user, profile }: GeneratorPageWrapperProps) {
+export default function GeneratorPageWrapper({ user, profile, onShowUpgrade }: GeneratorPageWrapperProps) {
   const [showUpgrade, setShowUpgrade] = useState(false)
   const [showProUpsellModal, setShowProUpsellModal] = useState(false)
+  const [showProTrialModal, setShowProTrialModal] = useState(false)
   const [isUpgrading, setIsUpgrading] = useState<string | null>(null)
   const [hasActiveDiscount, setHasActiveDiscount] = useState(false)
   const [discountMinutes, setDiscountMinutes] = useState(0)
@@ -102,6 +105,12 @@ export default function GeneratorPageWrapper({ user, profile }: GeneratorPageWra
     }
   }
 
+  // Handler for showing trial modal
+  const handleShowTrialModal = () => {
+    // Always show the Pro trial modal when clicking "$1 Pro Trial" button
+    setShowProTrialModal(true)
+  }
+
   // Lock navigation if tutorial not completed
   const isNavigationLocked = !profile.tutorial_completed
 
@@ -161,7 +170,17 @@ export default function GeneratorPageWrapper({ user, profile }: GeneratorPageWra
         user={user} 
         profile={profile} 
         onLockedFeature={handleLockedFeature}
+        onShowUpgrade={handleShowTrialModal}
       />
+      
+      {/* Pro Trial Modal ($1 trial) */}
+      {showProTrialModal && (
+        <ProTrialModal
+          onCloseAction={() => setShowProTrialModal(false)}
+          onStartTrialAction={() => {}}
+          source="trial_button"
+        />
+      )}
       
       {/* Pro Upsell Modal with discount */}
       {showProUpsellModal && (

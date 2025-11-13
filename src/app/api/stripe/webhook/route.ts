@@ -120,6 +120,68 @@ export async function POST(req: NextRequest) {
       case "checkout.session.completed": {
         const session = event.data.object as Stripe.Checkout.Session;
 
+        // Handle trial payment (one-time CHF 1 payment)
+        if (session.mode === "payment" && session.metadata?.type === "pro_trial") {
+          const customerId = session.customer as string;
+          const userId = session.metadata?.user_id;
+          const trialDays = parseInt(session.metadata?.trial_days || "3");
+
+          console.log(`Processing pro trial payment for user ${userId}`);
+
+          if (userId) {
+            // Calculate trial end date
+            const trialEndDate = new Date();
+            trialEndDate.setDate(trialEndDate.getDate() + trialDays);
+
+            // Update user profile with trial status
+            const { error: updateError } = await supabaseAdmin
+              .from("profiles")
+              .update({
+                subscription_status: "trialing",
+                plan: "pro_trial",
+                trial_end_at: trialEndDate.toISOString(),
+                credits: STRIPE_PLANS.pro.credits, // Give 200 Pro credits
+                updated_at: new Date().toISOString(),
+              })
+              .eq("id", userId);
+
+            if (updateError) {
+              console.error("Error updating trial status:", updateError);
+            } else {
+              console.log(`✅ Trial activated for user ${userId}, ends at ${trialEndDate.toISOString()}`);
+            }
+
+            // Track TikTok purchase event for trial
+            try {
+              const { data: profile } = await supabaseAdmin
+                .from("profiles")
+                .select("email")
+                .eq("id", userId)
+                .single();
+
+              if (profile?.email) {
+                const amount = (session.amount_total || 0) / 100;
+                const currency = session.currency || 'chf';
+                
+                await trackPurchase({
+                  email: profile.email,
+                  userId: userId,
+                  value: amount,
+                  currency: currency.toUpperCase(),
+                  contentId: 'pro_trial',
+                  contentName: '3-Day Pro Trial',
+                  url: `${process.env.NEXT_PUBLIC_SITE_URL || 'https://image2ad.com'}/dashboard`,
+                });
+                
+                console.log(`✅ TikTok Purchase event tracked for trial: ${profile.email}`);
+              }
+            } catch (error) {
+              console.error('❌ Failed to track TikTok trial purchase:', error);
+            }
+          }
+          break;
+        }
+
         if (session.mode === "subscription") {
           const subscription = await stripe.subscriptions.retrieve(
             session.subscription as string
@@ -393,16 +455,31 @@ export async function POST(req: NextRequest) {
       case "customer.subscription.deleted": {
         const subscription = event.data.object as Stripe.Subscription;
 
-        const { error } = await supabaseAdmin
-          .from("profiles")
-          .update({
-            subscription_status: "canceled",
-            subscription_id: null,
-          })
-          .eq("stripe_customer_id", subscription.customer);
+        // Check if customer has any other active subscriptions before marking as canceled
+        // This prevents marking as canceled during an upgrade when old sub is canceled
+        const allSubscriptions = await stripe.subscriptions.list({
+          customer: subscription.customer as string,
+          status: 'active',
+        });
 
-        if (error) {
-          console.error("Error canceling subscription:", error);
+        // Only mark as canceled if there are NO other active subscriptions
+        if (allSubscriptions.data.length === 0) {
+          console.log(`No other active subscriptions found, marking customer as canceled`);
+          
+          const { error } = await supabaseAdmin
+            .from("profiles")
+            .update({
+              subscription_status: "canceled",
+              subscription_id: null,
+            })
+            .eq("stripe_customer_id", subscription.customer);
+
+          if (error) {
+            console.error("Error canceling subscription:", error);
+          }
+        } else {
+          console.log(`Customer has ${allSubscriptions.data.length} other active subscription(s), keeping as active`);
+          // Don't update status - they still have an active subscription
         }
         break;
       }

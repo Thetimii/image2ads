@@ -74,7 +74,7 @@ export default function SimplifiedChatGenerator({ user, profile, onLockedFeature
 
   const meta = TAB_META[gen.activeTab]
   const requiresImage = gen.activeTab === 'image-to-image' || gen.activeTab === 'image-to-video'
-  const isLocked = !!meta.locked && !profile?.stripe_customer_id
+  const isLocked = !!meta.locked && profile?.subscription_status === 'free'
 
   const handleExample = (fullPrompt: string) => {
     setInput(fullPrompt)

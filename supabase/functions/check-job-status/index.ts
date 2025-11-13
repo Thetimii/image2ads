@@ -117,7 +117,7 @@ async function handler(req: Request) {
     // Veo models (from task_id prefix or job metadata) use different endpoint
     const isVeoTask = job.task_id.startsWith('veo_') || job.model?.includes('veo3');
     const endpoint = isVeoTask
-      ? `https://api.kie.ai/api/v1/veo/get-task-info?taskId=${job.task_id}`
+      ? `https://api.kie.ai/api/v1/veo/record-info?taskId=${job.task_id}`
       : `https://api.kie.ai/api/v1/jobs/recordInfo?taskId=${job.task_id}`;
     
     console.log(`[check-job-status] Using endpoint: ${endpoint} (isVeoTask: ${isVeoTask})`);
@@ -143,9 +143,9 @@ async function handler(req: Request) {
     // Kie.ai schema differs by endpoint:
     // - Legacy /jobs/recordInfo: state: "waiting" | "generating" | "completed" | "failed"  
     // - Music /generate/record-info: status: "WAITING" | "FIRST_SUCCESS" | "SUCCESS" | "FAILED"
-    // - Veo /veo/get-task-info: status: "pending" | "processing" | "success" | "failed"
+    // - Veo /veo/record-info: successFlag: 1 (completed), resultUrls in data.response.resultUrls
     const taskState = (result.data?.state || '').toLowerCase();
-    const taskStatus = (result.data?.status || '').toLowerCase(); // Veo uses lowercase
+    const taskStatus = (result.data?.status || '').toLowerCase();
     
     // Check if resultJson has actual data (legacy format)
     let parsedResults = null;
@@ -158,21 +158,23 @@ async function handler(req: Request) {
       console.log(`[check-job-status] Could not parse resultJson:`, e);
     }
     
-    // For Veo tasks, check data.resultUrls directly (not in resultJson)
-    const veoResultUrls = result.data?.resultUrls;
+    // For Veo tasks, check data.response.resultUrls (nested structure)
+    const veoResultUrls = result.data?.response?.resultUrls;
+    const veoSuccessFlag = result.data?.successFlag;
     
-    console.log(`[check-job-status] Parsed - state: "${taskState}", status: "${taskStatus}", hasResultJson: ${!!parsedResults}, veoResultUrls: ${veoResultUrls?.length || 0}`);
+    console.log(`[check-job-status] Parsed - state: "${taskState}", status: "${taskStatus}", hasResultJson: ${!!parsedResults}, veoResultUrls: ${veoResultUrls?.length || 0}, veoSuccessFlag: ${veoSuccessFlag}`);
     
     // Check for completion
     const isComplete = Boolean(
       taskState === 'completed' || 
       taskState === 'success' || 
       taskState === 'done' ||
-      taskStatus === 'success' ||  // Veo uses lowercase 'success'
-      taskStatus === 'SUCCESS' ||  // Music uses uppercase
+      taskStatus === 'success' ||
+      taskStatus === 'SUCCESS' ||
       taskStatus === 'FIRST_SUCCESS' ||
       taskStatus === 'COMPLETED' ||
       taskStatus === 'completed' ||
+      veoSuccessFlag === 1 || // Veo completion flag
       (veoResultUrls && Array.isArray(veoResultUrls) && veoResultUrls.length > 0) || // Veo format
       (parsedResults && (parsedResults.resultUrls || parsedResults.videoUrls || parsedResults.results)) // Legacy format
     );

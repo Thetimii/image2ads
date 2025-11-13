@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, ReactNode } from 'react'
+import React, { useState, useEffect, ReactNode } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
@@ -10,6 +10,8 @@ import type { Profile } from '@/lib/validations'
 import { STRIPE_PLANS } from '@/lib/stripe-plans'
 import PricingPlans from '@/components/PricingPlans'
 import ProUpsellModal from '@/components/ProUpsellModal'
+import ProDiscountModal from '@/components/ProDiscountModal'
+import ProTrialModal from '@/components/ProTrialModal'
 
 
 interface DashboardLayoutProps {
@@ -18,6 +20,7 @@ interface DashboardLayoutProps {
   children: ReactNode
   onDemoOpen?: () => void
   isNavigationLocked?: boolean
+  onShowUpgrade?: () => void
 }
 
 interface NavItem { name: string; href: string; locked?: boolean }
@@ -41,12 +44,29 @@ const bottomNavigation = [
   },
 ]
 
-export default function DashboardLayout({ user, profile, children, onDemoOpen, isNavigationLocked = false }: DashboardLayoutProps) {
+export default function DashboardLayout({ user, profile, children, onDemoOpen, isNavigationLocked = false, onShowUpgrade }: DashboardLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [isSafari, setIsSafari] = useState(false)
   const [loadingPath, setLoadingPath] = useState<string | null>(null)
   const [showUpgrade, setShowUpgrade] = useState(false)
   const [showProUpsellModal, setShowProUpsellModal] = useState(false)
+  const [showProDiscountModal, setShowProDiscountModal] = useState(false)
+  const [showProTrialModal, setShowProTrialModal] = useState(false)
+  const [discountModalDismissed, setDiscountModalDismissed] = useState(false)
+  const [trialModalDismissed, setTrialModalDismissed] = useState(() => {
+    // Check localStorage on mount to persist across page navigations
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem(`trial-modal-dismissed-${user.id}`) === 'true'
+    }
+    return false
+  })
+  const [hasSeenTrialModal, setHasSeenTrialModal] = useState(() => {
+    // Check localStorage on mount
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem(`trial-modal-seen-${user.id}`) === 'true'
+    }
+    return false
+  })
   const [isUpgrading, setIsUpgrading] = useState<string | null>(null)
   const router = useRouter()
   const pathname = usePathname()
@@ -55,15 +75,57 @@ export default function DashboardLayout({ user, profile, children, onDemoOpen, i
   // Generator context removed for now to fix build issues
   const generator = null
 
+  // Determine if user has pro access (not free)
+  const hasPro = profile.subscription_status !== 'free'
+
   useEffect(() => {
     // Detect Safari
     const userAgent = navigator.userAgent.toLowerCase();
     setIsSafari(userAgent.includes('safari') && !userAgent.includes('chrome'));
   }, []);
 
+  // Check credits and show appropriate modal
+  useEffect(() => {
+    const checkCreditsAndShowModal = async () => {
+      // Only show modals for free users
+      if (hasPro) return;
+
+      // Don't show if any modal is already open
+      if (showUpgrade || showProUpsellModal || showProDiscountModal || showProTrialModal) return;
+
+      // Only show trial modal at 0 credits (removed 20% discount modal logic)
+      if (profile.credits === 0 && !trialModalDismissed) {
+        console.log('User has 0 credits - showing trial modal');
+        setShowProTrialModal(true);
+        setHasSeenTrialModal(true);
+        // Save to localStorage so it persists across page navigations
+        localStorage.setItem(`trial-modal-seen-${user.id}`, 'true');
+      }
+    };
+
+    checkCreditsAndShowModal();
+  }, [profile.credits, hasPro, showUpgrade, showProUpsellModal, showProDiscountModal, showProTrialModal, discountModalDismissed, trialModalDismissed]);
+
   const handleSignOut = async () => {
     await supabase.auth.signOut()
     router.push('/')
+  }
+
+  // Handler to show trial/upgrade modal from children components
+  const handleShowUpgradeModal = async () => {
+    // Check if there's an active discount
+    try {
+      const response = await fetch('/api/pro-discount-status')
+      const data = await response.json()
+      
+      if (data.is_valid) {
+        setShowProUpsellModal(true)
+      } else {
+        setShowProTrialModal(true)
+      }
+    } catch (err) {
+      setShowProTrialModal(true)
+    }
   }
 
   const handleSubscribe = async (plan: 'starter' | 'pro' | 'business') => {
@@ -98,9 +160,6 @@ export default function DashboardLayout({ user, profile, children, onDemoOpen, i
     }
   }
 
-  // Determine if user has pro (stripe customer ID)
-  const hasPro = !!profile.stripe_customer_id
-
   const handleNavigation = async (href: string) => {
     if (href === pathname) return
 
@@ -112,9 +171,7 @@ export default function DashboardLayout({ user, profile, children, onDemoOpen, i
       try {
         const response = await fetch('/api/pro-discount-status')
         const data = await response.json()
-        console.log('📊 Discount status:', data)
         
-        // Show discount modal if discount is active (is_valid = true)
         if (data.is_valid) {
           console.log('✅ Showing discount modal')
           setShowProUpsellModal(true)
@@ -206,12 +263,11 @@ export default function DashboardLayout({ user, profile, children, onDemoOpen, i
           {/* User info */}
           <button
             onClick={async () => {
-              // Check if there's an active discount
+              // Check if there's an active discount, show appropriate modal
               try {
                 const response = await fetch('/api/pro-discount-status')
                 const data = await response.json()
                 
-                // Show discount modal if discount is active (is_valid = true)
                 if (data.is_valid) {
                   setShowProUpsellModal(true)
                 } else {
@@ -247,6 +303,8 @@ export default function DashboardLayout({ user, profile, children, onDemoOpen, i
             </div>
           </button>
 
+
+
           {/* Main navigation - Fixed height, no scrolling */}
           <nav className="flex-1 px-4 py-4 space-y-1">
             {navigation.map((item) => {
@@ -264,9 +322,7 @@ export default function DashboardLayout({ user, profile, children, onDemoOpen, i
                       try {
                         const response = await fetch('/api/pro-discount-status')
                         const data = await response.json()
-                        console.log('📊 Discount status:', data)
                         
-                        // Show discount modal if discount is active (is_valid = true)
                         if (data.is_valid) {
                           console.log('✅ Showing discount modal')
                           setShowProUpsellModal(true)
@@ -357,6 +413,30 @@ export default function DashboardLayout({ user, profile, children, onDemoOpen, i
 
       {/* Main content */}
       <div className="flex-1 flex flex-col h-screen overflow-hidden lg:ml-64">
+          {/* Pro Discount Modal (20% off at 1 credit) */}
+          {showProDiscountModal && (
+            <ProDiscountModal
+              onCloseAction={() => {
+                setShowProDiscountModal(false)
+                setDiscountModalDismissed(true)
+              }}
+              onUpgradeAction={() => {}}
+            />
+          )}
+
+          {/* Pro Trial Modal ($1 at 0 credits) */}
+          {showProTrialModal && (
+            <ProTrialModal
+              onCloseAction={() => {
+                setShowProTrialModal(false)
+                setTrialModalDismissed(true)
+                // Save to localStorage to persist across page navigations
+                localStorage.setItem(`trial-modal-dismissed-${user.id}`, 'true')
+              }}
+              onStartTrialAction={() => {}}
+            />
+          )}
+
           {/* Pro Upsell Modal with discount */}
           {showProUpsellModal && (
             <ProUpsellModal
@@ -452,7 +532,10 @@ export default function DashboardLayout({ user, profile, children, onDemoOpen, i
             ? 'overflow-y-auto' 
             : 'overflow-hidden'
         }`}>
-          {children}
+          {React.isValidElement(children) 
+            ? React.cloneElement(children, { onShowUpgrade: handleShowUpgradeModal } as any)
+            : children
+          }
         </main>
       </div>
     </div>

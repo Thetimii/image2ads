@@ -168,7 +168,9 @@ export default function BillingClient({ user, profile }: BillingClientProps) {
   }
 
   const getSubscriptionStatus = () => {
-    if (profile.subscription_status === 'active' || profile.subscription_status === 'trialing') {
+    if (profile.subscription_status === 'trialing') {
+      return 'Trial'
+    } else if (profile.subscription_status === 'active') {
       return 'Active'
     } else if (profile.subscription_status === 'canceled' || profile.subscription_status === 'cancelled') {
       return 'Cancelled'
@@ -340,15 +342,28 @@ export default function BillingClient({ user, profile }: BillingClientProps) {
               <div>
                 <p className="text-sm font-medium text-gray-600">Next Billing</p>
                 <p className="text-lg font-bold text-gray-900">
-                  {(profile.subscription_status === 'active' || profile.subscription_status === 'trialing') && profile.updated_at ? 
+                  {(profile.subscription_status === 'active' || profile.subscription_status === 'trialing') ? 
                     (() => {
-                      const nextBilling = new Date(profile.updated_at);
-                      nextBilling.setDate(nextBilling.getDate() + 30);
-                      return nextBilling.toLocaleDateString('en-US', { 
-                        month: 'short', 
-                        day: 'numeric',
-                        year: 'numeric'
-                      });
+                      // If trialing, use trial_end_at for next billing date
+                      if (profile.subscription_status === 'trialing' && profile.trial_end_at) {
+                        const trialEndDate = new Date(profile.trial_end_at);
+                        return trialEndDate.toLocaleDateString('en-US', { 
+                          month: 'short', 
+                          day: 'numeric',
+                          year: 'numeric'
+                        });
+                      }
+                      // If active, calculate 30 days from last update
+                      else if (profile.updated_at) {
+                        const nextBilling = new Date(profile.updated_at);
+                        nextBilling.setDate(nextBilling.getDate() + 30);
+                        return nextBilling.toLocaleDateString('en-US', { 
+                          month: 'short', 
+                          day: 'numeric',
+                          year: 'numeric'
+                        });
+                      }
+                      return 'N/A';
                     })()
                     : 'N/A'}
                 </p>

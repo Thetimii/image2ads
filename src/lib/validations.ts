@@ -10,6 +10,7 @@ export const profileSchema = z.object({
   stripe_customer_id: z.string().optional(),
   subscription_id: z.string().optional(),
   subscription_status: z.string().optional(),
+  trial_end_at: z.string().optional(),
   tutorial_completed: z.boolean().optional(),
   created_at: z.string(),
   updated_at: z.string(),

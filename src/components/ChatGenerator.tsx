@@ -32,6 +32,7 @@ interface ChatGeneratorProps {
   user: User
   profile: Profile
   onLockedFeature?: () => void
+  onShowUpgrade?: () => void
 }
 
 // Supabase Edge Function endpoints
@@ -132,7 +133,7 @@ const EXAMPLES: Record<string, Array<{ short: string; full: string }>> = {
   ]
 }
 
-export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGeneratorProps) {
+export default function ChatGenerator({ user, profile, onLockedFeature, onShowUpgrade }: ChatGeneratorProps) {
   const gen = useGenerator()
   const supabase = createClient()
   const router = useRouter()
@@ -209,11 +210,12 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
   const history = gen.histories[gen.activeTab]
   const requiresImage = gen.activeTab === 'image-to-image' || gen.activeTab === 'image-to-video'
   const isMusicMode = gen.activeTab === 'text-to-music'
-  // Check if feature is locked: only locked if marked as locked AND user doesn't have stripe customer ID
-  const isLocked = !!meta.locked && !profile?.stripe_customer_id
+  // Check if feature is locked: only locked if marked as locked AND user has free status
+  const isLocked = !!meta.locked && profile?.subscription_status === 'free'
   
   // Helper to get credit text based on user type
-  const isFreeUser = !profile?.stripe_customer_id
+  const isFreeUser = profile?.subscription_status === 'free'
+  const hasPro = profile?.subscription_status !== 'free'
   const getCreditText = () => {
     if (isFreeUser) {
       return profile.credits === 1 ? '1 free image remaining' : `${profile.credits} free images remaining`
@@ -1099,15 +1101,13 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
         />
       )}
       
-      {/* Credit Popup */}
-      {showCreditPopup && (
+      {/* Credit Popup - DISABLED: Now handled by DashboardLayout with new ProDiscountModal and ProTrialModal */}
+      {/* {showCreditPopup && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-5xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
-            {/* Header */}
             <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex justify-between items-center rounded-t-2xl">
               <div>
                 {profile.credits === 0 && hasShownLastCreditModal.current ? (
-                  // Success message after last free credit
                   <>
                     <h2 className="text-xl font-bold text-gray-900">🎉 You've Used Your 2 Free Credits!</h2>
                     <p className="text-sm text-gray-500 mt-1">
@@ -1115,7 +1115,6 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
                     </p>
                   </>
                 ) : (
-                  // Insufficient credits message
                   <>
                     <h2 className="text-xl font-bold text-gray-900">⚠️ Insufficient Credits</h2>
                     <p className="text-sm text-gray-500 mt-1">
@@ -1132,7 +1131,6 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
               </button>
             </div>
 
-            {/* Plans Grid */}
             <PricingPlans 
               onSubscribeAction={handleSubscribe}
               isLoading={isUpgrading}
@@ -1141,7 +1139,6 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
               couponId={hasActiveDiscount ? 'VbLhruZu' : undefined}
             />
 
-            {/* Footer */}
             <div className="border-t border-gray-200 px-6 py-4 bg-gray-50 rounded-b-2xl">
               <p className="text-xs text-gray-500 text-center">
                 💳 Secure payment powered by Stripe • Cancel anytime • 30-day money-back guarantee
@@ -1149,7 +1146,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
             </div>
           </div>
         </div>
-      )}
+      )} */}
       
       {/* Header */}
       <div className="flex justify-between items-center border-b border-gray-200 bg-white px-6 py-3 flex-shrink-0">
@@ -1157,30 +1154,41 @@ export default function ChatGenerator({ user, profile, onLockedFeature }: ChatGe
           <h1 className="text-base font-semibold text-gray-800">{meta.title}</h1>
           <p className="text-xs text-gray-500 mt-0.5">{meta.subtitle}</p>
         </div>
-        <button
-          onClick={async () => {
-            // Check if there's an active 15-minute discount window
-            try {
-              const response = await fetch('/api/pro-discount-status')
-              const data = await response.json()
-              
-              // Show discount modal if discount is active (is_valid = true)
-              if (data.is_valid) {
-                setShowProUpsellModal(true)
-              } else {
-                // Otherwise show normal credit popup
-                setShowCreditPopup(true)
-              }
-            } catch (err) {
-              // On error, show normal popup
-              setShowCreditPopup(true)
-            }
-          }}
-          className="text-xs bg-gradient-to-r from-purple-500 to-pink-500 text-white px-3 py-1.5 rounded-full font-medium shadow-sm hover:shadow-lg hover:scale-105 transition-all cursor-pointer"
-          title="Click to get more credits"
-        >
-          ⭐ {getCreditText()}
-        </button>
+        <div className="flex items-center gap-3">
+          {/* Upgrade Button - Always visible for free users */}
+          {isFreeUser && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                console.log('$1 Pro Trial button clicked, onShowUpgrade exists:', !!onShowUpgrade)
+                // Always show the $1 trial modal
+                if (onShowUpgrade) {
+                  onShowUpgrade()
+                } else {
+                  console.warn('onShowUpgrade not available, using fallback')
+                  // Fallback to locked feature handler
+                  onLockedFeature?.()
+                }
+              }}
+              className="text-sm bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white px-4 py-2 rounded-full font-semibold shadow-md hover:shadow-lg hover:scale-105 transition-all cursor-pointer"
+              title="Get Pro access - $1 for 3 days"
+            >
+              ✨ $1 Pro Trial
+            </button>
+          )}
+          
+          {/* Credits Pill */}
+          <button
+            onClick={() => {
+              // Call onLockedFeature to show 3-plan upgrade modal
+              onLockedFeature?.()
+            }}
+            className="text-xs bg-gradient-to-r from-purple-500 to-pink-500 text-white px-3 py-1.5 rounded-full font-medium shadow-sm hover:shadow-lg hover:scale-105 transition-all cursor-pointer"
+            title="Click to get more credits"
+          >
+            ⭐ {getCreditText()}
+          </button>
+        </div>
       </div>
 
       {/* Chat scroll area */}
