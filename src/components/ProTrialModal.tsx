@@ -114,7 +114,7 @@ export default function ProTrialModal({ onCloseAction, onStartTrialAction, sourc
             <div className="bg-purple-100/50 rounded-lg p-2.5">
               <p className="text-xs text-gray-600 leading-relaxed text-center">
                 <span className="font-semibold text-gray-700">How it works:</span><br/>
-                Pay $1 now • Use Pro for 3 days • Auto-renews at $19.99/mo unless canceled
+                Pay $1 now • Use Pro for 3 days • Automatically renews at $19.99/month unless you cancel
               </p>
             </div>
           </div>
@@ -141,7 +141,7 @@ export default function ProTrialModal({ onCloseAction, onStartTrialAction, sourc
         {/* Footer */}
         <div className="border-t border-gray-200 px-5 py-3 bg-gray-50 rounded-b-2xl">
           <p className="text-xs text-gray-500 text-center">
-            💳 Secure payment • Cancel anytime • No commitment
+            💳 Secure payment • Auto-renews monthly • Cancel anytime
           </p>
         </div>
       </div>

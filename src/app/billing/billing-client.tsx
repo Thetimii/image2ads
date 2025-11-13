@@ -439,11 +439,19 @@ export default function BillingClient({ user, profile }: BillingClientProps) {
                 <ul className="space-y-2 text-sm text-gray-600">
                   <li className="flex items-start">
                     <span className="text-blue-500 mr-2">•</span>
+                    Subscriptions renew automatically unless cancelled
+                  </li>
+                  <li className="flex items-start">
+                    <span className="text-blue-500 mr-2">•</span>
                     You can upgrade or downgrade your plan at any time
                   </li>
                   <li className="flex items-start">
                     <span className="text-blue-500 mr-2">•</span>
-                    Changes take effect at the next billing cycle
+                    Upgrades take effect immediately with instant access
+                  </li>
+                  <li className="flex items-start">
+                    <span className="text-blue-500 mr-2">•</span>
+                    Keep all credits and features until subscription ends
                   </li>
                   <li className="flex items-start">
                     <span className="text-blue-500 mr-2">•</span>

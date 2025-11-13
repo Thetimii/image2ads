@@ -96,15 +96,19 @@ export default function PricingPlans({
                     </li>
                     <li className="flex items-start gap-2 text-sm text-gray-600">
                       <span className="text-green-500 mt-0.5">✓</span>
-                      <span>70 images per month</span>
+                      <span>Text-to-Video</span>
                     </li>
-                    <li className="flex items-start gap-2 text-sm text-gray-400">
-                      <span className="text-gray-300 mt-0.5">✗</span>
-                      <span>No video features</span>
+                    <li className="flex items-start gap-2 text-sm text-gray-600">
+                      <span className="text-green-500 mt-0.5">✓</span>
+                      <span>Image-to-Video</span>
                     </li>
-                    <li className="flex items-start gap-2 text-sm text-gray-400">
-                      <span className="text-gray-300 mt-0.5">✗</span>
-                      <span>No music generation</span>
+                    <li className="flex items-start gap-2 text-sm text-gray-600">
+                      <span className="text-green-500 mt-0.5">✓</span>
+                      <span>Text-to-Music</span>
+                    </li>
+                    <li className="flex items-start gap-2 text-sm text-gray-600">
+                      <span className="text-green-500 mt-0.5">✓</span>
+                      <span>70 credits per month</span>
                     </li>
                   </>
                 ) : (

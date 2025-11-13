@@ -263,7 +263,7 @@ export default function ProDiscountModal({ onCloseAction, onUpgradeAction }: Pro
         {/* Footer */}
         <div className="border-t border-gray-200 px-6 py-4 bg-gray-50 rounded-b-2xl">
           <p className="text-xs text-gray-500 text-center">
-            💳 Secure payment • Cancel anytime • 30-day money-back guarantee
+            💳 Secure payment • Auto-renews monthly • Cancel anytime
           </p>
         </div>
       </div>

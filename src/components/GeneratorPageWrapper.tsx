@@ -222,7 +222,7 @@ export default function GeneratorPageWrapper({ user, profile, onShowUpgrade }: G
             {/* Footer */}
             <div className="border-t border-gray-200 px-6 py-4 bg-gray-50 rounded-b-2xl">
               <p className="text-xs text-gray-500 text-center">
-                💳 Secure payment powered by Stripe • Cancel anytime • 30-day money-back guarantee
+                💳 Secure payment powered by Stripe • Auto-renews monthly • Cancel anytime
               </p>
             </div>
           </div>
