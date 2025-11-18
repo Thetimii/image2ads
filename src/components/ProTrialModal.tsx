@@ -1,6 +1,11 @@
 'use client'
 
 import { useState } from 'react'
+import {
+  trackMetaAddPaymentInfo,
+  trackMetaInitiateCheckout,
+  trackMetaSubscribedButtonClick,
+} from '@/lib/meta-events'
 
 interface ProTrialModalProps {
   onCloseAction: () => void
@@ -13,7 +18,15 @@ export default function ProTrialModal({ onCloseAction, onStartTrialAction, sourc
 
   const handleStartTrial = async () => {
     setIsStarting(true)
+    const metaOptions = {
+      plan: 'pro_trial',
+      value: 1,
+      source: `pro_trial_${source}`,
+      contentName: 'Pro Trial',
+    }
+    trackMetaSubscribedButtonClick(metaOptions)
     try {
+      trackMetaInitiateCheckout(metaOptions)
       const response = await fetch('/api/stripe/create-trial-checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -25,6 +38,7 @@ export default function ProTrialModal({ onCloseAction, onStartTrialAction, sourc
 
       if (response.ok) {
         const { url } = await response.json()
+        trackMetaAddPaymentInfo(metaOptions)
         window.location.href = url
       } else {
         const errorData = await response.json()

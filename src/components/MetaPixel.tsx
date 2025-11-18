@@ -3,6 +3,7 @@
 import Script from 'next/script'
 import { useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { trackMetaEvent } from '@/lib/meta-client'
 
 export default function MetaPixel() {
   useEffect(() => {
@@ -30,6 +31,11 @@ export default function MetaPixel() {
           
           // Track PageView
           fbq('track', 'PageView')
+
+          trackMetaEvent({
+            eventName: 'PageView',
+            userData: { email: user?.email || undefined },
+          })
         } else if (cookieConsent === 'declined') {
           fbq('consent', 'revoke')
         }

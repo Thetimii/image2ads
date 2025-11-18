@@ -8,6 +8,12 @@ import type { Profile } from '@/lib/validations'
 import PricingPlans from '@/components/PricingPlans'
 import ProUpsellModal from '@/components/ProUpsellModal'
 import ProTrialModal from '@/components/ProTrialModal'
+import {
+  trackMetaAddPaymentInfo,
+  trackMetaInitiateCheckout,
+  trackMetaSubscribedButtonClick,
+  trackMetaViewContent,
+} from '@/lib/meta-events'
 
 interface GeneratorPageWrapperProps {
   user: User
@@ -76,14 +82,20 @@ export default function GeneratorPageWrapper({ user, profile, onShowUpgrade }: G
             contentId: 'generator',
             contentName: 'AI Generator Dashboard',
           }),
-        });
-        console.log('✅ TikTok ViewContent event tracked');
+        })
+        console.log('✅ TikTok ViewContent event tracked')
       } catch (error) {
-        console.error('❌ Failed to track TikTok ViewContent:', error);
+        console.error('❌ Failed to track TikTok ViewContent:', error)
       }
-    };
+    }
     
-    trackViewContent();
+    trackViewContent()
+    trackMetaViewContent({
+      contentName: 'AI Generator Dashboard',
+      contentCategory: 'dashboard',
+      contentIds: ['generator'],
+      source: 'generator_dashboard',
+    })
   }, []); // Only run once on mount
 
   const handleLockedFeature = async () => {
@@ -114,8 +126,14 @@ export default function GeneratorPageWrapper({ user, profile, onShowUpgrade }: G
   // Lock navigation if tutorial not completed
   const isNavigationLocked = !profile.tutorial_completed
 
-  const handleSubscribe = async (plan: 'starter' | 'pro' | 'business') => {
+  const handleSubscribe = async (plan: 'starter' | 'pro' | 'business', couponId?: string) => {
     setIsUpgrading(plan)
+    const metaOptions = {
+      plan,
+      couponId,
+      source: 'generator_pricing_modal',
+    }
+    trackMetaSubscribedButtonClick(metaOptions)
     try {
       // 🚀 Track TikTok InitiateCheckout event
       try {
@@ -130,8 +148,10 @@ export default function GeneratorPageWrapper({ user, profile, onShowUpgrade }: G
         });
         console.log(`✅ TikTok InitiateCheckout event tracked for ${plan} plan`);
       } catch (tikTokError) {
-        console.error('❌ Failed to track TikTok InitiateCheckout:', tikTokError);
+        console.error('❌ Failed to track TikTok InitiateCheckout:', tikTokError)
       }
+
+      trackMetaInitiateCheckout(metaOptions)
 
       // Create checkout session via API
       const response = await fetch('/api/stripe/create-checkout-session', {
@@ -150,6 +170,7 @@ export default function GeneratorPageWrapper({ user, profile, onShowUpgrade }: G
 
       if (response.ok) {
         const { url } = await response.json()
+        trackMetaAddPaymentInfo(metaOptions)
         window.location.href = url
       } else {
         const errorData = await response.json()

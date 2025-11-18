@@ -1,6 +1,11 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import {
+  trackMetaAddPaymentInfo,
+  trackMetaInitiateCheckout,
+  trackMetaSubscribedButtonClick,
+} from '@/lib/meta-events'
 
 interface ProDiscountModalProps {
   onCloseAction: () => void
@@ -119,7 +124,14 @@ export default function ProDiscountModal({ onCloseAction, onUpgradeAction }: Pro
 
   const handleUpgrade = async () => {
     setIsUpgrading(true)
+    const metaOptions = {
+      plan: 'pro' as const,
+      couponId: 'VbLhruZu',
+      source: 'pro_discount_modal',
+    }
+    trackMetaSubscribedButtonClick(metaOptions)
     try {
+      trackMetaInitiateCheckout(metaOptions)
       const response = await fetch('/api/stripe/create-checkout-session', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -133,6 +145,7 @@ export default function ProDiscountModal({ onCloseAction, onUpgradeAction }: Pro
 
       if (response.ok) {
         const { url } = await response.json()
+        trackMetaAddPaymentInfo(metaOptions)
         window.location.href = url
       } else {
         const errorData = await response.json()

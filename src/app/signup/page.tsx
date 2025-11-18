@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
+import { trackMetaCompleteRegistration } from '@/lib/meta-events'
 
 export default function SignUpPage() {
   const [email, setEmail] = useState('')
@@ -71,6 +72,8 @@ export default function SignUpPage() {
           console.log('Meta Pixel: CompleteRegistration event fired for email signup');
         }
       }
+
+      trackMetaCompleteRegistration({ method: 'email_password' })
 
       // 🚀 Track TikTok CompleteRegistration event (server-side)
       try {
@@ -139,6 +142,8 @@ export default function SignUpPage() {
           console.log('Meta Pixel: CompleteRegistration event fired for Google signup');
         }
       }
+
+      trackMetaCompleteRegistration({ method: 'google_oauth' })
     } catch (error: unknown) {
       setMessage((error as Error).message || 'An error occurred')
       setIsLoading(false)

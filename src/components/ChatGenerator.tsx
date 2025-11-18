@@ -14,6 +14,11 @@ import UpgradePrompt from './UpgradePrompt'
 import { useOnboarding } from '@/hooks/useOnboarding'
 import dynamic from 'next/dynamic'
 import ProUpsellModal from './ProUpsellModal'
+import {
+  trackMetaAddPaymentInfo,
+  trackMetaInitiateCheckout,
+  trackMetaSubscribedButtonClick,
+} from '@/lib/meta-events'
 
 // Generate UUID that works on both server and client
 const generateId = () => {
@@ -231,8 +236,14 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
     return `${count} credit${count > 1 ? 's' : ''}`
   }
   
-  const handleSubscribe = async (plan: 'starter' | 'pro' | 'business') => {
+  const handleSubscribe = async (plan: 'starter' | 'pro' | 'business', couponId?: string) => {
     setIsUpgrading(plan)
+    const metaOptions = {
+      plan,
+      couponId,
+      source: 'generator_inline_pricing',
+    }
+    trackMetaSubscribedButtonClick(metaOptions)
     try {
       // 🚀 Track TikTok InitiateCheckout event
       try {
@@ -247,8 +258,10 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
         });
         console.log(`✅ TikTok InitiateCheckout event tracked for ${plan} plan`);
       } catch (tikTokError) {
-        console.error('❌ Failed to track TikTok InitiateCheckout:', tikTokError);
+        console.error('❌ Failed to track TikTok InitiateCheckout:', tikTokError)
       }
+
+      trackMetaInitiateCheckout(metaOptions)
 
       // Create checkout session via API
       const response = await fetch('/api/stripe/create-checkout-session', {
@@ -267,6 +280,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
 
       if (response.ok) {
         const { url } = await response.json()
+        trackMetaAddPaymentInfo(metaOptions)
         window.location.href = url
       } else {
         const errorData = await response.json()

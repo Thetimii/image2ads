@@ -3,12 +3,18 @@
 import { useRouter } from 'next/navigation'
 import PricingPlans from './PricingPlans'
 import type { StripePlan } from '@/lib/stripe-plans'
+import { trackMetaSubscribedButtonClick } from '@/lib/meta-events'
 
 export default function PricingSection() {
   const router = useRouter()
 
   // For landing page, redirect to signin when user tries to subscribe
-  const handleGetStarted = (plan: StripePlan) => {
+  const handleGetStarted = (plan: StripePlan, couponId?: string) => {
+    trackMetaSubscribedButtonClick({
+      plan,
+      couponId,
+      source: 'marketing_pricing',
+    })
     router.push('/signin')
   }
 

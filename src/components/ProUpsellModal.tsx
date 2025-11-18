@@ -2,6 +2,11 @@
 
 import { useState, useEffect } from 'react'
 import PricingPlans from './PricingPlans'
+import {
+  trackMetaAddPaymentInfo,
+  trackMetaInitiateCheckout,
+  trackMetaSubscribedButtonClick,
+} from '@/lib/meta-events'
 
 interface ProUpsellModalProps {
   onCloseAction: () => void
@@ -122,9 +127,16 @@ export default function ProUpsellModal({ onCloseAction, onUpgradeAction, isUpgra
     return `${mins}:${secs}`
   }
 
-  const handleSubscribe = async (plan: 'starter' | 'pro' | 'business') => {
+  const handleSubscribe = async (plan: 'starter' | 'pro' | 'business', couponId?: string) => {
     setIsUpgradingLocal(plan)
+    const metaOptions = {
+      plan,
+      couponId,
+      source: 'pro_upsell_modal',
+    }
+    trackMetaSubscribedButtonClick(metaOptions)
     try {
+      trackMetaInitiateCheckout(metaOptions)
       const response = await fetch('/api/stripe/create-checkout-session', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -139,6 +151,7 @@ export default function ProUpsellModal({ onCloseAction, onUpgradeAction, isUpgra
 
       if (response.ok) {
         const { url } = await response.json()
+        trackMetaAddPaymentInfo(metaOptions)
         window.location.href = url
       } else {
         const errorData = await response.json()

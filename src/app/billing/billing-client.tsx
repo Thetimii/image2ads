@@ -6,6 +6,12 @@ import type { Profile } from '@/lib/validations'
 import { type StripePlan, STRIPE_PLANS } from '@/lib/stripe-plans'
 import DashboardLayout from '@/components/DashboardLayout'
 import PricingPlans from '@/components/PricingPlans'
+import {
+  trackMetaAddPaymentInfo,
+  trackMetaInitiateCheckout,
+  trackMetaPurchase,
+  trackMetaSubscribedButtonClick,
+} from '@/lib/meta-events'
 
 interface BillingClientProps {
   user: User
@@ -52,6 +58,13 @@ export default function BillingClient({ user, profile }: BillingClientProps) {
           if (data.is_valid) {
             console.log('✨ Pro 20% discount is valid, redirecting to checkout...')
             setIsLoading('pro')
+            const metaOptions = {
+              plan: 'pro' as const,
+              couponId: 'VbLhruZu',
+              source: 'billing_promo_redirect',
+            }
+            trackMetaSubscribedButtonClick(metaOptions)
+            trackMetaInitiateCheckout(metaOptions)
             
             // Create checkout with discount
             const checkoutResponse = await fetch('/api/stripe/create-checkout-session', {
@@ -67,6 +80,7 @@ export default function BillingClient({ user, profile }: BillingClientProps) {
             
             if (checkoutResponse.ok) {
               const { url } = await checkoutResponse.json()
+              trackMetaAddPaymentInfo(metaOptions)
               window.location.href = url
             } else {
               console.error('Failed to create checkout session')
@@ -100,16 +114,20 @@ export default function BillingClient({ user, profile }: BillingClientProps) {
       const planName = profile.subscription_id?.toLowerCase() || ''
       let planValue = 0
       let planDisplayName = 'Subscription'
+      let planKey: 'starter' | 'pro' | 'business' | undefined
       
       if (planName.includes('starter')) {
         planValue = STRIPE_PLANS.starter.price
         planDisplayName = 'Starter Plan'
+        planKey = 'starter'
       } else if (planName.includes('pro')) {
         planValue = STRIPE_PLANS.pro.price
         planDisplayName = 'Pro Plan'
+        planKey = 'pro'
       } else if (planName.includes('business')) {
         planValue = STRIPE_PLANS.business.price
         planDisplayName = 'Business Plan'
+        planKey = 'business'
       }
       
       // Fire Meta Pixel Purchase event
@@ -125,6 +143,15 @@ export default function BillingClient({ user, profile }: BillingClientProps) {
           })
           console.log(`🔥 Meta Pixel: Purchase event fired for ${planDisplayName} ($${planValue})`)
         }
+      }
+
+      if (planValue > 0) {
+        trackMetaPurchase({
+          ...(planKey ? { plan: planKey } : {}),
+          value: planValue,
+          contentName: planDisplayName,
+          source: 'billing_success',
+        })
       }
       
       // Clean up URL (remove success parameter)
@@ -178,8 +205,14 @@ export default function BillingClient({ user, profile }: BillingClientProps) {
     return 'Free Plan'
   }
 
-  const handleSubscribe = async (plan: StripePlan) => {
+  const handleSubscribe = async (plan: StripePlan, couponId?: string) => {
     setIsLoading(plan)
+    const metaOptions = {
+      plan,
+      couponId,
+      source: 'billing_page',
+    }
+    trackMetaSubscribedButtonClick(metaOptions)
     try {
       // 🚀 Track TikTok InitiateCheckout event
       try {
@@ -194,8 +227,10 @@ export default function BillingClient({ user, profile }: BillingClientProps) {
         });
         console.log(`✅ TikTok InitiateCheckout event tracked for ${plan} plan`);
       } catch (tikTokError) {
-        console.error('❌ Failed to track TikTok InitiateCheckout:', tikTokError);
+        console.error('❌ Failed to track TikTok InitiateCheckout:', tikTokError)
       }
+
+      trackMetaInitiateCheckout(metaOptions)
 
       // Create checkout session via API
       const response = await fetch('/api/stripe/create-checkout-session', {
@@ -214,6 +249,7 @@ export default function BillingClient({ user, profile }: BillingClientProps) {
 
       if (response.ok) {
         const { url } = await response.json()
+        trackMetaAddPaymentInfo(metaOptions)
         window.location.href = url
       } else {
         const errorData = await response.json()

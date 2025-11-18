@@ -12,6 +12,12 @@ import PricingPlans from '@/components/PricingPlans'
 import ProUpsellModal from '@/components/ProUpsellModal'
 import ProDiscountModal from '@/components/ProDiscountModal'
 import ProTrialModal from '@/components/ProTrialModal'
+import {
+  trackMetaAddPaymentInfo,
+  trackMetaInitiateCheckout,
+  trackMetaPurchase,
+  trackMetaSubscribedButtonClick,
+} from '@/lib/meta-events'
 
 
 interface DashboardLayoutProps {
@@ -128,9 +134,16 @@ export default function DashboardLayout({ user, profile, children, onDemoOpen, i
     }
   }
 
-  const handleSubscribe = async (plan: 'starter' | 'pro' | 'business') => {
+  const handleSubscribe = async (plan: 'starter' | 'pro' | 'business', couponId?: string) => {
     setIsUpgrading(plan)
+    const metaOptions = {
+      plan,
+      couponId,
+      source: 'dashboard_layout_pricing',
+    }
+    trackMetaSubscribedButtonClick(metaOptions)
     try {
+      trackMetaInitiateCheckout(metaOptions)
       // Create checkout session via API
       const response = await fetch('/api/stripe/create-checkout-session', {
         method: 'POST',
@@ -146,6 +159,7 @@ export default function DashboardLayout({ user, profile, children, onDemoOpen, i
 
       if (response.ok) {
         const { url } = await response.json()
+        trackMetaAddPaymentInfo(metaOptions)
         window.location.href = url
       } else {
         const errorData = await response.json()
@@ -199,6 +213,51 @@ export default function DashboardLayout({ user, profile, children, onDemoOpen, i
   useEffect(() => {
     setLoadingPath(null)
   }, [pathname])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const params = new URLSearchParams(window.location.search)
+    const successTypes: Array<'upgrade' | 'trial'> = []
+
+    if (params.get('upgrade') === 'success') successTypes.push('upgrade')
+    if (params.get('trial') === 'success') successTypes.push('trial')
+
+    if (!successTypes.length) return
+
+    const subscriptionId = profile.subscription_id?.toLowerCase() || ''
+    let planKey: 'starter' | 'pro' | 'business' | undefined
+    let planValue = 0
+    let planDisplayName = 'Subscription'
+
+    if (subscriptionId.includes('starter')) {
+      planKey = 'starter'
+      planValue = STRIPE_PLANS.starter.price
+      planDisplayName = 'Starter Plan'
+    } else if (subscriptionId.includes('pro')) {
+      planKey = 'pro'
+      planValue = STRIPE_PLANS.pro.price
+      planDisplayName = 'Pro Plan'
+    } else if (subscriptionId.includes('business')) {
+      planKey = 'business'
+      planValue = STRIPE_PLANS.business.price
+      planDisplayName = 'Business Plan'
+    }
+
+    successTypes.forEach(type => {
+      const eventValue = type === 'trial' ? 1 : planValue
+      trackMetaPurchase({
+        ...(planKey ? { plan: planKey } : {}),
+        value: eventValue || planValue || undefined,
+        contentName: planDisplayName,
+        source: `dashboard_${type}_success`,
+      })
+      params.delete(type)
+    })
+
+    const search = params.toString()
+    const nextUrl = search ? `${window.location.pathname}?${search}` : window.location.pathname
+    window.history.replaceState({}, '', nextUrl)
+  }, [profile.subscription_id, profile.subscription_status])
 
   const isCurrentPath = (href: string) => {
     // Always check pathname for instant visual update
