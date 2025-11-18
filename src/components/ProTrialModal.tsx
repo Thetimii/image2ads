@@ -20,7 +20,7 @@ export default function ProTrialModal({ onCloseAction, onStartTrialAction, sourc
     setIsStarting(true)
     const metaOptions = {
       plan: 'pro_trial',
-      value: 1,
+      value: 5,
       source: `pro_trial_${source}`,
       contentName: 'Pro Trial',
     }
@@ -72,12 +72,12 @@ export default function ProTrialModal({ onCloseAction, onStartTrialAction, sourc
             </div>
             
             <h2 className="text-xl font-bold text-gray-900 mb-1">
-              {source === 'trial_button' ? 'Try Pro for 3 Days – $1' : 'Not sure yet?'}
+              {source === 'trial_button' ? 'Try Pro for 3 Days – $5' : 'Not sure yet?'}
             </h2>
             <p className="text-sm text-gray-600">
               {source === 'trial_button' 
-                ? 'Get full Pro access for just $1' 
-                : 'Try full Pro for 3 days — just $1'
+                ? 'Get full Pro access for just $5' 
+                : 'Try full Pro for 3 days — just $5'
               }
             </p>
           </div>
@@ -89,7 +89,7 @@ export default function ProTrialModal({ onCloseAction, onStartTrialAction, sourc
             {/* Price Display */}
             <div className="text-center mb-3">
               <div className="text-4xl font-bold text-purple-600 mb-1">
-                $1.00
+                $5.00
               </div>
               <p className="text-sm text-gray-600">
                 3 days Pro access
@@ -128,7 +128,7 @@ export default function ProTrialModal({ onCloseAction, onStartTrialAction, sourc
             <div className="bg-purple-100/50 rounded-lg p-2.5">
               <p className="text-xs text-gray-600 leading-relaxed text-center">
                 <span className="font-semibold text-gray-700">How it works:</span><br/>
-                Pay $1 now • Use Pro for 3 days • Automatically renews at $19.99/month unless you cancel
+                Pay $5 now • Use Pro for 3 days • Automatically renews at $19.99/month unless you cancel
               </p>
             </div>
           </div>
@@ -139,7 +139,7 @@ export default function ProTrialModal({ onCloseAction, onStartTrialAction, sourc
             disabled={isStarting}
             className="w-full bg-gradient-to-r from-purple-500 to-pink-500 text-white py-3 px-6 rounded-xl font-semibold text-base hover:from-purple-600 hover:to-pink-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg"
           >
-            {isStarting ? 'Starting...' : 'Start 3-Day Trial for $1'}
+            {isStarting ? 'Starting...' : 'Start 3-Day Trial for $5'}
           </button>
 
           {/* No Thanks Button */}

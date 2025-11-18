@@ -119,7 +119,7 @@ export default function GeneratorPageWrapper({ user, profile, onShowUpgrade }: G
 
   // Handler for showing trial modal
   const handleShowTrialModal = () => {
-    // Always show the Pro trial modal when clicking "$1 Pro Trial" button
+    // Always show the Pro trial modal when clicking "$5 Pro Trial" button
     setShowProTrialModal(true)
   }
 
@@ -194,7 +194,7 @@ export default function GeneratorPageWrapper({ user, profile, onShowUpgrade }: G
         onShowUpgrade={handleShowTrialModal}
       />
       
-      {/* Pro Trial Modal ($1 trial) */}
+      {/* Pro Trial Modal ($5 trial) */}
       {showProTrialModal && (
         <ProTrialModal
           onCloseAction={() => setShowProTrialModal(false)}

@@ -1174,8 +1174,8 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
             <button
               onClick={(e) => {
                 e.stopPropagation()
-                console.log('$1 Pro Trial button clicked, onShowUpgrade exists:', !!onShowUpgrade)
-                // Always show the $1 trial modal
+                console.log('$5 Pro Trial button clicked, onShowUpgrade exists:', !!onShowUpgrade)
+                // Always show the $5 trial modal
                 if (onShowUpgrade) {
                   onShowUpgrade()
                 } else {

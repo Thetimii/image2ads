@@ -483,7 +483,7 @@ export default function DashboardLayout({ user, profile, children, onDemoOpen, i
             />
           )}
 
-          {/* Pro Trial Modal ($1 at 0 credits) */}
+          {/* Pro Trial Modal ($5 at 0 credits) */}
           {showProTrialModal && (
             <ProTrialModal
               onCloseAction={() => {
