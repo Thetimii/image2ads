@@ -1207,7 +1207,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
 
       {/* Chat scroll area */}
       <div 
-        className="flex-1 overflow-y-auto px-8 py-6 bg-[#f7f7f8] space-y-6 relative"
+        className="flex-1 overflow-y-auto px-3 sm:px-6 lg:px-8 py-3 sm:py-4 lg:py-6 bg-[#f7f7f8] space-y-3 sm:space-y-4 lg:space-y-6 relative"
         onDragOver={(e) => { e.preventDefault(); if (requiresImage) setIsDragging(true) }}
         onDragLeave={() => setIsDragging(false)}
         onDrop={(e) => {
@@ -1319,51 +1319,51 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
         )}
         {history.map(m => (
             <div key={m.id} className={`flex w-full ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-            <div className={`${m.role === 'user' ? 'bg-purple-600 text-white rounded-2xl rounded-br-sm' : 'bg-white border border-gray-200 rounded-2xl rounded-bl-sm'} px-4 py-3 shadow-sm text-sm max-w-[65%]`}>
+            <div className={`${m.role === 'user' ? 'bg-purple-600 text-white rounded-2xl rounded-br-sm' : 'bg-white border border-gray-200 rounded-2xl rounded-bl-sm'} px-3 sm:px-4 py-2 sm:py-3 shadow-sm text-xs sm:text-sm max-w-[85%] sm:max-w-[75%] lg:max-w-[65%]`}>
               <div className="whitespace-pre-wrap leading-relaxed">
                 {m.content}
               </div>
               {m.status === 'pending' && (
-                <div className="mt-3 w-[260px] h-[170px] rounded-lg bg-gradient-to-br from-purple-50 via-pink-50 to-purple-50 relative overflow-hidden border border-purple-200/50">
+                <div className="mt-2 sm:mt-3 w-full sm:w-[220px] lg:w-[260px] h-[120px] sm:h-[140px] lg:h-[170px] rounded-lg bg-gradient-to-br from-purple-50 via-pink-50 to-purple-50 relative overflow-hidden border border-purple-200/50">
                   {/* Animated shimmer */}
                   <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/50 to-transparent animate-[shimmer_2s_infinite] -translate-x-full" />
                   
                   {/* Pulsing dots */}
-                  <div className="absolute top-4 left-4 flex gap-1">
-                    <div className="w-2 h-2 bg-purple-400 rounded-full animate-bounce [animation-delay:-0.3s]" />
-                    <div className="w-2 h-2 bg-pink-400 rounded-full animate-bounce [animation-delay:-0.15s]" />
-                    <div className="w-2 h-2 bg-purple-400 rounded-full animate-bounce" />
+                  <div className="absolute top-2 sm:top-3 lg:top-4 left-2 sm:left-3 lg:left-4 flex gap-0.5 sm:gap-1">
+                    <div className="w-1.5 sm:w-2 h-1.5 sm:h-2 bg-purple-400 rounded-full animate-bounce [animation-delay:-0.3s]" />
+                    <div className="w-1.5 sm:w-2 h-1.5 sm:h-2 bg-pink-400 rounded-full animate-bounce [animation-delay:-0.15s]" />
+                    <div className="w-1.5 sm:w-2 h-1.5 sm:h-2 bg-purple-400 rounded-full animate-bounce" />
                   </div>
                   
                   {/* Rotating spinner */}
-                  <div className="absolute top-4 right-4">
-                    <div className="w-4 h-4 border-2 border-purple-300 border-t-purple-600 rounded-full animate-spin" />
+                  <div className="absolute top-2 sm:top-3 lg:top-4 right-2 sm:right-3 lg:right-4">
+                    <div className="w-3 sm:w-4 h-3 sm:h-4 border-2 border-purple-300 border-t-purple-600 rounded-full animate-spin" />
                   </div>
                   
                   {/* Center text with typing animation */}
-                  <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
-                    <div className="text-purple-600 font-medium text-sm mb-1">
+                  <div className="absolute inset-0 flex flex-col items-center justify-center text-center px-2">
+                    <div className="text-purple-600 font-medium text-xs sm:text-sm mb-0.5 sm:mb-1">
                       Generating {meta.resultType}
                     </div>
-                    <div className="text-xs text-purple-500/70 animate-pulse">
-                      This may take {meta.resultType === 'video' ? '2-5 minutes' : '30-60 seconds'}
+                    <div className="text-[10px] sm:text-xs text-purple-500/70 animate-pulse">
+                      {meta.resultType === 'video' ? '2-5 min' : '30-60 sec'}
                     </div>
                   </div>
                   
                   {/* Progress bar */}
-                  <div className="absolute bottom-4 left-4 right-4 h-1 bg-purple-100 rounded-full overflow-hidden">
+                  <div className="absolute bottom-2 sm:bottom-3 lg:bottom-4 left-2 sm:left-3 lg:left-4 right-2 sm:right-3 lg:right-4 h-0.5 sm:h-1 bg-purple-100 rounded-full overflow-hidden">
                     <div className="h-full bg-gradient-to-r from-purple-500 to-pink-500 rounded-full animate-[progress_3s_ease-in-out_infinite]" />
                   </div>
                 </div>
               )}
               {m.mediaUrl && m.mediaType === 'image' && (
-                <div className="mt-3 relative group">
+                <div className="mt-2 sm:mt-3 relative group">
                   <Image 
                     src={m.mediaUrl} 
                     alt="Generated result" 
                     width={400} 
                     height={400} 
-                    className="rounded-lg w-full max-w-[400px] shadow-sm cursor-pointer hover:shadow-lg transition-shadow" 
+                    className="rounded-lg w-full max-w-full sm:max-w-[350px] lg:max-w-[400px] shadow-sm cursor-pointer hover:shadow-lg transition-shadow" 
                     onClick={() => m.mediaUrl && window.open(m.mediaUrl, '_blank')}
                   />
                   <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -1393,11 +1393,11 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
                 </div>
               )}
               {m.mediaUrl && m.mediaType === 'video' && (
-                <div className="mt-3 relative group">
+                <div className="mt-2 sm:mt-3 relative group">
                   <video 
                     src={m.mediaUrl} 
                     controls 
-                    className="rounded-lg w-full max-w-[500px] shadow-md" 
+                    className="rounded-lg w-full max-w-full sm:max-w-[400px] lg:max-w-[500px] shadow-md" 
                   />
                   <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
                     <button
@@ -1426,8 +1426,8 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
                 </div>
               )}
               {m.mediaUrl && m.mediaType === 'music' && (
-                <div className="mt-3 relative group">
-                  <div className="bg-gradient-to-r from-purple-500 to-pink-500 rounded-lg overflow-hidden max-w-[500px]">
+                <div className="mt-2 sm:mt-3 relative group">
+                  <div className="bg-gradient-to-r from-purple-500 to-pink-500 rounded-lg overflow-hidden max-w-full sm:max-w-[400px] lg:max-w-[500px]">
                     {/* Cover Image */}
                     {m.coverUrl && (
                       <div className="relative w-full aspect-square">
@@ -1492,7 +1492,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
       </div>
 
       {/* Bottom input bar */}
-      <div className="border-t border-gray-200 bg-white px-4 py-3 flex flex-col gap-2 shadow-inner">
+      <div className="border-t border-gray-200 bg-white px-2 sm:px-3 lg:px-4 py-2 sm:py-2.5 lg:py-3 flex flex-col gap-1.5 sm:gap-2 shadow-inner">
         {/* Examples */}
         <div className="flex gap-2 overflow-x-auto text-xs text-gray-600 pb-1 hide-scrollbar pr-4">
           {EXAMPLES[gen.activeTab].map(ex => (
@@ -1633,13 +1633,13 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
         
         {/* Quick controls - only show aspect ratio for images/videos */}
         {!isMusicMode && (
-          <div className="flex justify-center gap-4 mb-3 flex-wrap">
-            <div className="flex gap-3 items-center">
+          <div className="flex justify-center gap-2 sm:gap-3 lg:gap-4 mb-1 sm:mb-2 lg:mb-3 flex-wrap">
+            <div className="flex gap-2 sm:gap-3 items-center">
               {aspectOptions.map(opt => (
                 <button
                   key={opt.value}
                   onClick={() => gen.setAspectRatio(opt.value)}
-                  className={`flex flex-col items-center justify-center gap-2 p-3 rounded-lg transition ${
+                  className={`flex flex-col items-center justify-center gap-1 sm:gap-1.5 lg:gap-2 p-2 sm:p-2.5 lg:p-3 rounded-lg transition ${
                     gen.aspectRatio === opt.value 
                       ? 'bg-purple-50 border-2 border-purple-500' 
                       : 'border-2 border-gray-200 hover:bg-gray-50'
@@ -1650,7 +1650,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
                     className={`rounded border-2 ${
                       gen.aspectRatio === opt.value ? 'border-purple-500 bg-purple-200' : 'border-gray-400 bg-gray-200'
                     } ${
-                      opt.value === 'landscape' ? 'w-10 h-6' : 'w-6 h-10'
+                      opt.value === 'landscape' ? 'w-7 h-4 sm:w-9 sm:h-5 lg:w-10 lg:h-6' : 'w-4 h-7 sm:w-5 sm:h-9 lg:w-6 lg:h-10'
                     }`}
                   />
                   {/* Label */}
@@ -1712,13 +1712,14 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
               sendPrompt()
             }}
             disabled={gen.isGenerating || isSubmitting || (requiresImage && localFiles.length === 0) || !input.trim()}
-            className={`bg-gradient-to-r from-purple-500 to-pink-500 text-white px-5 py-2 rounded-full text-sm font-semibold hover:scale-[1.03] active:scale-[0.97] transition disabled:opacity-50 disabled:hover:scale-100 flex items-center gap-2 ${shouldHighlightGenerate ? 'relative z-[9998]' : ''}`}
+            className={`bg-gradient-to-r from-purple-500 to-pink-500 text-white px-3 sm:px-4 lg:px-5 py-1.5 sm:py-2 rounded-full text-xs sm:text-sm font-semibold hover:scale-[1.03] active:scale-[0.97] transition disabled:opacity-50 disabled:hover:scale-100 flex items-center gap-1 sm:gap-1.5 lg:gap-2 whitespace-nowrap ${shouldHighlightGenerate ? 'relative z-[9998]' : ''}`}
             style={shouldHighlightGenerate ? {
               animation: 'soft-glow-pulse 2s ease-in-out infinite'
             } : undefined}
           >
-            <span>⚡ Generate</span>
-            <span className="bg-white/20 px-2 py-0.5 rounded-full text-xs">
+            <span className="hidden sm:inline">⚡ Generate</span>
+            <span className="sm:hidden">⚡</span>
+            <span className="bg-white/20 px-1.5 sm:px-2 py-0.5 rounded-full text-[10px] sm:text-xs">
               {getButtonCreditText()}
             </span>
           </button>
