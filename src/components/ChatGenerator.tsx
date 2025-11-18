@@ -1185,9 +1185,9 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
                 }
               }}
               className="text-sm bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white px-4 py-2 rounded-full font-semibold shadow-md hover:shadow-lg hover:scale-105 transition-all cursor-pointer"
-              title="Get Pro access - $1 for 3 days"
+              title="Get Pro access - $5 for 3 days"
             >
-              ✨ $1 Pro Trial
+              ✨ $5 Pro Trial
             </button>
           )}
           
