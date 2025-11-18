@@ -30,7 +30,12 @@ export async function POST(request: NextRequest) {
     }
 
     const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    
+    // Don't fail if user is not authenticated - some events (like PageView) can be anonymous
+    if (authError) {
+      console.warn('[MetaCAPI] No authenticated user, sending anonymous event')
+    }
 
     const userAgent = request.headers.get('user-agent') || undefined
     const referer = body.eventSourceUrl || request.headers.get('referer') || process.env.NEXT_PUBLIC_APP_URL || 'https://image2ad.com'
@@ -65,9 +70,11 @@ export async function POST(request: NextRequest) {
       },
     })
 
-    return NextResponse.json(response, { status: response.success ? 200 : 500 })
+    // Return success even if Meta API fails - don't break user flow
+    return NextResponse.json(response, { status: 200 })
   } catch (error) {
     console.error('[MetaCAPI] API route error:', error)
-    return NextResponse.json({ error: 'Failed to send Meta event' }, { status: 500 })
+    // Return 200 to not break user experience, log error for debugging
+    return NextResponse.json({ success: false, error: 'Internal error' }, { status: 200 })
   }
 }
