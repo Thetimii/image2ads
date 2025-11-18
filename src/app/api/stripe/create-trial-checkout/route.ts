@@ -67,14 +67,11 @@ export async function POST(request: NextRequest) {
         .eq('id', user.id)
     }
 
-    // Use env variable or fallback to hardcoded $5 trial price
-    const trialPriceId = process.env.STRIPE_TRIAL_PRICE_ID || 'price_1SUpz3EmSPK4NJFzWivSKrCE'
-
     console.log('Creating trial checkout session:', {
       userId: user.id,
       customerId,
       proPriceId: process.env.STRIPE_PRO_PRICE_ID,
-      setupFeePriceId: trialPriceId,
+      setupFeePriceId: 'price_1SUpz3EmSPK4NJFzWivSKrCE',
     })
 
     // Create Stripe checkout session for Pro subscription with 3-day trial + $5 setup fee
@@ -88,7 +85,7 @@ export async function POST(request: NextRequest) {
           quantity: 1,
         },
         {
-          price: trialPriceId, // $5 one-time setup fee
+          price: 'price_1SUpz3EmSPK4NJFzWivSKrCE', // $5 one-time setup fee
           quantity: 1,
         },
       ],
