@@ -71,7 +71,7 @@ export async function POST(request: NextRequest) {
       userId: user.id,
       customerId,
       proPriceId: process.env.STRIPE_PRO_PRICE_ID,
-      setupFeePriceId: 'price_1SSwkxEmSPK4NJFzt16AvWca',
+      setupFeePriceId: process.env.STRIPE_TRIAL_PRICE_ID,
     })
 
     // Create Stripe checkout session for Pro subscription with 3-day trial + $1 setup fee
@@ -85,7 +85,7 @@ export async function POST(request: NextRequest) {
           quantity: 1,
         },
         {
-          price: 'price_1SSwkxEmSPK4NJFzt16AvWca', // $1 one-time setup fee
+          price: process.env.STRIPE_TRIAL_PRICE_ID!, // $5 one-time setup fee
           quantity: 1,
         },
       ],
