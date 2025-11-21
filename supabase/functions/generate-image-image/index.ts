@@ -74,6 +74,7 @@ async function handler(req: Request) {
     console.log(`[generate-image-image] Request body:`, body);
     jobId = body?.jobId ?? null;
     const selectedModel = body?.model ?? 'nano-banana'; // Default to regular model
+    const selectedResolution = body?.resolution ?? '2K'; // Default to 2K for Pro model
     
     if (!jobId) {
       console.log(`[generate-image-image] ERROR: No jobId provided in body`);
@@ -165,15 +166,16 @@ async function handler(req: Request) {
     let taskInput: any;
 
     if (selectedModel === 'nano-banana-pro') {
-      // Nano Banana Pro with 4K resolution and image_input array
+      // Nano Banana Pro with user-selected resolution (1K, 2K, or 4K) and image_input array
       kieModel = "nano-banana-pro";
       taskInput = {
         prompt: userPrompt,
         image_input: imageUrls, // Pro model uses image_input array
         aspect_ratio: aspectRatio,
-        resolution: "4K", // Pro model uses 4K
+        resolution: selectedResolution, // User-selected: 1K, 2K, or 4K
         output_format: "png"
       };
+      console.log(`[generate-image-image] Using Pro model with ${selectedResolution} resolution`);
     } else {
       // Regular Nano Banana Edit
       kieModel = "google/nano-banana-edit";

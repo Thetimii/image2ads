@@ -44,6 +44,7 @@ async function handler(req: Request) {
     const body = await req.json();
     jobId = body?.jobId ?? null;
     const selectedModel = body?.model ?? 'nano-banana'; // Default to regular model
+    const selectedResolution = body?.resolution ?? '2K'; // Default to 2K for Pro model
     
     if (!jobId) return new Response("Job ID required", { status: 400, headers: cors });
 
@@ -99,15 +100,16 @@ async function handler(req: Request) {
     let taskInput: any;
 
     if (selectedModel === 'nano-banana-pro') {
-      // Nano Banana Pro with 4K resolution
+      // Nano Banana Pro with user-selected resolution (1K, 2K, or 4K)
       kieModel = "nano-banana-pro";
       taskInput = {
         prompt: job.prompt || "A beautiful landscape",
         image_input: [], // Empty for text-to-image
         aspect_ratio: aspectRatio,
-        resolution: "4K", // Pro model uses 4K
+        resolution: selectedResolution, // User-selected: 1K, 2K, or 4K
         output_format: "png"
       };
+      console.log(`[generate-text-image] Using Pro model with ${selectedResolution} resolution`);
     } else {
       // Regular Nano Banana
       kieModel = "google/nano-banana";

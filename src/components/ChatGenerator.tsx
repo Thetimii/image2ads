@@ -214,6 +214,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
 
   // Model selection for image generation (text-to-image and image-to-image only)
   const [selectedModel, setSelectedModel] = useState<'nano-banana' | 'nano-banana-pro'>('nano-banana')
+  const [selectedResolution, setSelectedResolution] = useState<'1K' | '2K' | '4K'>('2K') // Default to 2K for Pro model
 
   const meta = TAB_META[gen.activeTab]
   const history = gen.histories[gen.activeTab]
@@ -850,7 +851,13 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
       // Add model parameter for image generation modes
       if (isImageMode) {
         requestBody.model = selectedModel
-        console.log(`[ChatGenerator] Selected model: ${selectedModel}`)
+        // Add resolution for Pro model
+        if (selectedModel === 'nano-banana-pro') {
+          requestBody.resolution = selectedResolution
+          console.log(`[ChatGenerator] Selected model: ${selectedModel}, Resolution: ${selectedResolution}`)
+        } else {
+          console.log(`[ChatGenerator] Selected model: ${selectedModel}`)
+        }
       }
       
       const resp = await fetch(endpoint, {
@@ -1755,6 +1762,8 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
             <ModelSelector
               selectedModel={selectedModel}
               onSelectModel={setSelectedModel}
+              selectedResolution={selectedResolution}
+              onSelectResolution={setSelectedResolution}
               disabled={gen.isGenerating || isSubmitting}
             />
           </div>
