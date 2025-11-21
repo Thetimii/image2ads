@@ -43,6 +43,8 @@ async function handler(req: Request) {
   try {
     const body = await req.json();
     jobId = body?.jobId ?? null;
+    const selectedModel = body?.model ?? 'nano-banana'; // Default to regular model
+    
     if (!jobId) return new Response("Job ID required", { status: 400, headers: cors });
 
     const KIE_API_KEY = Deno.env.get("KIE_API_KEY");
@@ -58,10 +60,14 @@ async function handler(req: Request) {
     if (jobErr || !job)
       return new Response("Job not found", { status: 404, headers: cors });
 
+    // Determine credit cost based on model
+    const creditAmount = selectedModel === 'nano-banana-pro' ? 6 : 1;
+    console.log(`[generate-text-image] Model: ${selectedModel}, Credits: ${creditAmount}`);
+
     // Check and consume credits
     const { data: creditResult, error: creditError } = await supabase.rpc("consume_credit", {
       user_uuid: job.user_id,
-      credit_amount: 1
+      credit_amount: creditAmount
     });
     
     if (creditError || !creditResult) {
@@ -74,26 +80,47 @@ async function handler(req: Request) {
     // Update job status to processing
     await supabase.from("jobs").update({ status: "processing" }).eq("id", jobId);
 
-    // Determine image size from aspect_ratio field
-    let imageSize = "16:9"; // Default to landscape
-    if (job.aspect_ratio === 'portrait') imageSize = "9:16";
-    else if (job.aspect_ratio === 'landscape') imageSize = "16:9";
-    else if (job.aspect_ratio === 'square') imageSize = "1:1";
+    // Determine aspect ratio
+    let aspectRatio = "1:1"; // Default
+    if (job.aspect_ratio === 'portrait') aspectRatio = "9:16";
+    else if (job.aspect_ratio === 'landscape') aspectRatio = "16:9";
+    else if (job.aspect_ratio === 'square') aspectRatio = "1:1";
 
-    console.log(`[generate-text-image] Creating task for job ${jobId} with prompt: ${job.prompt}`);
-    console.log(`[generate-text-image] Aspect ratio: ${job.aspect_ratio}, Image size: ${imageSize}`);
+    console.log(`[generate-text-image] Creating task for job ${jobId}`);
+    console.log(`[generate-text-image] Model: ${selectedModel}, Aspect ratio: ${aspectRatio}`);
 
-    // Create Kie.ai task
-    const taskId = await createKieTask(
-      "google/nano-banana",
-      {
+    // Prepare callback URL
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const callbackUrl = `${supabaseUrl}/functions/v1/kie-callback`;
+
+    // Create task based on selected model
+    let taskId: string;
+    let kieModel: string;
+    let taskInput: any;
+
+    if (selectedModel === 'nano-banana-pro') {
+      // Nano Banana Pro with 4K resolution
+      kieModel = "nano-banana-pro";
+      taskInput = {
+        prompt: job.prompt || "A beautiful landscape",
+        image_input: [], // Empty for text-to-image
+        aspect_ratio: aspectRatio,
+        resolution: "4K", // Pro model uses 4K
+        output_format: "png"
+      };
+    } else {
+      // Regular Nano Banana
+      kieModel = "google/nano-banana";
+      taskInput = {
         prompt: job.prompt || "A beautiful landscape",
         output_format: "png",
-        image_size: imageSize
-      },
-      KIE_API_KEY
-    );
+        image_size: aspectRatio
+      };
+    }
 
+    console.log(`[generate-text-image] KIE Model: ${kieModel}, Input:`, taskInput);
+
+    taskId = await createKieTask(kieModel, taskInput, KIE_API_KEY, callbackUrl);
     console.log(`[generate-text-image] Task created: ${taskId}`);
 
     // Update job with task_id and keep status as processing
@@ -105,11 +132,11 @@ async function handler(req: Request) {
 
     // Log usage event immediately (credits already consumed)
     const userId = job.user_id as string;
-    console.log(`[generate-text-image] Consuming 1 credit for user ${userId}, job ${jobId}`);
+    console.log(`[generate-text-image] Consuming ${creditAmount} credit(s) for user ${userId}, job ${jobId}`);
     await supabase.from("usage_events").insert({
       user_id: userId,
       event_type: "text-to-image",
-      credits_consumed: 1
+      credits_consumed: creditAmount
     });
 
     // Return immediately with task info - frontend will poll for results

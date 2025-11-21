@@ -14,6 +14,7 @@ import UpgradePrompt from './UpgradePrompt'
 import { useOnboarding } from '@/hooks/useOnboarding'
 import dynamic from 'next/dynamic'
 import ProUpsellModal from './ProUpsellModal'
+import ModelSelector from './ModelSelector'
 import {
   trackMetaAddPaymentInfo,
   trackMetaInitiateCheckout,
@@ -211,10 +212,14 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
   const [musicDuration, setMusicDuration] = useState<10 | 30 | 60 | 120 | 180>(30) // Duration in seconds
   const [coverPrompt, setCoverPrompt] = useState('') // Optional custom prompt for cover image
 
+  // Model selection for image generation (text-to-image and image-to-image only)
+  const [selectedModel, setSelectedModel] = useState<'nano-banana' | 'nano-banana-pro'>('nano-banana')
+
   const meta = TAB_META[gen.activeTab]
   const history = gen.histories[gen.activeTab]
   const requiresImage = gen.activeTab === 'image-to-image' || gen.activeTab === 'image-to-video'
   const isMusicMode = gen.activeTab === 'text-to-music'
+  const isImageMode = gen.activeTab === 'text-to-image' || gen.activeTab === 'image-to-image'
   // Check if feature is locked: only locked if marked as locked AND user has free status
   const isLocked = !!meta.locked && profile?.subscription_status === 'free'
   
@@ -229,11 +234,28 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
   }
   
   const getButtonCreditText = () => {
-    const count = meta.resultType === 'music' ? 3 : meta.resultType === 'video' ? 8 : 1
+    let count: number
+    if (meta.resultType === 'music') {
+      count = 3
+    } else if (meta.resultType === 'video') {
+      count = 8
+    } else {
+      // Image generation - check selected model
+      count = isImageMode && selectedModel === 'nano-banana-pro' ? 6 : 1
+    }
+    
     if (isFreeUser) {
       return count === 1 ? '1 free image' : `${count} free images`
     }
     return `${count} credit${count > 1 ? 's' : ''}`
+  }
+  
+  // Get credit cost for current mode and model selection
+  const getCreditCost = () => {
+    if (meta.resultType === 'music') return 3
+    if (meta.resultType === 'video') return 8
+    if (isImageMode && selectedModel === 'nano-banana-pro') return 6
+    return 1
   }
   
   const handleSubscribe = async (plan: 'starter' | 'pro' | 'business', couponId?: string) => {
@@ -652,7 +674,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
     }
     
     // Check if user has sufficient credits BEFORE generation
-    const requiredCredits = meta.resultType === 'video' ? 8 : meta.resultType === 'music' ? 3 : 1
+    const requiredCredits = getCreditCost()
     if (profile.credits < requiredCredits) {
       console.log(`[ChatGenerator] Blocked: Insufficient credits (have: ${profile.credits}, need: ${requiredCredits})`)
       
@@ -823,13 +845,21 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
       const timeoutId = setTimeout(() => controller.abort(), 300000) // 5 minute timeout for music
       
       console.log(`[ChatGenerator] Making fetch request...`)
+      const requestBody: any = { jobId: job.id }
+      
+      // Add model parameter for image generation modes
+      if (isImageMode) {
+        requestBody.model = selectedModel
+        console.log(`[ChatGenerator] Selected model: ${selectedModel}`)
+      }
+      
       const resp = await fetch(endpoint, {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`
         },
-        body: JSON.stringify({ jobId: job.id }),
+        body: JSON.stringify(requestBody),
         signal: controller.signal
       })
       
@@ -849,14 +879,109 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
         throw new Error(responseData.error || 'Generation failed')
       }
 
-      // Task created successfully, now poll for results
+      // Task created successfully, now subscribe to realtime updates
       gen.updateMessage(gen.activeTab, assistantPlaceholder.id, {
         status: 'pending',
         content: 'Processing with AI...'
       })
 
-      // Poll for results every 3 seconds
-      const pollForResult = async (): Promise<void> => {
+      console.log(`[ChatGenerator] 🔔 Setting up realtime subscription for job ${job.id}`)
+      
+      // Subscribe to database changes for this specific job
+      const channel = supabase
+        .channel(`job-${job.id}`)
+        .on(
+          'postgres_changes',
+          {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'jobs',
+            filter: `id=eq.${job.id}`
+          },
+          async (payload) => {
+            console.log(`[ChatGenerator] 🔔 Received realtime update for job ${job.id}:`, payload)
+            const updatedJob = payload.new as any
+            
+            if (updatedJob.status === 'completed' && updatedJob.result_url) {
+              console.log(`[ChatGenerator] 🎉 Job completed via realtime! Result: ${updatedJob.result_url}`)
+              
+              // Unsubscribe from further updates
+              channel.unsubscribe()
+              
+              // Show success notification
+              const contentType = meta.resultType === 'image' ? 'Image' : meta.resultType === 'video' ? 'Video' : 'Music'
+              if (shouldHighlightGenerate && !profile.tutorial_completed) {
+                const remainingCredits = profile.credits - requiredCredits
+                toast.success('🔥 That\'s your first AI-generated ad!', {
+                  description: `Try another — you've got ${remainingCredits} free ${remainingCredits === 1 ? 'image' : 'images'} left.`,
+                  duration: 6000,
+                })
+              } else {
+                toast.success(`${contentType} generated successfully! 🎉`, {
+                  description: 'Your content is ready to view',
+                  duration: 5000,
+                })
+              }
+              
+              // Get signed URL for the result
+              const { data: signedUrl } = await supabase.storage
+                .from('results')
+                .createSignedUrl(updatedJob.result_url, 3600)
+              
+              const mediaUrl = signedUrl?.signedUrl || ''
+              console.log(`[ChatGenerator] 🖼️ Media URL: ${mediaUrl}`)
+              
+              // For music, also get cover URL if available
+              let coverUrl = ''
+              if (meta.resultType === 'music' && updatedJob.cover_url) {
+                const { data: coverSignedUrl } = await supabase.storage
+                  .from('results')
+                  .createSignedUrl(updatedJob.cover_url, 3600)
+                
+                if (coverSignedUrl?.signedUrl) {
+                  coverUrl = coverSignedUrl.signedUrl
+                }
+              }
+              
+              // Update the message with the result
+              gen.updateMessage(gen.activeTab, assistantPlaceholder.id, {
+                status: 'complete',
+                content: `${contentType} generated ✅`,
+                mediaUrl,
+                mediaType: meta.resultType,
+                coverUrl: coverUrl || undefined
+              })
+              
+              gen.setIsGenerating(false)
+              router.refresh()
+              
+              // Track first generation for onboarding
+              if (shouldHighlightGenerate) {
+                handleFirstGeneration()
+              }
+            } else if (updatedJob.status === 'failed') {
+              console.error(`[ChatGenerator] ❌ Job failed:`, updatedJob.error_message)
+              
+              // Unsubscribe from further updates
+              channel.unsubscribe()
+              
+              gen.updateMessage(gen.activeTab, assistantPlaceholder.id, {
+                status: 'error',
+                content: updatedJob.error_message || 'Generation failed. Please try again.'
+              })
+              
+              gen.setIsGenerating(false)
+            }
+          }
+        )
+        .subscribe((status) => {
+          console.log(`[ChatGenerator] 🔔 Realtime subscription status:`, status)
+        })
+      
+      // Fallback: If no update after 10 minutes, check manually once
+      const fallbackTimeout = setTimeout(async () => {
+        console.log(`[ChatGenerator] ⏰ Fallback timeout reached, checking job status manually...`)
+        const pollForResult = async (): Promise<void> => {
         try {
           const statusResp = await fetch(`${CHECK_JOB_STATUS_ENDPOINT}?jobId=${job.id}`, {
             method: 'GET',
@@ -1049,25 +1174,16 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
             content: statusData.message || 'Still processing...'
           })
 
-          // Poll again in 3 seconds
-          const timeoutId = setTimeout(pollForResult, 3000)
-          activeTimeouts.current.add(timeoutId)
         } catch (error) {
-          console.error('Polling error:', error)
-          // Clear all active timeouts
-          activeTimeouts.current.forEach(timeoutId => clearTimeout(timeoutId))
-          activeTimeouts.current.clear()
-          gen.setIsGenerating(false)
-          gen.updateMessage(gen.activeTab, assistantPlaceholder.id, {
-            status: 'error',
-            content: `Polling failed: ${error instanceof Error ? error.message : 'Unknown error'}`
-          })
+          console.error('[ChatGenerator] Fallback polling error:', error)
         }
       }
-
-      // Start polling after 3 seconds
-      const initialTimeoutId = setTimeout(pollForResult, 3000)
-      activeTimeouts.current.add(initialTimeoutId)
+      
+      // Execute fallback once
+      pollForResult()
+      }, 600000) // 10 minutes
+      
+      activeTimeouts.current.add(fallbackTimeout)
     } catch (e: any) {
       console.error(`[ChatGenerator] *** GENERATION ERROR ***`)
       console.error(`[ChatGenerator] Error for ${gen.activeTab}:`, e)
@@ -1305,8 +1421,10 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
                     <p className="text-xs text-gray-400">
                       Example: "Luxury watch on marble surface, dramatic lighting, macro lens, professional product photography"
                     </p>
-                    <div className="bg-green-50 border border-green-200 px-3 py-1 rounded-xl">
-                      <span className="text-xs font-medium text-green-700">1 credit per image</span>
+                    <div className={`${selectedModel === 'nano-banana-pro' ? 'bg-amber-50 border-amber-200' : 'bg-green-50 border-green-200'} border px-3 py-1 rounded-xl`}>
+                      <span className={`text-xs font-medium ${selectedModel === 'nano-banana-pro' ? 'text-amber-700' : 'text-green-700'}`}>
+                        {selectedModel === 'nano-banana-pro' ? '6 credits per image (4K)' : '1 credit per image'}
+                      </span>
                     </div>
                   </div>
                   <p className="text-xs text-gray-400 mt-3">
@@ -1628,6 +1746,17 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
                 Customize the cover art appearance (leave empty for automatic generation based on music style)
               </p>
             </div>
+          </div>
+        )}
+        
+        {/* Model Selector - only for image generation modes */}
+        {isImageMode && (
+          <div className="px-3 sm:px-6 lg:px-8">
+            <ModelSelector
+              selectedModel={selectedModel}
+              onSelectModel={setSelectedModel}
+              disabled={gen.isGenerating || isSubmitting}
+            />
           </div>
         )}
         

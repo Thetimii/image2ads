@@ -73,6 +73,8 @@ async function handler(req: Request) {
     const body = await req.json();
     console.log(`[generate-image-image] Request body:`, body);
     jobId = body?.jobId ?? null;
+    const selectedModel = body?.model ?? 'nano-banana'; // Default to regular model
+    
     if (!jobId) {
       console.log(`[generate-image-image] ERROR: No jobId provided in body`);
       return new Response("Job ID required", { status: 400, headers: cors });
@@ -118,10 +120,14 @@ async function handler(req: Request) {
     console.log(`[generate-image-image] Processing ${imageUrls.length} image(s)`);
     console.log(`[generate-image-image] Image URLs:`, imageUrls);
 
+    // Determine credit cost based on model
+    const creditAmount = selectedModel === 'nano-banana-pro' ? 6 : 1;
+    console.log(`[generate-image-image] Model: ${selectedModel}, Credits: ${creditAmount}`);
+
     // Check and consume credits
     const { data: creditResult, error: creditError } = await supabase.rpc("consume_credit", {
       user_uuid: job.user_id,
-      credit_amount: 1
+      credit_amount: creditAmount
     });
     
     if (creditError || !creditResult) {
@@ -134,36 +140,54 @@ async function handler(req: Request) {
     // Update job status to processing
     await supabase.from("jobs").update({ status: "processing" }).eq("id", jobId);
 
-    // Determine image size from aspect_ratio field
-    let imageSize = "16:9"; // Default to landscape
-    if (job.aspect_ratio === 'portrait') imageSize = "9:16";
-    else if (job.aspect_ratio === 'landscape') imageSize = "16:9";
-    else if (job.aspect_ratio === 'square') imageSize = "1:1";
+    // Determine aspect ratio
+    let aspectRatio = "1:1"; // Default
+    if (job.aspect_ratio === 'portrait') aspectRatio = "9:16";
+    else if (job.aspect_ratio === 'landscape') aspectRatio = "16:9";
+    else if (job.aspect_ratio === 'square') aspectRatio = "1:1";
 
     console.log(`[generate-image-image] Raw job data:`, JSON.stringify(job, null, 2));
     console.log(`[generate-image-image] Job prompt value: "${job.prompt}"`);
     console.log(`[generate-image-image] Image URLs:`, imageUrls);
-    console.log(`[generate-image-image] Aspect ratio: ${job.aspect_ratio}, Image size: ${imageSize}`);
+    console.log(`[generate-image-image] Aspect ratio: ${job.aspect_ratio}`);
 
     // Make sure we use the actual user prompt, with a fallback if needed
     const userPrompt = job.prompt && job.prompt.trim() !== '' ? job.prompt : "Transform this image";
     console.log(`[generate-image-image] Using prompt: "${userPrompt}"`);
 
-    // Create Kie.ai task using nano-banana-edit with multiple images
-    const taskPayload = {
-      prompt: userPrompt,
-      image_urls: imageUrls,
-      output_format: "png",
-      image_size: imageSize
-    };
-    console.log(`[generate-image-image] Kie.ai task payload:`, JSON.stringify(taskPayload, null, 2));
+    // Prepare callback URL
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const callbackUrl = `${supabaseUrl}/functions/v1/kie-callback`;
 
-    const taskId = await createKieTask(
-      "google/nano-banana-edit",
-      taskPayload,
-      KIE_API_KEY
-    );
+    // Create task based on selected model
+    let taskId: string;
+    let kieModel: string;
+    let taskInput: any;
 
+    if (selectedModel === 'nano-banana-pro') {
+      // Nano Banana Pro with 4K resolution and image_input array
+      kieModel = "nano-banana-pro";
+      taskInput = {
+        prompt: userPrompt,
+        image_input: imageUrls, // Pro model uses image_input array
+        aspect_ratio: aspectRatio,
+        resolution: "4K", // Pro model uses 4K
+        output_format: "png"
+      };
+    } else {
+      // Regular Nano Banana Edit
+      kieModel = "google/nano-banana-edit";
+      taskInput = {
+        prompt: userPrompt,
+        image_urls: imageUrls,
+        output_format: "png",
+        image_size: aspectRatio
+      };
+    }
+
+    console.log(`[generate-image-image] KIE Model: ${kieModel}, Input:`, JSON.stringify(taskInput, null, 2));
+
+    taskId = await createKieTask(kieModel, taskInput, KIE_API_KEY, callbackUrl);
     console.log(`[generate-image-image] Task created: ${taskId}`);
 
     // Update job with task_id and keep status as processing
@@ -175,11 +199,11 @@ async function handler(req: Request) {
 
     // Log usage event immediately (credits already consumed)
     const userId = job.user_id as string;
-    console.log(`[generate-image-image] Consuming 1 credit for user ${userId}, job ${jobId}`);
+    console.log(`[generate-image-image] Consuming ${creditAmount} credit(s) for user ${userId}, job ${jobId}`);
     await supabase.from("usage_events").insert({
       user_id: userId,
       event_type: "image-to-image",
-      credits_consumed: 1
+      credits_consumed: creditAmount
     });
 
     // Return immediately with task info - frontend will poll for results
