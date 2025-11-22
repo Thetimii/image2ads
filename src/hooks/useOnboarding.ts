@@ -7,7 +7,8 @@ import type { Profile } from '@/lib/validations'
 
 export function useOnboarding(user: User, profile: Profile) {
   const [shouldShowOnboarding, setShouldShowOnboarding] = useState(false)
-  const [shouldHighlightGenerate, setShouldHighlightGenerate] = useState(false)
+  // Simplified: Just highlight the send button if tutorial not completed
+  const shouldHighlightGenerate = !profile.tutorial_completed
   const [shouldShowUpgrade, setShouldShowUpgrade] = useState(false)
   const [prefillPrompt, setPrefillPrompt] = useState<string>('')
   const supabase = createClient()
@@ -20,17 +21,15 @@ export function useOnboarding(user: User, profile: Profile) {
   }, [profile.tutorial_completed])
 
   const handleOnboardingComplete = useCallback((prompt: string) => {
-    console.log('Onboarding complete, prefilling prompt and highlighting generate button')
+    console.log('Onboarding complete, prefilling prompt')
     setShouldShowOnboarding(false)
     setPrefillPrompt(prompt)
-    setShouldHighlightGenerate(true)
   }, [])
 
   const handleFirstGeneration = useCallback(async () => {
     console.log('First generation triggered, marking tutorial as complete')
-    setShouldHighlightGenerate(false)
     setPrefillPrompt('') // Clear the prefilled prompt so it doesn't refill
-    
+
     // Mark tutorial as completed
     await supabase
       .from('profiles')

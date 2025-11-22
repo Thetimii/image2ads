@@ -1283,9 +1283,9 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
 
   return (
     <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
-      {/* Tutorial Dark Overlay - covers everything except generate button */}
+      {/* Tutorial Dark Overlay - covers everything */}
       {shouldHighlightGenerate && (
-        <div className="fixed inset-0 bg-black/50 z-[9997] pointer-events-none" />
+        <div className="fixed inset-0 bg-black/60 z-[9999] pointer-events-none" />
       )}
 
       {/* Pro Upsell Modal (20% discount for 15 minutes) */}
@@ -1692,11 +1692,22 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
       {/* Bottom input bar */}
       {/* Fixed input section inside generator area */}
       <div
-        className="flex-shrink-0 border-t border-gray-200 bg-white px-6 py-3 flex flex-col gap-2 shadow-inner z-20"
-        style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 10px)' }}
+        className="flex-shrink-0 border-t border-gray-200 bg-white px-6 py-3 flex flex-col gap-2 shadow-inner"
+        style={shouldHighlightGenerate ? { 
+          paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 10px)',
+          position: 'relative',
+          zIndex: 10001
+        } : { 
+          paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 10px)' 
+        }}
       >
+        {/* Local overlay for this section only */}
+        {shouldHighlightGenerate && (
+          <div className="absolute inset-0 bg-black/60 pointer-events-none" style={{ zIndex: 1 }} />
+        )}
+        
         {/* Examples */}
-        <div className="flex gap-2 overflow-x-auto text-xs text-gray-600 pb-1 scrollbar-hide pr-4 -mx-1 px-1">
+        <div className="flex gap-2 overflow-x-auto text-xs text-gray-600 pb-1 scrollbar-hide pr-4 -mx-1 px-1 relative" style={{ zIndex: 0 }}>
           {EXAMPLES[gen.activeTab].map(ex => (
             <button
               key={ex.short}
@@ -1710,7 +1721,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
         </div>
 
         {/* Collapsible Settings Bar */}
-        <div className="flex flex-wrap items-center gap-2 mb-3">
+        <div className="flex flex-wrap items-center gap-2 mb-3 relative" style={{ zIndex: 0 }}>
           {/* Upload Button - only for image-to-image/video */}
           {requiresImage && (
             <button
@@ -1907,7 +1918,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
         <input ref={fileInputRef} onChange={handleFileChange} type="file" accept="image/*" multiple className="hidden" />
 
         {/* Prompt Row */}
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-2 relative" style={{ zIndex: 2 }}>
           <div className="flex items-end gap-2">
             <textarea
               ref={textareaRef}
@@ -1922,7 +1933,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
                   : "Describe your idea or drop an image…"
               }
               rows={1}
-              className="flex-1 w-full border border-gray-300 rounded-2xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none overflow-hidden min-h-[40px] max-h-[120px]"
+              className="flex-1 w-full border border-gray-300 rounded-2xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none overflow-hidden min-h-[40px] max-h-[120px] bg-white"
               style={{ height: '40px' }}
             />
             <button
@@ -1936,14 +1947,11 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
                 }
                 sendPrompt()
               }}
-              disabled={gen.isGenerating || isSubmitting || (requiresImage && localFiles.length === 0) || !input.trim()}
-              className={`bg-gradient-to-r from-purple-500 to-pink-500 text-white w-10 h-10 rounded-full text-xl font-semibold hover:scale-[1.05] active:scale-[0.95] transition ${shouldHighlightGenerate ? '' : 'disabled:opacity-50'} disabled:hover:scale-100 flex items-center justify-center flex-shrink-0 ${shouldHighlightGenerate ? 'relative z-[10000] ring-4 ring-blue-400 ring-offset-4' : ''}`}
+              disabled={shouldHighlightGenerate ? false : (gen.isGenerating || isSubmitting || (requiresImage && localFiles.length === 0) || !input.trim())}
+              className={`bg-gradient-to-r from-purple-500 to-pink-500 text-white w-10 h-10 rounded-full text-xl font-semibold hover:scale-[1.05] active:scale-[0.95] transition ${shouldHighlightGenerate ? '' : 'disabled:opacity-50'} disabled:hover:scale-100 flex items-center justify-center flex-shrink-0 ${shouldHighlightGenerate ? 'ring-4 ring-blue-400 ring-offset-4' : ''}`}
               style={shouldHighlightGenerate ? {
                 animation: 'soft-glow-pulse 2s ease-in-out infinite',
                 boxShadow: '0 0 0 4px rgba(59, 130, 246, 0.4), 0 0 0 8px rgba(59, 130, 246, 0.2), 0 0 30px 4px rgba(59, 130, 246, 0.6)',
-                opacity: 1,
-                zIndex: 10000,
-                position: 'relative'
               } : undefined}
               title={`Generate (${getButtonCreditText()})`}
             >

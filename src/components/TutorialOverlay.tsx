@@ -288,10 +288,18 @@ export default function TutorialOverlay() {
             // Check both attribute and property since React may set either
             const isDisabled = target.hasAttribute('disabled') || (target as HTMLButtonElement).disabled
 
+            console.log('[TutorialOverlay] Button state:', {
+              stepId: currentStepData.id,
+              hasDisabledAttr: target.hasAttribute('disabled'),
+              disabledProp: (target as HTMLButtonElement).disabled,
+              isDisabled,
+              classList: target.classList.toString()
+            })
+
             if (isDisabled && currentStepData.id === 'generate-ad') {
-              console.log('Temporarily enabling disabled button for tutorial')
-              target.removeAttribute('disabled')
-                ; (target as HTMLButtonElement).disabled = false
+              console.log('[TutorialOverlay] Temporarily enabling disabled button for tutorial')
+              target.removeAttribute('disabled');
+              (target as HTMLButtonElement).disabled = false
               target.classList.add('tutorial-force-enabled')
             }
 
@@ -432,8 +440,8 @@ export default function TutorialOverlay() {
             onClick={previousStep}
             disabled={currentStep === 0}
             className={`px-4 py-2 text-sm rounded-lg transition-colors ${currentStep === 0
-                ? 'text-gray-400 cursor-not-allowed'
-                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+              ? 'text-gray-400 cursor-not-allowed'
+              : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
               }`}
           >
             Previous
