@@ -14,6 +14,7 @@ interface SubscriptionEventOptions {
   value?: number
   currency?: string
   contentName?: string
+  eventId?: string
 }
 
 interface ViewContentEventOptions {
@@ -77,6 +78,7 @@ const buildSubscriptionCustomData = (options: SubscriptionEventOptions = {}) => 
 export const trackMetaSubscribedButtonClick = (options: SubscriptionEventOptions) => {
   return trackMetaEvent({
     eventName: 'SubscribedButtonClick',
+    eventId: options.eventId,
     customData: buildSubscriptionCustomData(options),
   })
 }
@@ -84,6 +86,7 @@ export const trackMetaSubscribedButtonClick = (options: SubscriptionEventOptions
 export const trackMetaInitiateCheckout = (options: SubscriptionEventOptions) => {
   return trackMetaEvent({
     eventName: 'InitiateCheckout',
+    eventId: options.eventId,
     customData: buildSubscriptionCustomData(options),
   })
 }
@@ -91,6 +94,7 @@ export const trackMetaInitiateCheckout = (options: SubscriptionEventOptions) => 
 export const trackMetaAddPaymentInfo = (options: SubscriptionEventOptions) => {
   return trackMetaEvent({
     eventName: 'AddPaymentInfo',
+    eventId: options.eventId,
     customData: buildSubscriptionCustomData(options),
   })
 }
@@ -98,6 +102,7 @@ export const trackMetaAddPaymentInfo = (options: SubscriptionEventOptions) => {
 export const trackMetaPurchase = (options: SubscriptionEventOptions) => {
   return trackMetaEvent({
     eventName: 'Purchase',
+    eventId: options.eventId,
     customData: {
       ...buildSubscriptionCustomData(options),
       status: 'success',

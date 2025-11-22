@@ -5,30 +5,32 @@ import { useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { trackMetaEvent } from '@/lib/meta-client'
 
+const PIXEL_ID = process.env.NEXT_PUBLIC_META_PIXEL_ID || '1317994616486123'
+
 export default function MetaPixel() {
   useEffect(() => {
     // Initialize pixels with user data if available
     const initPixelsWithUserData = async () => {
       const supabase = createClient()
       const { data: { user } } = await supabase.auth.getUser()
-      
+
       // Check cookie consent
       const cookieConsent = localStorage.getItem('cookieConsent')
-      
+
       // META PIXEL
       if (typeof window !== 'undefined' && (window as any).fbq) {
         const fbq = (window as any).fbq
-        
+
         if (cookieConsent === 'accepted') {
           // If user is logged in, send their email for advanced matching
           if (user?.email) {
             console.log('[MetaPixel] Initializing with advanced matching for user:', user.email)
             // Re-init with user data - pixel hashes this automatically
-            fbq('init', '1317994616486123', {
+            fbq('init', PIXEL_ID, {
               em: user.email, // Email will be hashed by Meta automatically
             })
           }
-          
+
           // Track PageView
           fbq('track', 'PageView')
 
@@ -40,11 +42,11 @@ export default function MetaPixel() {
           fbq('consent', 'revoke')
         }
       }
-      
+
       // TIKTOK PIXEL
       if (typeof window !== 'undefined' && (window as any).ttq) {
         const ttq = (window as any).ttq
-        
+
         if (cookieConsent === 'accepted') {
           console.log('[TikTokPixel] Tracking PageView')
           ttq.page()
@@ -77,11 +79,11 @@ export default function MetaPixel() {
             'https://connect.facebook.net/en_US/fbevents.js');
             
             // Initial basic init (will be enhanced with user data if available)
-            fbq('init', '1317994616486123');
+            fbq('init', '${PIXEL_ID}');
           `,
         }}
       />
-      
+
       {/* TikTok Pixel Base Code */}
       <Script
         id="tiktok-pixel"
@@ -99,14 +101,14 @@ export default function MetaPixel() {
           `,
         }}
       />
-      
+
       <noscript>
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img 
-          height="1" 
-          width="1" 
-          style={{display: 'none'}}
-          src="https://www.facebook.com/tr?id=1317994616486123&ev=PageView&noscript=1"
+        <img
+          height="1"
+          width="1"
+          style={{ display: 'none' }}
+          src={`https://www.facebook.com/tr?id=${PIXEL_ID}&ev=PageView&noscript=1`}
           alt=""
         />
       </noscript>

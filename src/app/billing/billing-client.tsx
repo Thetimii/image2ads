@@ -29,7 +29,7 @@ export default function BillingClient({ user, profile }: BillingClientProps) {
       try {
         const response = await fetch('/api/pro-discount-status')
         const data = await response.json()
-        
+
         if (data.is_valid) {
           console.log('✅ Active 20% discount detected on billing page')
           setHasActiveDiscount(true)
@@ -39,7 +39,7 @@ export default function BillingClient({ user, profile }: BillingClientProps) {
         console.error('Error checking discount:', error)
       }
     }
-    
+
     checkDiscount()
   }, [])
 
@@ -47,14 +47,14 @@ export default function BillingClient({ user, profile }: BillingClientProps) {
   useEffect(() => {
     const searchParams = new URLSearchParams(window.location.search)
     const promo = searchParams.get('promo')
-    
+
     if (promo === 'pro20limited') {
       // Verify discount is still valid before redirecting
       const checkAndRedirect = async () => {
         try {
           const response = await fetch('/api/pro-discount-status')
           const data = await response.json()
-          
+
           if (data.is_valid) {
             console.log('✨ Pro 20% discount is valid, redirecting to checkout...')
             setIsLoading('pro')
@@ -65,7 +65,7 @@ export default function BillingClient({ user, profile }: BillingClientProps) {
             }
             trackMetaSubscribedButtonClick(metaOptions)
             trackMetaInitiateCheckout(metaOptions)
-            
+
             // Create checkout with discount
             const checkoutResponse = await fetch('/api/stripe/create-checkout-session', {
               method: 'POST',
@@ -77,7 +77,7 @@ export default function BillingClient({ user, profile }: BillingClientProps) {
                 cancelUrl: `${window.location.origin}/billing`,
               }),
             })
-            
+
             if (checkoutResponse.ok) {
               const { url } = await checkoutResponse.json()
               trackMetaAddPaymentInfo(metaOptions)
@@ -99,7 +99,7 @@ export default function BillingClient({ user, profile }: BillingClientProps) {
           window.history.replaceState({}, '', '/billing')
         }
       }
-      
+
       checkAndRedirect()
     }
   }, [])
@@ -108,14 +108,14 @@ export default function BillingClient({ user, profile }: BillingClientProps) {
   useEffect(() => {
     const searchParams = new URLSearchParams(window.location.search)
     const isSuccess = searchParams.get('success')
-    
+
     if (isSuccess === 'true') {
       // Determine which plan was purchased based on profile
       const planName = profile.subscription_id?.toLowerCase() || ''
       let planValue = 0
       let planDisplayName = 'Subscription'
       let planKey: 'starter' | 'pro' | 'business' | undefined
-      
+
       if (planName.includes('starter')) {
         planValue = STRIPE_PLANS.starter.price
         planDisplayName = 'Starter Plan'
@@ -129,7 +129,10 @@ export default function BillingClient({ user, profile }: BillingClientProps) {
         planDisplayName = 'Business Plan'
         planKey = 'business'
       }
-      
+
+      // Generate unique event ID for deduplication between Pixel and CAPI
+      const eventId = `purchase_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+
       // Fire Meta Pixel Purchase event
       if (typeof window !== 'undefined' && (window as any).fbq) {
         const cookieConsent = localStorage.getItem('cookieConsent')
@@ -140,8 +143,8 @@ export default function BillingClient({ user, profile }: BillingClientProps) {
             content_name: planDisplayName,
             content_type: 'product',
             content_ids: [planName || 'subscription'],
-          })
-          console.log(`🔥 Meta Pixel: Purchase event fired for ${planDisplayName} ($${planValue})`)
+          }, { eventID: eventId })
+          console.log(`🔥 Meta Pixel: Purchase event fired for ${planDisplayName} ($${planValue}) [eventID: ${eventId}]`)
         }
       }
 
@@ -151,9 +154,10 @@ export default function BillingClient({ user, profile }: BillingClientProps) {
           value: planValue,
           contentName: planDisplayName,
           source: 'billing_success',
+          eventId,
         })
       }
-      
+
       // Clean up URL (remove success parameter)
       window.history.replaceState({}, '', '/billing')
     }
@@ -173,7 +177,7 @@ export default function BillingClient({ user, profile }: BillingClientProps) {
       if (profile.subscription_id) {
         const subId = profile.subscription_id.toLowerCase()
         console.log('Debug - Checking subscription_id:', subId)
-        
+
         switch (subId) {
           case 'starter':
           case 'prod_t2wztl6zmyzqda': // Stripe product ID for starter
@@ -331,12 +335,10 @@ export default function BillingClient({ user, profile }: BillingClientProps) {
                   {getPlanDisplayName()}
                 </p>
               </div>
-              <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
-                (profile.subscription_status === 'active' || profile.subscription_status === 'trialing') ? 'bg-purple-100' : 'bg-gray-100'
-              }`}>
-                <svg className={`w-6 h-6 ${
-                  (profile.subscription_status === 'active' || profile.subscription_status === 'trialing') ? 'text-purple-600' : 'text-gray-600'
-                }`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${(profile.subscription_status === 'active' || profile.subscription_status === 'trialing') ? 'bg-purple-100' : 'bg-gray-100'
+                }`}>
+                <svg className={`w-6 h-6 ${(profile.subscription_status === 'active' || profile.subscription_status === 'trialing') ? 'text-purple-600' : 'text-gray-600'
+                  }`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
                 </svg>
               </div>
@@ -351,16 +353,14 @@ export default function BillingClient({ user, profile }: BillingClientProps) {
                   {getSubscriptionStatus()}
                 </p>
               </div>
-              <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${
-                (profile.subscription_status === 'active' || profile.subscription_status === 'trialing') ? 'bg-green-100' : 
-                (profile.subscription_status === 'canceled' || profile.subscription_status === 'cancelled') ? 'bg-red-100' : 
-                'bg-gray-100'
-              }`}>
-                <svg className={`w-6 h-6 ${
-                  (profile.subscription_status === 'active' || profile.subscription_status === 'trialing') ? 'text-green-600' : 
-                  (profile.subscription_status === 'canceled' || profile.subscription_status === 'cancelled') ? 'text-red-600' : 
-                  'text-gray-600'
-                }`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${(profile.subscription_status === 'active' || profile.subscription_status === 'trialing') ? 'bg-green-100' :
+                  (profile.subscription_status === 'canceled' || profile.subscription_status === 'cancelled') ? 'bg-red-100' :
+                    'bg-gray-100'
+                }`}>
+                <svg className={`w-6 h-6 ${(profile.subscription_status === 'active' || profile.subscription_status === 'trialing') ? 'text-green-600' :
+                    (profile.subscription_status === 'canceled' || profile.subscription_status === 'cancelled') ? 'text-red-600' :
+                      'text-gray-600'
+                  }`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   {(profile.subscription_status === 'active' || profile.subscription_status === 'trialing') ? (
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   ) : (profile.subscription_status === 'canceled' || profile.subscription_status === 'cancelled') ? (
@@ -378,19 +378,19 @@ export default function BillingClient({ user, profile }: BillingClientProps) {
               <div>
                 <p className="text-sm font-medium text-gray-600">Next Billing</p>
                 <p className="text-lg font-bold text-gray-900">
-                  {(profile.subscription_status === 'active' || profile.subscription_status === 'trialing') && profile.updated_at ? 
+                  {(profile.subscription_status === 'active' || profile.subscription_status === 'trialing') && profile.updated_at ?
                     (() => {
                       const nextBilling = new Date(profile.updated_at);
                       // If trialing, add 3 days from updated_at
                       if (profile.subscription_status === 'trialing') {
                         nextBilling.setDate(nextBilling.getDate() + 3);
-                      } 
+                      }
                       // If active, add 30 days from updated_at
                       else {
                         nextBilling.setDate(nextBilling.getDate() + 30);
                       }
-                      return nextBilling.toLocaleDateString('en-US', { 
-                        month: 'short', 
+                      return nextBilling.toLocaleDateString('en-US', {
+                        month: 'short',
                         day: 'numeric',
                         year: 'numeric'
                       });
@@ -435,8 +435,8 @@ export default function BillingClient({ user, profile }: BillingClientProps) {
             <h2 className="text-lg font-semibold text-gray-900 mb-1">Subscription Plans</h2>
             <p className="text-sm text-gray-600">Choose the plan that best fits your needs.</p>
           </div>
-          
-          <PricingPlans 
+
+          <PricingPlans
             onSubscribeAction={handleSubscribe}
             isLoading={isLoading}
             variant="page"
@@ -452,13 +452,13 @@ export default function BillingClient({ user, profile }: BillingClientProps) {
             <h2 className="text-lg font-semibold text-gray-900 mb-1">Usage Information</h2>
             <p className="text-sm text-gray-600">Important details about credits and billing.</p>
           </div>
-          
+
           <div className="p-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <h3 className="font-medium text-gray-900 mb-3">Credit System</h3>
                 <ul className="space-y-2 text-sm text-gray-600">
-                  
+
                   <li className="flex items-start">
                     <span className="text-blue-500 mr-2">•</span>
                     Credits are renewed monthly with your subscription
@@ -469,7 +469,7 @@ export default function BillingClient({ user, profile }: BillingClientProps) {
                   </li>
                 </ul>
               </div>
-              
+
               <div>
                 <h3 className="font-medium text-gray-900 mb-3">Subscription Management</h3>
                 <ul className="space-y-2 text-sm text-gray-600">
