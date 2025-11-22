@@ -12,6 +12,11 @@
   }
 }
 
+html, body {
+  height: 100%;
+  overflow: hidden;
+}
+
 body {
   background: linear-gradient(135deg, 
     #f0f9ff 0%, 
@@ -26,7 +31,6 @@ body {
   background-attachment: fixed;
   color: #1e293b;
   font-family: var(--font-poppins);
-  min-height: 100vh;
 }
 
 .gradient-primary {

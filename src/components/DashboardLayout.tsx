@@ -288,8 +288,10 @@ export default function DashboardLayout({ user, profile, children, onDemoOpen, i
     return pathname === href
   }
 
+  const isGeneratorPage = pathname.startsWith('/dashboard/generate')
+
   return (
-    <div className="min-h-screen bg-gray-50 flex">
+    <div className="h-screen bg-gray-50 flex">
       {/* Mobile sidebar overlay */}
       {sidebarOpen && (
         <div 
@@ -495,7 +497,7 @@ export default function DashboardLayout({ user, profile, children, onDemoOpen, i
       </div>
 
       {/* Main content */}
-      <div className="flex-1 flex flex-col min-h-screen overflow-hidden lg:ml-64">
+      <div className="flex-1 flex flex-col overflow-hidden lg:ml-64">
           {/* Pro Discount Modal (20% off at 1 credit) */}
           {showProDiscountModal && (
             <ProDiscountModal
@@ -610,13 +612,10 @@ export default function DashboardLayout({ user, profile, children, onDemoOpen, i
         </div>
 
         {/* Page content */}
-        <main className={`flex-1 flex flex-col min-h-0 ${
-          // Enable scrolling for specific pages
-          pathname === '/dashboard/library' || 
-          pathname === '/dashboard/settings' || 
-          pathname === '/billing'
-            ? 'overflow-y-auto' 
-            : 'overflow-hidden'
+        <main className={`flex-1 flex flex-col min-h-0 overflow-hidden ${
+          !isGeneratorPage && (pathname === '/dashboard/library' || pathname === '/dashboard/settings' || pathname === '/billing')
+            ? 'overflow-y-auto'
+            : ''
         }`}>
           {React.isValidElement(children) 
             ? React.cloneElement(children, { onShowUpgrade: handleShowUpgradeModal } as any)

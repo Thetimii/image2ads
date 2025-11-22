@@ -234,6 +234,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
   const isImageMode = gen.activeTab === 'text-to-image' || gen.activeTab === 'image-to-image'
   // Check if feature is locked: only locked if marked as locked AND user has free status
   const isLocked = !!meta.locked && profile?.subscription_status === 'free'
+  const chatContainerRef = useRef<HTMLDivElement | null>(null)
   
   // Helper to get credit text based on user type
   const isFreeUser = profile?.subscription_status === 'free'
@@ -283,7 +284,12 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
   }, [gen.activeTab, history.length])
 
   const scrollToBottom = (behavior: ScrollBehavior = 'auto') => {
-    if (bottomRef.current) {
+    if (chatContainerRef.current) {
+      chatContainerRef.current.scrollTo({
+        top: chatContainerRef.current.scrollHeight,
+        behavior,
+      })
+    } else if (bottomRef.current) {
       bottomRef.current.scrollIntoView({ behavior })
     }
   }
@@ -296,7 +302,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
   // Scroll on new messages
   useEffect(() => {
     scrollToBottom(history.length > 0 ? 'smooth' : 'auto')
-  }, [history.length])
+  }, [history.length, visibleHistory.length])
 
   const loadOlderMessages = () => {
     setVisibleCounts(prev => ({
@@ -705,6 +711,11 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
 
   // Drag & drop state
   const [isDragging, setIsDragging] = useState(false)
+  
+  // Collapsible controls state
+  const [showAspectRatio, setShowAspectRatio] = useState(false)
+  const [showMusicOptions, setShowMusicOptions] = useState(false)
+  const [showModelSelector, setShowModelSelector] = useState(false)
 
   const sendPrompt = async () => {
     console.log(`[ChatGenerator] *** SEND PROMPT CALLED ***`)
@@ -863,9 +874,9 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
       if (isMusicMode) {
         jobPayload.music_options = {
           make_instrumental: makeInstrumental,
-          tags: musicTags.trim() || undefined,
           lyrics_mode: lyricsMode,
-          custom_lyrics: lyricsMode === 'custom' ? customLyrics.trim() : undefined,
+          // When custom lyrics mode, use the main input field content as lyrics word-for-word
+          custom_lyrics: lyricsMode === 'custom' ? input.trim() : undefined,
           duration: musicDuration,
           cover_prompt: coverPrompt.trim() || undefined
         }
@@ -1271,7 +1282,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
   }
 
   return (
-    <div className="flex flex-col h-full min-h-0 relative">
+    <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
       {/* Tutorial Dark Overlay - covers everything except generate button */}
       {shouldHighlightGenerate && (
         <div className="fixed inset-0 bg-black/50 z-[9997] pointer-events-none" />
@@ -1336,15 +1347,15 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
       )} */}
       
       {/* Header */}
+      {/* Fixed header inside generator area */}
       <div
-        className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between border-b border-gray-200 bg-white px-4 sm:px-6 py-2.5 sm:py-3 flex-shrink-0 sticky top-0 z-20"
-        style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) / 2)' }}
+        className="flex items-center justify-between border-b border-gray-200 bg-white px-6 h-16 flex-shrink-0"
       >
-        <div className="flex flex-col gap-0.5">
-          <h1 className="text-base font-semibold text-gray-800">{meta.title}</h1>
-          <p className="text-xs text-gray-500">{meta.subtitle}</p>
+        <div className="flex flex-col justify-center">
+          <h1 className="text-base font-semibold text-gray-800 leading-tight">{meta.title}</h1>
+          <p className="text-xs text-gray-500 leading-tight">{meta.subtitle}</p>
         </div>
-        <div className="flex items-center gap-2 sm:gap-3 flex-wrap justify-end">
+        <div className="flex items-center gap-3 flex-shrink-0">
           {/* Upgrade Button - Always visible for free users */}
           {isFreeUser && (
             <button
@@ -1360,7 +1371,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
                   onLockedFeature?.()
                 }
               }}
-              className="text-sm bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white px-4 py-2 rounded-full font-semibold shadow-md hover:shadow-lg hover:scale-105 transition-all cursor-pointer w-full sm:w-auto text-center"
+              className="text-sm bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white px-4 py-2 rounded-full font-semibold shadow-md hover:shadow-lg hover:scale-105 transition-all cursor-pointer whitespace-nowrap"
               title="Get Pro access - $5 for 3 days"
             >
               ✨ $5 Pro Trial
@@ -1373,7 +1384,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
               // Call onLockedFeature to show 3-plan upgrade modal
               onLockedFeature?.()
             }}
-            className="text-xs bg-gradient-to-r from-purple-500 to-pink-500 text-white px-3 py-1.5 rounded-full font-medium shadow-sm hover:shadow-lg hover:scale-105 transition-all cursor-pointer w-full sm:w-auto text-center"
+            className="text-xs bg-gradient-to-r from-purple-500 to-pink-500 text-white px-3 py-1.5 rounded-full font-medium shadow-sm hover:shadow-lg hover:scale-105 transition-all cursor-pointer whitespace-nowrap"
             title="Click to get more credits"
           >
             ⭐ {getCreditText()}
@@ -1382,8 +1393,10 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
       </div>
 
       {/* Chat scroll area */}
+      {/* Scrollable chat body only */}
       <div 
-        className="flex-1 min-h-0 overflow-y-auto px-3 sm:px-6 lg:px-8 py-3 sm:py-4 lg:py-6 pb-28 bg-[#f7f7f8] space-y-3 sm:space-y-4 lg:space-y-6 relative"
+        ref={chatContainerRef}
+        className="flex-1 min-h-0 overflow-y-auto px-6 py-4 bg-[#f7f7f8] space-y-4 relative"
         onDragOver={(e) => { e.preventDefault(); if (requiresImage) setIsDragging(true) }}
         onDragLeave={() => setIsDragging(false)}
         onDrop={(e) => {
@@ -1680,8 +1693,9 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
       </div>
 
       {/* Bottom input bar */}
+      {/* Fixed input section inside generator area */}
       <div
-        className="border-t border-gray-200 bg-white/95 backdrop-blur sticky bottom-0 left-0 right-0 px-2 sm:px-3 lg:px-4 py-2 sm:py-2.5 lg:py-3 flex flex-col gap-1.5 sm:gap-2 shadow-inner z-20"
+        className="flex-shrink-0 border-t border-gray-200 bg-white px-6 py-3 flex flex-col gap-2 shadow-inner z-20"
         style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 10px)' }}
       >
         {/* Examples */}
@@ -1698,133 +1712,106 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
           ))}
         </div>
         
-        {/* Music-specific options */}
-        {isMusicMode && (
-          <div className="flex flex-col gap-3 p-4 bg-gradient-to-br from-purple-50 to-pink-50 rounded-xl border border-purple-200/50">
-            {/* Row 1: Instrumental Toggle & Duration */}
-            <div className="flex items-center justify-between gap-4">
-              <label className="flex items-center gap-2 cursor-pointer group">
-                <div className="relative">
-                  <input
-                    type="checkbox"
-                    checked={makeInstrumental}
-                    onChange={(e) => setMakeInstrumental(e.target.checked)}
-                    className="sr-only peer"
-                  />
-                  <div className="w-10 h-5 bg-gray-300 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-purple-500 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-purple-600"></div>
-                </div>
-                <span className="text-sm font-medium text-gray-700">
-                  🎹 Instrumental Only (no vocals)
+        {/* Collapsible Settings Bar */}
+        <div className="flex flex-wrap items-center gap-2 mb-3">
+          {/* Upload Button - only for image-to-image/video */}
+          {requiresImage && (
+            <button
+              onClick={handleUploadClick}
+              className="flex items-center gap-2 px-3 py-2 bg-white border border-gray-200 rounded-lg hover:border-purple-300 hover:bg-purple-50/50 transition text-sm h-[38px]"
+              title="Upload reference images"
+            >
+              <span className="text-gray-600">📎 Upload:</span>
+              <span className="font-medium text-gray-900">
+                {localFiles.length > 0 ? `${localFiles.length} image${localFiles.length > 1 ? 's' : ''}` : 'None'}
+              </span>
+            </button>
+          )}
+          
+          {/* Aspect Ratio Preview/Toggle - only for images/videos */}
+          {!isMusicMode && (
+            <button
+              onClick={() => setShowAspectRatio(!showAspectRatio)}
+              className="flex items-center gap-2 px-3 py-2 bg-white border border-gray-200 rounded-lg hover:border-purple-300 hover:bg-purple-50/50 transition text-sm"
+            >
+              <span className="text-gray-600">📐 Ratio:</span>
+              <span className="font-medium text-gray-900">
+                {aspectOptions.find(opt => opt.value === gen.aspectRatio)?.label || '16:9'}
+              </span>
+              <svg className={`w-4 h-4 text-gray-400 transition-transform ${showAspectRatio ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+          )}
+          
+          {/* Model Selector Preview/Toggle - only for image generation modes */}
+          {isImageMode && (
+            <button
+              onClick={() => setShowModelSelector(!showModelSelector)}
+              className="flex items-center gap-2 px-3 py-2 bg-white border border-gray-200 rounded-lg hover:border-purple-300 hover:bg-purple-50/50 transition text-sm"
+            >
+              <span className="text-gray-600">🍌 Model:</span>
+              <span className="font-medium text-gray-900">
+                {selectedModel === 'nano-banana-pro' ? `Pro (${selectedResolution})` : 'Regular'}
+              </span>
+              <svg className={`w-4 h-4 text-gray-400 transition-transform ${showModelSelector ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+          )}
+          
+          {/* Music Options Preview/Toggle */}
+          {isMusicMode && (
+            <button
+              onClick={() => setShowMusicOptions(!showMusicOptions)}
+              className="flex items-center gap-2 px-3 py-2 bg-white border border-gray-200 rounded-lg hover:border-purple-300 hover:bg-purple-50/50 transition text-sm"
+            >
+              <span className="text-gray-600">🎵 Options:</span>
+              <span className="font-medium text-gray-900">
+                {musicDuration < 60 ? `${musicDuration}s` : `${musicDuration / 60}m`}
+                {makeInstrumental && ' • Instrumental'}
+                {musicTags && ' • ' + musicTags.split(',')[0].trim()}
+              </span>
+              <svg className={`w-4 h-4 text-gray-400 transition-transform ${showMusicOptions ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+          )}
+        </div>
+        
+        {/* Expandable Aspect Ratio Controls */}
+        {!isMusicMode && showAspectRatio && (
+          <div className="flex justify-center gap-3 mb-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
+            {aspectOptions.map(opt => (
+              <button
+                key={opt.value}
+                onClick={() => gen.setAspectRatio(opt.value)}
+                className={`flex flex-col items-center justify-center gap-2 p-3 rounded-lg transition ${
+                  gen.aspectRatio === opt.value 
+                    ? 'bg-purple-100 border-2 border-purple-500' 
+                    : 'bg-white border-2 border-gray-200 hover:bg-gray-50'
+                }`}
+              >
+                <div 
+                  className={`rounded border-2 ${
+                    gen.aspectRatio === opt.value ? 'border-purple-500 bg-purple-200' : 'border-gray-400 bg-gray-200'
+                  } ${
+                    opt.value === 'landscape' ? 'w-10 h-6' : 'w-6 h-10'
+                  }`}
+                />
+                <span className={`text-sm font-medium ${
+                  gen.aspectRatio === opt.value ? 'text-purple-700' : 'text-gray-600'
+                }`}>
+                  {opt.label}
                 </span>
-              </label>
-
-              {/* Duration selector inline */}
-              <div className="flex gap-1 items-center">
-                <span className="text-xs text-gray-600 font-medium mr-1">⏱️ Duration:</span>
-                {[10, 30, 60, 120, 180].map(duration => (
-                  <button
-                    key={duration}
-                    onClick={() => setMusicDuration(duration as 10 | 30 | 60 | 120 | 180)}
-                    className={`text-xs px-2.5 py-1 rounded-md transition ${
-                      musicDuration === duration 
-                        ? 'bg-purple-600 text-white font-semibold' 
-                        : 'bg-white/80 text-gray-600 hover:bg-white border border-purple-200'
-                    }`}
-                  >
-                    {duration < 60 ? `${duration}s` : `${duration / 60}m`}
-                  </button>
-                ))}
-              </div>
-            </div>
-            
-            {/* Row 2: Genre Tags */}
-            <div className="flex flex-col gap-1">
-              <label className="text-xs font-medium text-gray-600">
-                🏷️ Genre/Style Tags <span className="text-gray-400 font-normal">(optional)</span>
-              </label>
-              <input
-                type="text"
-                value={musicTags}
-                onChange={(e) => setMusicTags(e.target.value)}
-                placeholder="e.g., rock, pop, electronic, jazz, ambient"
-                className="text-sm border border-purple-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white/80 placeholder:text-gray-400"
-              />
-              <p className="text-xs text-gray-500 mt-0.5">
-                Add specific genres or styles to guide the music generation
-              </p>
-            </div>
-            
-            {/* Row 3: Lyrics Mode Selection */}
-            <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-medium text-gray-600">
-                ✍️ Lyrics
-              </label>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => setLyricsMode('ai')}
-                  className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition ${
-                    lyricsMode === 'ai'
-                      ? 'bg-purple-600 text-white shadow-sm'
-                      : 'bg-white/80 text-gray-600 hover:bg-white border border-purple-200'
-                  }`}
-                >
-                  🤖 AI Generate
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setLyricsMode('custom')}
-                  className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition ${
-                    lyricsMode === 'custom'
-                      ? 'bg-purple-600 text-white shadow-sm'
-                      : 'bg-white/80 text-gray-600 hover:bg-white border border-purple-200'
-                  }`}
-                >
-                  📝 Paste Your Own
-                </button>
-              </div>
-              
-              {lyricsMode === 'ai' ? (
-                <p className="text-xs text-gray-500 mt-0.5">
-                  AI will generate lyrics based on your prompt and genre
-                </p>
-              ) : (
-                <>
-                  <textarea
-                    value={customLyrics}
-                    onChange={(e) => setCustomLyrics(e.target.value)}
-                    placeholder="Paste your lyrics here (verse, chorus, bridge, etc.)"
-                    className="text-sm border border-purple-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white/80 resize-y min-h-[80px] placeholder:text-gray-400 mt-1"
-                  />
-                  <p className="text-xs text-gray-500">
-                    Enter your own lyrics - the music will match your words
-                  </p>
-                </>
-              )}
-            </div>
-            
-            {/* Row 4: Cover Image Prompt */}
-            <div className="flex flex-col gap-1">
-              <label className="text-xs font-medium text-gray-600">
-                🎨 Cover Image Prompt <span className="text-gray-400 font-normal">(optional)</span>
-              </label>
-              <input
-                type="text"
-                value={coverPrompt}
-                onChange={(e) => setCoverPrompt(e.target.value)}
-                placeholder="e.g., Sunset over ocean waves, vibrant colors..."
-                className="text-sm border border-purple-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white/80 placeholder:text-gray-400"
-              />
-              <p className="text-xs text-gray-500 mt-0.5">
-                Customize the cover art appearance (leave empty for automatic generation based on music style)
-              </p>
-            </div>
+              </button>
+            ))}
           </div>
         )}
         
-        {/* Model Selector - only for image generation modes */}
-        {isImageMode && (
-          <div className="px-1.5 sm:px-6 lg:px-8">
+        {/* Expandable Model Selector */}
+        {isImageMode && showModelSelector && (
+          <div className="mb-3">
             <ModelSelector
               selectedModel={selectedModel}
               onSelectModel={setSelectedModel}
@@ -1835,75 +1822,115 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
           </div>
         )}
         
-        {/* Quick controls - only show aspect ratio for images/videos */}
-        {!isMusicMode && (
-          <div className="flex justify-center gap-2 sm:gap-3 lg:gap-4 mb-1 sm:mb-2 lg:mb-3 flex-wrap">
-            <div className="flex gap-2 sm:gap-3 items-center">
-              {aspectOptions.map(opt => (
+        {/* Expandable Music Options */}
+        {isMusicMode && showMusicOptions && (
+          <div className="flex flex-col gap-3 p-4 bg-gradient-to-br from-purple-50 to-pink-50 rounded-xl border border-purple-200/50 mb-3">
+            {/* Duration */}
+            <div className="flex flex-col gap-2">
+              <label className="text-sm font-medium text-gray-700">⏱️ Duration</label>
+              <div className="flex gap-2">
+                {[10, 30, 60, 120, 180].map(duration => (
+                  <button
+                    key={duration}
+                    onClick={() => setMusicDuration(duration as 10 | 30 | 60 | 120 | 180)}
+                    className={`flex-1 text-sm px-3 py-2 rounded-lg transition font-medium ${
+                      musicDuration === duration 
+                        ? 'bg-purple-600 text-white shadow-sm' 
+                        : 'bg-white text-gray-600 hover:bg-gray-50 border border-purple-200'
+                    }`}
+                  >
+                    {duration < 60 ? `${duration}s` : `${duration / 60}m`}
+                  </button>
+                ))}
+              </div>
+            </div>
+            
+            {/* Lyrics Mode */}
+            <div className="flex flex-col gap-2">
+              <label className="text-sm font-medium text-gray-700">✍️ Lyrics</label>
+              <div className="flex gap-2">
                 <button
-                  key={opt.value}
-                  onClick={() => gen.setAspectRatio(opt.value)}
-                  className={`flex flex-col items-center justify-center gap-1 sm:gap-1.5 lg:gap-2 p-2 sm:p-2.5 lg:p-3 rounded-lg transition ${
-                    gen.aspectRatio === opt.value 
-                      ? 'bg-purple-50 border-2 border-purple-500' 
-                      : 'border-2 border-gray-200 hover:bg-gray-50'
+                  type="button"
+                  onClick={() => setLyricsMode('ai')}
+                  className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition ${
+                    lyricsMode === 'ai'
+                      ? 'bg-purple-600 text-white shadow-sm'
+                      : 'bg-white text-gray-600 hover:bg-gray-50 border border-purple-200'
                   }`}
                 >
-                  {/* Visual aspect ratio box */}
-                  <div 
-                    className={`rounded border-2 ${
-                      gen.aspectRatio === opt.value ? 'border-purple-500 bg-purple-200' : 'border-gray-400 bg-gray-200'
-                    } ${
-                      opt.value === 'landscape' ? 'w-7 h-4 sm:w-9 sm:h-5 lg:w-10 lg:h-6' : 'w-4 h-7 sm:w-5 sm:h-9 lg:w-6 lg:h-10'
-                    }`}
-                  />
-                  {/* Label */}
-                  <span className={`text-xs font-medium ${
-                    gen.aspectRatio === opt.value ? 'text-purple-700' : 'text-gray-600'
-                  }`}>
-                    {opt.label}
-                  </span>
+                  🤖 AI Generate
                 </button>
-              ))}
+                <button
+                  type="button"
+                  onClick={() => setLyricsMode('custom')}
+                  className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition ${
+                    lyricsMode === 'custom'
+                      ? 'bg-purple-600 text-white shadow-sm'
+                      : 'bg-white text-gray-600 hover:bg-gray-50 border border-purple-200'
+                  }`}
+                >
+                  📝 Your Own
+                </button>
+              </div>
+              {lyricsMode === 'custom' && (
+                <p className="text-xs text-purple-600 mt-1">
+                  💡 Type your lyrics in the main input field below
+                </p>
+              )}
+            </div>
+            
+            {/* Cover Prompt */}
+            <div className="flex flex-col gap-2">
+              <label className="text-sm font-medium text-gray-700">
+                🎨 Cover Image <span className="text-gray-400 font-normal">(optional)</span>
+              </label>
+              <input
+                type="text"
+                value={coverPrompt}
+                onChange={(e) => setCoverPrompt(e.target.value)}
+                placeholder="Describe cover art style..."
+                className="text-sm border border-purple-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white placeholder:text-gray-400"
+              />
             </div>
           </div>
         )}
         
-        {/* Prompt Row */}
-        <div className="flex flex-col gap-2 sm:gap-3">
-          {requiresImage && (
-            <div className="flex flex-wrap items-center gap-2">
-              <button
-                onClick={handleUploadClick}
-                className="text-xl hover:opacity-80 cursor-pointer"
-                title="Upload reference images"
-              >
-                📎
-              </button>
-              <input ref={fileInputRef} onChange={handleFileChange} type="file" accept="image/*" multiple className="hidden" />
-              <div className="flex gap-2 flex-wrap">
-                {localPreviews.map((preview, index) => (
-                  <div key={index} className="relative group">
-                    <Image src={preview} alt={`preview ${index + 1}`} width={40} height={40} className="rounded-md object-cover" />
-                    <button
-                      onClick={() => removeFile(index)}
-                      className="absolute -top-1 -right-1 bg-red-500 hover:bg-red-600 text-white rounded-full w-4 h-4 flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition-opacity"
-                      title="Remove image"
-                    >
-                      ×
-                    </button>
-                  </div>
-                ))}
+        {/* Image Previews - show when images are uploaded */}
+        {requiresImage && localPreviews.length > 0 && (
+          <div className="flex gap-2 flex-wrap mb-2 p-2 bg-gray-50 rounded-lg border border-gray-200">
+            {localPreviews.map((preview, index) => (
+              <div key={index} className="relative group">
+                <Image src={preview} alt={`preview ${index + 1}`} width={60} height={60} className="rounded-lg object-cover border-2 border-purple-200" />
+                <button
+                  onClick={() => removeFile(index)}
+                  className="absolute -top-2 -right-2 bg-red-500 hover:bg-red-600 text-white rounded-full w-5 h-5 flex items-center justify-center text-sm font-bold shadow-md"
+                  title="Remove image"
+                >
+                  ×
+                </button>
               </div>
-            </div>
-          )}
-          <div className="flex flex-col sm:flex-row sm:items-end gap-2 sm:gap-3">
+            ))}
+          </div>
+        )}
+        
+        {/* Hidden file input */}
+        <input ref={fileInputRef} onChange={handleFileChange} type="file" accept="image/*" multiple className="hidden" />
+        
+        {/* Prompt Row */}
+        <div className="flex flex-col gap-2">
+          <div className="flex items-end gap-2">
             <textarea
               ref={textareaRef}
               value={input}
               onChange={handleInputChange}
               onKeyDown={onKeyDown}
-              placeholder={isMusicMode ? "Describe your music: style, mood, instruments, tempo..." : "Describe your idea or drop an image…"}
+              placeholder={
+                isMusicMode 
+                  ? (lyricsMode === 'custom' 
+                      ? "Paste your lyrics here (verse, chorus, etc.)..." 
+                      : "Describe your music: style, mood, instruments, tempo...")
+                  : "Describe your idea or drop an image…"
+              }
               rows={1}
               className="flex-1 w-full border border-gray-300 rounded-2xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none overflow-hidden min-h-[40px] max-h-[120px]"
               style={{ height: '40px' }}
@@ -1919,16 +1946,13 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
                 sendPrompt()
               }}
               disabled={gen.isGenerating || isSubmitting || (requiresImage && localFiles.length === 0) || !input.trim()}
-              className={`bg-gradient-to-r from-purple-500 to-pink-500 text-white px-3 sm:px-4 lg:px-5 py-2 rounded-full text-xs sm:text-sm font-semibold hover:scale-[1.03] active:scale-[0.97] transition disabled:opacity-50 disabled:hover:scale-100 flex items-center justify-center gap-1 sm:gap-1.5 lg:gap-2 whitespace-nowrap w-full sm:w-auto self-stretch sm:self-auto ${shouldHighlightGenerate ? 'relative z-[9998]' : ''}`}
+              className={`bg-gradient-to-r from-purple-500 to-pink-500 text-white w-10 h-10 rounded-full text-xl font-semibold hover:scale-[1.05] active:scale-[0.95] transition disabled:opacity-50 disabled:hover:scale-100 flex items-center justify-center flex-shrink-0 ${shouldHighlightGenerate ? 'relative z-[9998]' : ''}`}
               style={shouldHighlightGenerate ? {
                 animation: 'soft-glow-pulse 2s ease-in-out infinite'
               } : undefined}
+              title={`Generate (${getButtonCreditText()})`}
             >
-              <span className="hidden sm:inline">⚡ Generate</span>
-              <span className="sm:hidden">⚡</span>
-              <span className="bg-white/20 px-1.5 sm:px-2 py-0.5 rounded-full text-[10px] sm:text-xs">
-                {getButtonCreditText()}
-              </span>
+              ➤
             </button>
           </div>
         </div>

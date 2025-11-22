@@ -187,12 +187,14 @@ export default function GeneratorPageWrapper({ user, profile, onShowUpgrade }: G
 
   return (
     <DashboardLayout user={user} profile={profile} isNavigationLocked={isNavigationLocked}>
-      <ChatGenerator 
-        user={user} 
-        profile={profile} 
-        onLockedFeature={handleLockedFeature}
-        onShowUpgrade={handleShowTrialModal}
-      />
+      <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+        <ChatGenerator 
+          user={user} 
+          profile={profile} 
+          onLockedFeature={handleLockedFeature}
+          onShowUpgrade={handleShowTrialModal}
+        />
+      </div>
       
       {/* Pro Trial Modal ($5 trial) */}
       {showProTrialModal && (
