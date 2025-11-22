@@ -5,16 +5,16 @@ import { createPortal } from 'react-dom'
 import { useTutorial } from '@/contexts/TutorialContext'
 
 export default function TutorialOverlay() {
-  const { 
-    isActive, 
-    currentStepData, 
-    currentStep, 
-    steps, 
-    nextStep, 
-    previousStep, 
-    skipTutorial 
+  const {
+    isActive,
+    currentStepData,
+    currentStep,
+    steps,
+    nextStep,
+    previousStep,
+    skipTutorial
   } = useTutorial()
-  
+
   const [tooltipPosition, setTooltipPosition] = useState<any>({
     position: 'fixed',
     top: '50%',
@@ -27,7 +27,7 @@ export default function TutorialOverlay() {
 
   useEffect(() => {
     setMounted(true)
-    
+
     // Inject CSS for highlighting
     const style = document.createElement('style')
     style.id = 'tutorial-styles'
@@ -152,13 +152,13 @@ export default function TutorialOverlay() {
         }
       }
     `
-    
+
     // Remove existing style if it exists
     const existingStyle = document.getElementById('tutorial-styles')
     if (existingStyle) {
       existingStyle.remove()
     }
-    
+
     document.head.appendChild(style)
 
     return () => {
@@ -174,7 +174,7 @@ export default function TutorialOverlay() {
     }
   }, [])
 
-    const getTooltipPosition = (target: Element | null) => {
+  const getTooltipPosition = (target: Element | null) => {
     if (!target) {
       return {
         position: 'fixed' as const,
@@ -191,14 +191,14 @@ export default function TutorialOverlay() {
     const padding = 20
     const arrowSize = 12
 
-    console.log('Dynamic positioning for:', currentStepData?.id, { rect, viewport: { width: window.innerWidth, height: window.innerHeight }})
+    console.log('Dynamic positioning for:', currentStepData?.id, { rect, viewport: { width: window.innerWidth, height: window.innerHeight } })
 
     // Calculate available space in each direction
     const spaceAbove = rect.top
     const spaceBelow = window.innerHeight - rect.bottom
     const spaceLeft = rect.left
     const spaceRight = window.innerWidth - rect.right
-    
+
     // Determine best position based on available space and step type
     let position = 'center'
     let top = 0
@@ -254,43 +254,47 @@ export default function TutorialOverlay() {
     const updatePosition = () => {
       if (currentStepData.targetSelector) {
         const target = document.querySelector(currentStepData.targetSelector)
-        console.log('Tutorial positioning update:', { 
-          selector: currentStepData.targetSelector, 
+        console.log('Tutorial positioning update:', {
+          selector: currentStepData.targetSelector,
           target: !!target,
-          step: currentStepData.id 
+          step: currentStepData.id
         })
-        
+
         if (target) {
           // Remove previous highlighting from all elements
           document.querySelectorAll('.tutorial-highlight, .tutorial-force-enabled').forEach(el => {
             el.classList.remove('tutorial-highlight', 'tutorial-force-enabled')
           })
-          
+
           // Check if element is in viewport
           const rect = target.getBoundingClientRect()
-          const isInViewport = rect.top >= 0 && rect.bottom <= window.innerHeight && 
-                             rect.left >= 0 && rect.right <= window.innerWidth
-          
+          const isInViewport = rect.top >= 0 && rect.bottom <= window.innerHeight &&
+            rect.left >= 0 && rect.right <= window.innerWidth
+
           if (!isInViewport) {
             console.log('Scrolling target into view:', currentStepData.id)
-            target.scrollIntoView({ 
-              behavior: 'smooth', 
-              block: 'center', 
-              inline: 'center' 
+            target.scrollIntoView({
+              behavior: 'smooth',
+              block: 'center',
+              inline: 'center'
             })
           }
-          
+
           // Add highlighting and positioning after a smooth delay
           setTimeout(() => {
             target.classList.add('tutorial-highlight')
-            
+
             // Handle disabled elements for tutorial
-            if (target.hasAttribute('disabled') && currentStepData.id === 'generate-ad') {
-              console.log('Temporarily enabling element for tutorial')
+            // Check both attribute and property since React may set either
+            const isDisabled = target.hasAttribute('disabled') || (target as HTMLButtonElement).disabled
+
+            if (isDisabled && currentStepData.id === 'generate-ad') {
+              console.log('Temporarily enabling disabled button for tutorial')
               target.removeAttribute('disabled')
+                ; (target as HTMLButtonElement).disabled = false
               target.classList.add('tutorial-force-enabled')
             }
-            
+
             // Update tooltip position with latest rect
             const updatedRect = target.getBoundingClientRect()
             setTooltipPosition(getTooltipPosition(target))
@@ -311,10 +315,10 @@ export default function TutorialOverlay() {
     // Update position on resize and scroll
     const handleResize = () => updatePosition()
     const handleScroll = () => updatePosition()
-    
+
     window.addEventListener('resize', handleResize)
     window.addEventListener('scroll', handleScroll)
-    
+
     return () => {
       window.removeEventListener('resize', handleResize)
       window.removeEventListener('scroll', handleScroll)
@@ -336,7 +340,7 @@ export default function TutorialOverlay() {
   const overlayContent = (
     <div className="hidden md:block">
       {/* Dark overlay */}
-      <div 
+      <div
         className="fixed inset-0 bg-black/50 z-40"
         style={{ backdropFilter: 'blur(2px)' }}
       />
@@ -387,9 +391,8 @@ export default function TutorialOverlay() {
             {steps.map((_, index) => (
               <div
                 key={index}
-                className={`w-2 h-2 rounded-full transition-colors ${
-                  index <= currentStep ? 'bg-blue-500' : 'bg-gray-300'
-                }`}
+                className={`w-2 h-2 rounded-full transition-colors ${index <= currentStep ? 'bg-blue-500' : 'bg-gray-300'
+                  }`}
               />
             ))}
           </div>
@@ -409,7 +412,7 @@ export default function TutorialOverlay() {
           <p className="text-sm text-gray-600 leading-relaxed">
             {currentStepData.description}
           </p>
-          
+
           {currentStepData.waitForAction && (
             <div className="mt-3 p-3 bg-blue-50 rounded-lg border border-blue-200">
               <p className="text-xs text-blue-700 font-medium">
@@ -428,11 +431,10 @@ export default function TutorialOverlay() {
           <button
             onClick={previousStep}
             disabled={currentStep === 0}
-            className={`px-4 py-2 text-sm rounded-lg transition-colors ${
-              currentStep === 0
+            className={`px-4 py-2 text-sm rounded-lg transition-colors ${currentStep === 0
                 ? 'text-gray-400 cursor-not-allowed'
                 : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
-            }`}
+              }`}
           >
             Previous
           </button>
@@ -449,7 +451,7 @@ export default function TutorialOverlay() {
               {currentStep === steps.length - 1 ? 'Finish!' : 'Next'}
             </button>
           )}
-          
+
           {currentStepData.waitForAction && (
             <div className="w-16"></div> // Spacer to maintain layout
           )}
