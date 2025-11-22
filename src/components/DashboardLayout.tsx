@@ -90,6 +90,20 @@ export default function DashboardLayout({ user, profile, children, onDemoOpen, i
     setIsSafari(userAgent.includes('safari') && !userAgent.includes('chrome'));
   }, []);
 
+  // Lock body scroll when sidebar is open on mobile
+  useEffect(() => {
+    if (typeof document === 'undefined') return
+    const original = document.body.style.overflow
+    if (sidebarOpen) {
+      document.body.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = original
+    }
+    return () => {
+      document.body.style.overflow = original
+    }
+  }, [sidebarOpen])
+
   // Prefetch dashboard routes for faster tab switching
   useEffect(() => {
     navigation.forEach(item => {
@@ -282,7 +296,7 @@ export default function DashboardLayout({ user, profile, children, onDemoOpen, i
           className="fixed inset-0 z-40 lg:hidden"
           onClick={() => setSidebarOpen(false)}
         >
-          <div className="fixed inset-0 bg-gray-600 bg-opacity-75" />
+          <div className="fixed inset-0 bg-gray-800/70 backdrop-blur-sm" />
         </div>
       )}
 
@@ -596,7 +610,7 @@ export default function DashboardLayout({ user, profile, children, onDemoOpen, i
         </div>
 
         {/* Page content */}
-        <main className={`flex-1 ${
+        <main className={`flex-1 flex flex-col min-h-0 ${
           // Enable scrolling for specific pages
           pathname === '/dashboard/library' || 
           pathname === '/dashboard/settings' || 

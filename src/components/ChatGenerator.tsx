@@ -1271,7 +1271,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
   }
 
   return (
-    <div className="flex flex-col h-full min-h-0">
+    <div className="flex flex-col h-full min-h-0 relative">
       {/* Tutorial Dark Overlay - covers everything except generate button */}
       {shouldHighlightGenerate && (
         <div className="fixed inset-0 bg-black/50 z-[9997] pointer-events-none" />
@@ -1383,7 +1383,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
 
       {/* Chat scroll area */}
       <div 
-        className="flex-1 min-h-0 overflow-y-auto px-3 sm:px-6 lg:px-8 py-3 sm:py-4 lg:py-6 bg-[#f7f7f8] space-y-3 sm:space-y-4 lg:space-y-6 relative"
+        className="flex-1 min-h-0 overflow-y-auto px-3 sm:px-6 lg:px-8 py-3 sm:py-4 lg:py-6 pb-28 bg-[#f7f7f8] space-y-3 sm:space-y-4 lg:space-y-6 relative"
         onDragOver={(e) => { e.preventDefault(); if (requiresImage) setIsDragging(true) }}
         onDragLeave={() => setIsDragging(false)}
         onDrop={(e) => {
@@ -1681,7 +1681,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
 
       {/* Bottom input bar */}
       <div
-        className="border-t border-gray-200 bg-white px-2 sm:px-3 lg:px-4 py-2 sm:py-2.5 lg:py-3 flex flex-col gap-1.5 sm:gap-2 shadow-inner"
+        className="border-t border-gray-200 bg-white/95 backdrop-blur sticky bottom-0 left-0 right-0 px-2 sm:px-3 lg:px-4 py-2 sm:py-2.5 lg:py-3 flex flex-col gap-1.5 sm:gap-2 shadow-inner z-20"
         style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 10px)' }}
       >
         {/* Examples */}
