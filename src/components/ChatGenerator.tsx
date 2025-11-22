@@ -1424,8 +1424,8 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
             <div
               onClick={requiresImage ? handleUploadClick : undefined}
               className={`max-w-lg w-full text-center px-4 py-6 sm:px-6 sm:py-8 lg:px-8 lg:py-12 rounded-xl border-2 ${requiresImage
-                  ? 'border-dashed border-purple-300 bg-purple-50/30 cursor-pointer hover:bg-purple-50/50 hover:border-purple-400 transition-all'
-                  : 'border-gray-200 bg-white'
+                ? 'border-dashed border-purple-300 bg-purple-50/30 cursor-pointer hover:bg-purple-50/50 hover:border-purple-400 transition-all'
+                : 'border-gray-200 bg-white'
                 }`}
             >
               {requiresImage ? (
@@ -1784,8 +1784,8 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
                 key={opt.value}
                 onClick={() => gen.setAspectRatio(opt.value)}
                 className={`flex flex-col items-center justify-center gap-2 p-3 rounded-lg transition ${gen.aspectRatio === opt.value
-                    ? 'bg-purple-100 border-2 border-purple-500'
-                    : 'bg-white border-2 border-gray-200 hover:bg-gray-50'
+                  ? 'bg-purple-100 border-2 border-purple-500'
+                  : 'bg-white border-2 border-gray-200 hover:bg-gray-50'
                   }`}
               >
                 <div
@@ -1827,8 +1827,8 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
                     key={duration}
                     onClick={() => setMusicDuration(duration as 10 | 30 | 60 | 120 | 180)}
                     className={`flex-1 text-sm px-3 py-2 rounded-lg transition font-medium ${musicDuration === duration
-                        ? 'bg-purple-600 text-white shadow-sm'
-                        : 'bg-white text-gray-600 hover:bg-gray-50 border border-purple-200'
+                      ? 'bg-purple-600 text-white shadow-sm'
+                      : 'bg-white text-gray-600 hover:bg-gray-50 border border-purple-200'
                       }`}
                   >
                     {duration < 60 ? `${duration}s` : `${duration / 60}m`}
@@ -1845,8 +1845,8 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
                   type="button"
                   onClick={() => setLyricsMode('ai')}
                   className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition ${lyricsMode === 'ai'
-                      ? 'bg-purple-600 text-white shadow-sm'
-                      : 'bg-white text-gray-600 hover:bg-gray-50 border border-purple-200'
+                    ? 'bg-purple-600 text-white shadow-sm'
+                    : 'bg-white text-gray-600 hover:bg-gray-50 border border-purple-200'
                     }`}
                 >
                   🤖 AI Generate
@@ -1855,8 +1855,8 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
                   type="button"
                   onClick={() => setLyricsMode('custom')}
                   className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition ${lyricsMode === 'custom'
-                      ? 'bg-purple-600 text-white shadow-sm'
-                      : 'bg-white text-gray-600 hover:bg-gray-50 border border-purple-200'
+                    ? 'bg-purple-600 text-white shadow-sm'
+                    : 'bg-white text-gray-600 hover:bg-gray-50 border border-purple-200'
                     }`}
                 >
                   📝 Your Own
@@ -1927,6 +1927,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
             />
             <button
               id="generateButton"
+              data-tutorial="generate-button"
               onClick={async () => {
                 if (shouldHighlightGenerate) {
                   await handleFirstGeneration()
@@ -1936,9 +1937,13 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
                 sendPrompt()
               }}
               disabled={gen.isGenerating || isSubmitting || (requiresImage && localFiles.length === 0) || !input.trim()}
-              className={`bg-gradient-to-r from-purple-500 to-pink-500 text-white w-10 h-10 rounded-full text-xl font-semibold hover:scale-[1.05] active:scale-[0.95] transition disabled:opacity-50 disabled:hover:scale-100 flex items-center justify-center flex-shrink-0 ${shouldHighlightGenerate ? 'relative z-[9998]' : ''}`}
+              className={`bg-gradient-to-r from-purple-500 to-pink-500 text-white w-10 h-10 rounded-full text-xl font-semibold hover:scale-[1.05] active:scale-[0.95] transition ${shouldHighlightGenerate ? '' : 'disabled:opacity-50'} disabled:hover:scale-100 flex items-center justify-center flex-shrink-0 ${shouldHighlightGenerate ? 'relative z-[10000] ring-4 ring-blue-400 ring-offset-4' : ''}`}
               style={shouldHighlightGenerate ? {
-                animation: 'soft-glow-pulse 2s ease-in-out infinite'
+                animation: 'soft-glow-pulse 2s ease-in-out infinite',
+                boxShadow: '0 0 0 4px rgba(59, 130, 246, 0.4), 0 0 0 8px rgba(59, 130, 246, 0.2), 0 0 30px 4px rgba(59, 130, 246, 0.6)',
+                opacity: 1,
+                zIndex: 10000,
+                position: 'relative'
               } : undefined}
               title={`Generate (${getButtonCreditText()})`}
             >
