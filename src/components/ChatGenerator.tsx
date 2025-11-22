@@ -1420,10 +1420,10 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
           </div>
         )}
         {history.length === 0 && (
-          <div className="flex items-center justify-center h-full">
+          <div className="flex items-center justify-center h-full px-4">
             <div 
               onClick={requiresImage ? handleUploadClick : undefined}
-              className={`max-w-lg w-full text-center px-8 py-12 rounded-xl border-2 ${
+              className={`max-w-lg w-full text-center px-4 py-6 sm:px-6 sm:py-8 lg:px-8 lg:py-12 rounded-xl border-2 ${
                 requiresImage 
                   ? 'border-dashed border-purple-300 bg-purple-50/30 cursor-pointer hover:bg-purple-50/50 hover:border-purple-400 transition-all' 
                   : 'border-gray-200 bg-white'
@@ -1469,40 +1469,37 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
                 </>
               ) : isMusicMode ? (
                 <>
-                  <div className="text-5xl mb-4">🎵</div>
-                  <h3 className="text-base font-semibold text-gray-800 mb-2">Describe Your Music</h3>
-                  <p className="text-sm text-gray-600 leading-relaxed">
-                    Describe the style, mood, instruments, tempo, and feeling. Include genre, energy level, and specific musical elements you want.
+                  <div className="text-3xl sm:text-4xl lg:text-5xl mb-2 sm:mb-3">🎵</div>
+                  <h3 className="text-sm sm:text-base font-semibold text-gray-800 mb-1.5 sm:mb-2">Describe Your Music</h3>
+                  <p className="text-xs sm:text-sm text-gray-600 leading-relaxed">
+                    Describe the style, mood, instruments, tempo, and energy level.
                   </p>
-                  <div className="flex items-center justify-between mt-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-0 mt-2 sm:mt-3">
                     <p className="text-xs text-gray-400">
-                      Example: "Upbeat rock song with electric guitars and powerful drums, energetic and motivational"
+                      Example: "Upbeat rock with electric guitars, energetic"
                     </p>
-                    <div className="bg-purple-50 border border-purple-200 px-3 py-1 rounded-xl">
-                      <span className="text-xs font-medium text-purple-700">3 credits per music</span>
+                    <div className="bg-purple-50 border border-purple-200 px-2 sm:px-3 py-1 rounded-xl">
+                      <span className="text-xs font-medium text-purple-700">3 credits</span>
                     </div>
                   </div>
                 </>
               ) : (
                 <>
-                  <div className="text-5xl mb-4">✨</div>
-                  <h3 className="text-base font-semibold text-gray-800 mb-2">Describe Your Vision</h3>
-                  <p className="text-sm text-gray-600 leading-relaxed">
-                    Use rich details: lighting, materials, mood, camera angles, and visual style. The more specific, the better your result.
+                  <div className="text-3xl sm:text-4xl lg:text-5xl mb-2 sm:mb-3">✨</div>
+                  <h3 className="text-sm sm:text-base font-semibold text-gray-800 mb-1.5 sm:mb-2">Describe Your Vision</h3>
+                  <p className="text-xs sm:text-sm text-gray-600 leading-relaxed">
+                    Use rich details: lighting, materials, mood, camera angles, and visual style.
                   </p>
-                  <div className="flex items-center justify-between mt-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-0 mt-2 sm:mt-3">
                     <p className="text-xs text-gray-400">
-                      Example: "Luxury watch on marble surface, dramatic lighting, macro lens, professional product photography"
+                      Example: "Luxury watch on marble surface, dramatic lighting"
                     </p>
-                    <div className={`${selectedModel === 'nano-banana-pro' ? 'bg-amber-50 border-amber-200' : 'bg-green-50 border-green-200'} border px-3 py-1 rounded-xl`}>
+                    <div className={`${selectedModel === 'nano-banana-pro' ? 'bg-amber-50 border-amber-200' : 'bg-green-50 border-green-200'} border px-2 sm:px-3 py-1 rounded-xl flex-shrink-0`}>
                       <span className={`text-xs font-medium ${selectedModel === 'nano-banana-pro' ? 'text-amber-700' : 'text-green-700'}`}>
-                        {selectedModel === 'nano-banana-pro' ? '6 credits per image (4K)' : '1 credit per image'}
+                        {selectedModel === 'nano-banana-pro' ? '6 credits' : '1 credit'}
                       </span>
                     </div>
                   </div>
-                  <p className="text-xs text-gray-400 mt-3">
-                    Example: "Cinematic shot of a premium water bottle on wet stone, soft morning light, shallow depth of field"
-                  </p>
                 </>
               )}
             </div>
