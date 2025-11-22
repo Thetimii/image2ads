@@ -211,6 +211,14 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
   const [customLyrics, setCustomLyrics] = useState('')
   const [musicDuration, setMusicDuration] = useState<10 | 30 | 60 | 120 | 180>(30) // Duration in seconds
   const [coverPrompt, setCoverPrompt] = useState('') // Optional custom prompt for cover image
+  const DEFAULT_VISIBLE_MESSAGES = 10
+  const [visibleCounts, setVisibleCounts] = useState<Record<typeof gen.activeTab, number>>({
+    'text-to-image': DEFAULT_VISIBLE_MESSAGES,
+    'image-to-image': DEFAULT_VISIBLE_MESSAGES,
+    'text-to-video': DEFAULT_VISIBLE_MESSAGES,
+    'image-to-video': DEFAULT_VISIBLE_MESSAGES,
+    'text-to-music': DEFAULT_VISIBLE_MESSAGES,
+  })
 
   // Model selection for image generation (text-to-image and image-to-image only)
   const [selectedModel, setSelectedModel] = useState<'nano-banana' | 'nano-banana-pro'>('nano-banana')
@@ -218,6 +226,9 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
 
   const meta = TAB_META[gen.activeTab]
   const history = gen.histories[gen.activeTab]
+  const visibleCount = visibleCounts[gen.activeTab] || DEFAULT_VISIBLE_MESSAGES
+  const visibleHistory = history.slice(Math.max(0, history.length - visibleCount))
+  const canLoadMore = history.length > visibleCount
   const requiresImage = gen.activeTab === 'image-to-image' || gen.activeTab === 'image-to-video'
   const isMusicMode = gen.activeTab === 'text-to-music'
   const isImageMode = gen.activeTab === 'text-to-image' || gen.activeTab === 'image-to-image'
@@ -257,6 +268,45 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
     if (meta.resultType === 'video') return 8
     if (isImageMode && selectedModel === 'nano-banana-pro') return 6
     return 1
+  }
+
+  // Keep visible messages count in sync with history length per tab
+  useEffect(() => {
+    setVisibleCounts(prev => {
+      const current = prev[gen.activeTab] ?? DEFAULT_VISIBLE_MESSAGES
+      const next = history.length === 0
+        ? DEFAULT_VISIBLE_MESSAGES
+        : Math.min(history.length, Math.max(current, DEFAULT_VISIBLE_MESSAGES))
+      if (next === current) return prev
+      return { ...prev, [gen.activeTab]: next }
+    })
+  }, [gen.activeTab, history.length])
+
+  const scrollToBottom = (behavior: ScrollBehavior = 'auto') => {
+    if (bottomRef.current) {
+      bottomRef.current.scrollIntoView({ behavior })
+    }
+  }
+
+  // Scroll when switching tabs
+  useEffect(() => {
+    scrollToBottom('auto')
+  }, [gen.activeTab])
+
+  // Scroll on new messages
+  useEffect(() => {
+    scrollToBottom(history.length > 0 ? 'smooth' : 'auto')
+  }, [history.length])
+
+  const loadOlderMessages = () => {
+    setVisibleCounts(prev => ({
+      ...prev,
+      [gen.activeTab]: Math.min(
+        history.length,
+        (prev[gen.activeTab] || DEFAULT_VISIBLE_MESSAGES) + DEFAULT_VISIBLE_MESSAGES
+      )
+    }))
+    requestAnimationFrame(() => scrollToBottom('auto'))
   }
   
   const handleSubscribe = async (plan: 'starter' | 'pro' | 'business', couponId?: string) => {
@@ -1221,7 +1271,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
   }
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full min-h-0">
       {/* Tutorial Dark Overlay - covers everything except generate button */}
       {shouldHighlightGenerate && (
         <div className="fixed inset-0 bg-black/50 z-[9997] pointer-events-none" />
@@ -1286,12 +1336,15 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
       )} */}
       
       {/* Header */}
-      <div className="flex justify-between items-center border-b border-gray-200 bg-white px-6 py-3 flex-shrink-0">
-        <div>
+      <div
+        className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between border-b border-gray-200 bg-white px-4 sm:px-6 py-2.5 sm:py-3 flex-shrink-0 sticky top-0 z-20"
+        style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) / 2)' }}
+      >
+        <div className="flex flex-col gap-0.5">
           <h1 className="text-base font-semibold text-gray-800">{meta.title}</h1>
-          <p className="text-xs text-gray-500 mt-0.5">{meta.subtitle}</p>
+          <p className="text-xs text-gray-500">{meta.subtitle}</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3 flex-wrap justify-end">
           {/* Upgrade Button - Always visible for free users */}
           {isFreeUser && (
             <button
@@ -1307,7 +1360,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
                   onLockedFeature?.()
                 }
               }}
-              className="text-sm bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white px-4 py-2 rounded-full font-semibold shadow-md hover:shadow-lg hover:scale-105 transition-all cursor-pointer"
+              className="text-sm bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white px-4 py-2 rounded-full font-semibold shadow-md hover:shadow-lg hover:scale-105 transition-all cursor-pointer w-full sm:w-auto text-center"
               title="Get Pro access - $5 for 3 days"
             >
               ✨ $5 Pro Trial
@@ -1320,7 +1373,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
               // Call onLockedFeature to show 3-plan upgrade modal
               onLockedFeature?.()
             }}
-            className="text-xs bg-gradient-to-r from-purple-500 to-pink-500 text-white px-3 py-1.5 rounded-full font-medium shadow-sm hover:shadow-lg hover:scale-105 transition-all cursor-pointer"
+            className="text-xs bg-gradient-to-r from-purple-500 to-pink-500 text-white px-3 py-1.5 rounded-full font-medium shadow-sm hover:shadow-lg hover:scale-105 transition-all cursor-pointer w-full sm:w-auto text-center"
             title="Click to get more credits"
           >
             ⭐ {getCreditText()}
@@ -1330,7 +1383,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
 
       {/* Chat scroll area */}
       <div 
-        className="flex-1 overflow-y-auto px-3 sm:px-6 lg:px-8 py-3 sm:py-4 lg:py-6 bg-[#f7f7f8] space-y-3 sm:space-y-4 lg:space-y-6 relative"
+        className="flex-1 min-h-0 overflow-y-auto px-3 sm:px-6 lg:px-8 py-3 sm:py-4 lg:py-6 bg-[#f7f7f8] space-y-3 sm:space-y-4 lg:space-y-6 relative"
         onDragOver={(e) => { e.preventDefault(); if (requiresImage) setIsDragging(true) }}
         onDragLeave={() => setIsDragging(false)}
         onDrop={(e) => {
@@ -1442,7 +1495,17 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
             </div>
           </div>
         )}
-        {history.map(m => (
+        {history.length > 0 && canLoadMore && (
+          <div className="flex justify-center">
+            <button
+              onClick={loadOlderMessages}
+              className="px-3 py-1.5 text-xs rounded-full bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 shadow-sm"
+            >
+              Load previous {Math.min(DEFAULT_VISIBLE_MESSAGES, history.length - visibleHistory.length)} messages
+            </button>
+          </div>
+        )}
+        {visibleHistory.map(m => (
             <div key={m.id} className={`flex w-full ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
             <div className={`${m.role === 'user' ? 'bg-purple-600 text-white rounded-2xl rounded-br-sm' : 'bg-white border border-gray-200 rounded-2xl rounded-bl-sm'} px-3 sm:px-4 py-2 sm:py-3 shadow-sm text-xs sm:text-sm max-w-[85%] sm:max-w-[75%] lg:max-w-[65%]`}>
               <div className="whitespace-pre-wrap leading-relaxed">
@@ -1617,9 +1680,12 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
       </div>
 
       {/* Bottom input bar */}
-      <div className="border-t border-gray-200 bg-white px-2 sm:px-3 lg:px-4 py-2 sm:py-2.5 lg:py-3 flex flex-col gap-1.5 sm:gap-2 shadow-inner">
+      <div
+        className="border-t border-gray-200 bg-white px-2 sm:px-3 lg:px-4 py-2 sm:py-2.5 lg:py-3 flex flex-col gap-1.5 sm:gap-2 shadow-inner"
+        style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 10px)' }}
+      >
         {/* Examples */}
-        <div className="flex gap-2 overflow-x-auto text-xs text-gray-600 pb-1 hide-scrollbar pr-4">
+        <div className="flex gap-2 overflow-x-auto text-xs text-gray-600 pb-1 scrollbar-hide pr-4 -mx-1 px-1">
           {EXAMPLES[gen.activeTab].map(ex => (
             <button
               key={ex.short}
@@ -1758,7 +1824,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
         
         {/* Model Selector - only for image generation modes */}
         {isImageMode && (
-          <div className="px-3 sm:px-6 lg:px-8">
+          <div className="px-1.5 sm:px-6 lg:px-8">
             <ModelSelector
               selectedModel={selectedModel}
               onSelectModel={setSelectedModel}
@@ -1804,14 +1870,16 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
         )}
         
         {/* Prompt Row */}
-        <div className="flex items-center gap-2">
+        <div className="flex flex-col gap-2 sm:gap-3">
           {requiresImage && (
-            <>
+            <div className="flex flex-wrap items-center gap-2">
               <button
                 onClick={handleUploadClick}
                 className="text-xl hover:opacity-80 cursor-pointer"
                 title="Upload reference images"
-              >📎</button>
+              >
+                📎
+              </button>
               <input ref={fileInputRef} onChange={handleFileChange} type="file" accept="image/*" multiple className="hidden" />
               <div className="flex gap-2 flex-wrap">
                 {localPreviews.map((preview, index) => (
@@ -1827,40 +1895,42 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
                   </div>
                 ))}
               </div>
-            </>
+            </div>
           )}
-          <textarea
-            ref={textareaRef}
-            value={input}
-            onChange={handleInputChange}
-            onKeyDown={onKeyDown}
-            placeholder={isMusicMode ? "Describe your music: style, mood, instruments, tempo..." : "Describe your idea or drop an image…"}
-            rows={1}
-            className="flex-1 border border-gray-300 rounded-2xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none overflow-hidden min-h-[40px] max-h-[120px]"
-            style={{ height: '40px' }}
-          />
-          <button
-            id="generateButton"
-            onClick={async () => {
-              if (shouldHighlightGenerate) {
-                await handleFirstGeneration()
-                // Refresh to get updated profile with tutorial_completed = true
-                router.refresh()
-              }
-              sendPrompt()
-            }}
-            disabled={gen.isGenerating || isSubmitting || (requiresImage && localFiles.length === 0) || !input.trim()}
-            className={`bg-gradient-to-r from-purple-500 to-pink-500 text-white px-3 sm:px-4 lg:px-5 py-1.5 sm:py-2 rounded-full text-xs sm:text-sm font-semibold hover:scale-[1.03] active:scale-[0.97] transition disabled:opacity-50 disabled:hover:scale-100 flex items-center gap-1 sm:gap-1.5 lg:gap-2 whitespace-nowrap ${shouldHighlightGenerate ? 'relative z-[9998]' : ''}`}
-            style={shouldHighlightGenerate ? {
-              animation: 'soft-glow-pulse 2s ease-in-out infinite'
-            } : undefined}
-          >
-            <span className="hidden sm:inline">⚡ Generate</span>
-            <span className="sm:hidden">⚡</span>
-            <span className="bg-white/20 px-1.5 sm:px-2 py-0.5 rounded-full text-[10px] sm:text-xs">
-              {getButtonCreditText()}
-            </span>
-          </button>
+          <div className="flex flex-col sm:flex-row sm:items-end gap-2 sm:gap-3">
+            <textarea
+              ref={textareaRef}
+              value={input}
+              onChange={handleInputChange}
+              onKeyDown={onKeyDown}
+              placeholder={isMusicMode ? "Describe your music: style, mood, instruments, tempo..." : "Describe your idea or drop an image…"}
+              rows={1}
+              className="flex-1 w-full border border-gray-300 rounded-2xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none overflow-hidden min-h-[40px] max-h-[120px]"
+              style={{ height: '40px' }}
+            />
+            <button
+              id="generateButton"
+              onClick={async () => {
+                if (shouldHighlightGenerate) {
+                  await handleFirstGeneration()
+                  // Refresh to get updated profile with tutorial_completed = true
+                  router.refresh()
+                }
+                sendPrompt()
+              }}
+              disabled={gen.isGenerating || isSubmitting || (requiresImage && localFiles.length === 0) || !input.trim()}
+              className={`bg-gradient-to-r from-purple-500 to-pink-500 text-white px-3 sm:px-4 lg:px-5 py-2 rounded-full text-xs sm:text-sm font-semibold hover:scale-[1.03] active:scale-[0.97] transition disabled:opacity-50 disabled:hover:scale-100 flex items-center justify-center gap-1 sm:gap-1.5 lg:gap-2 whitespace-nowrap w-full sm:w-auto self-stretch sm:self-auto ${shouldHighlightGenerate ? 'relative z-[9998]' : ''}`}
+              style={shouldHighlightGenerate ? {
+                animation: 'soft-glow-pulse 2s ease-in-out infinite'
+              } : undefined}
+            >
+              <span className="hidden sm:inline">⚡ Generate</span>
+              <span className="sm:hidden">⚡</span>
+              <span className="bg-white/20 px-1.5 sm:px-2 py-0.5 rounded-full text-[10px] sm:text-xs">
+                {getButtonCreditText()}
+              </span>
+            </button>
+          </div>
         </div>
       </div>
 

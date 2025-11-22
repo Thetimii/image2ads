@@ -83,24 +83,30 @@ export default function FirstTimeOnboarding({ user, profile, onCompleteAction }:
       <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[9998] animate-in fade-in duration-300" />
       
       {/* Welcome Modal */}
-      <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
-        <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full animate-in zoom-in-95 duration-300">
+      <div 
+        className="fixed inset-0 z-[9999] flex items-start justify-center overflow-y-auto p-4 sm:p-6"
+        style={{
+          paddingTop: 'calc(env(safe-area-inset-top, 0px) + 16px)',
+          paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 16px)',
+        }}
+      >
+        <div className="bg-white rounded-2xl shadow-2xl w-[min(480px,calc(100vw-32px))] max-h-[calc(100vh-48px)] overflow-hidden animate-in zoom-in-95 duration-300">
           {/* Header with emoji and confetti background */}
-          <div className="bg-gradient-to-br from-blue-500 via-purple-500 to-pink-500 p-8 rounded-t-2xl text-center relative overflow-hidden">
+          <div className="bg-gradient-to-br from-blue-500 via-purple-500 to-pink-500 p-6 sm:p-8 rounded-t-2xl text-center relative overflow-hidden">
             <div className="absolute inset-0 bg-white/10 backdrop-blur-sm"></div>
             <div className="relative z-10">
-              <div className="text-6xl mb-4 animate-bounce">☕</div>
-              <h2 className="text-3xl font-bold text-white mb-2">
+              <div className="text-5xl sm:text-6xl mb-4 animate-bounce">☕</div>
+              <h2 className="text-2xl sm:text-3xl font-bold text-white mb-2 leading-tight">
                 Welcome to Image2Ad!
               </h2>
-              <p className="text-white/90 text-lg">
+              <p className="text-white/90 text-base sm:text-lg">
                 Let's generate your first ad together — it only takes a few seconds.
               </p>
             </div>
           </div>
 
           {/* Body */}
-          <div className="p-8">
+          <div className="p-6 sm:p-8">
             <div className="space-y-4 mb-6">
               <div className="flex items-start space-x-3">
                 <div className="flex-shrink-0 w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">

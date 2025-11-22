@@ -90,6 +90,16 @@ export default function DashboardLayout({ user, profile, children, onDemoOpen, i
     setIsSafari(userAgent.includes('safari') && !userAgent.includes('chrome'));
   }, []);
 
+  // Prefetch dashboard routes for faster tab switching
+  useEffect(() => {
+    navigation.forEach(item => {
+      router.prefetch(item.href)
+    })
+    bottomNavigation.forEach(item => {
+      router.prefetch(item.href)
+    })
+  }, [router])
+
   // Check credits and show appropriate modal
   useEffect(() => {
     const checkCreditsAndShowModal = async () => {
@@ -265,7 +275,7 @@ export default function DashboardLayout({ user, profile, children, onDemoOpen, i
   }
 
   return (
-    <div className="h-screen bg-gray-50 flex">
+    <div className="min-h-screen bg-gray-50 flex">
       {/* Mobile sidebar overlay */}
       {sidebarOpen && (
         <div 
@@ -278,10 +288,10 @@ export default function DashboardLayout({ user, profile, children, onDemoOpen, i
 
       {/* Sidebar */}
       <div className={`
-        fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-gray-200 transform transition-transform duration-300 ease-in-out lg:translate-x-0
+        fixed inset-y-0 left-0 z-50 w-[82vw] max-w-xs lg:w-64 bg-white border-r border-gray-200 transform transition-transform duration-300 ease-in-out lg:translate-x-0
         ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
       `}>
-        <div className="flex flex-col h-screen w-64">
+        <div className="flex flex-col min-h-screen w-[82vw] max-w-xs lg:w-64 overflow-y-auto">
           {/* Header */}
           <div className="flex items-center justify-between h-16 px-6 border-b border-gray-200 flex-shrink-0">
             <Link href="/" className="flex items-center space-x-2">
@@ -471,7 +481,7 @@ export default function DashboardLayout({ user, profile, children, onDemoOpen, i
       </div>
 
       {/* Main content */}
-      <div className="flex-1 flex flex-col h-screen overflow-hidden lg:ml-64">
+      <div className="flex-1 flex flex-col min-h-screen overflow-hidden lg:ml-64">
           {/* Pro Discount Modal (20% off at 1 credit) */}
           {showProDiscountModal && (
             <ProDiscountModal
@@ -544,7 +554,10 @@ export default function DashboardLayout({ user, profile, children, onDemoOpen, i
             </div>
           )}
         {/* Mobile header */}
-        <div className="lg:hidden bg-white border-b border-gray-200 px-4 py-3">
+        <div 
+          className="lg:hidden bg-white border-b border-gray-200 px-4 py-3 sticky top-0 z-30"
+          style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 6px)' }}
+        >
           <div className="flex items-center justify-between">
             <button
               onClick={() => setSidebarOpen(true)}

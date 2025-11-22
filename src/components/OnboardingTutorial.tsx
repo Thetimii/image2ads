@@ -107,37 +107,47 @@ export default function OnboardingTutorial({ onCompleteAction, onSkipAction }: O
   }
 
   const getTooltipPosition = (target: Element | null) => {
-    if (!target) return { top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }
+    const fallbackWidth = typeof window !== 'undefined' ? Math.min(360, window.innerWidth - 24) : 320
+
+    if (!target) return { top: '50%', left: '50%', transform: 'translate(-50%, -50%)', width: `${fallbackWidth}px` }
 
     const rect = target.getBoundingClientRect()
-    const tooltipWidth = 320
-    const tooltipHeight = 200
+    const viewportWidth = window.innerWidth
+    const viewportHeight = window.innerHeight
+    const padding = viewportWidth < 640 ? 12 : 20
+    const tooltipWidth = Math.min(360, viewportWidth - padding * 2)
+    const tooltipHeight = Math.min(240, viewportHeight - padding * 2)
 
     switch (currentStepData.position) {
       case 'top':
         return {
-          top: `${rect.top - tooltipHeight - 20}px`,
-          left: `${rect.left + (rect.width / 2) - (tooltipWidth / 2)}px`
+          top: `${Math.max(padding, rect.top - tooltipHeight - padding)}px`,
+          left: `${Math.max(padding, Math.min(viewportWidth - tooltipWidth - padding, rect.left + (rect.width / 2) - (tooltipWidth / 2)))}px`,
+          width: `${tooltipWidth}px`
         }
       case 'bottom':
         return {
-          top: `${rect.bottom + 20}px`,
-          left: `${rect.left + (rect.width / 2) - (tooltipWidth / 2)}px`
+          top: `${Math.min(viewportHeight - tooltipHeight - padding, rect.bottom + padding)}px`,
+          left: `${Math.max(padding, Math.min(viewportWidth - tooltipWidth - padding, rect.left + (rect.width / 2) - (tooltipWidth / 2)))}px`,
+          width: `${tooltipWidth}px`
         }
       case 'left':
         return {
-          top: `${rect.top + (rect.height / 2) - (tooltipHeight / 2)}px`,
-          left: `${rect.left - tooltipWidth - 20}px`
+          top: `${Math.max(padding, Math.min(viewportHeight - tooltipHeight - padding, rect.top + (rect.height / 2) - (tooltipHeight / 2)))}px`,
+          left: `${Math.max(padding, rect.left - tooltipWidth - padding)}px`,
+          width: `${tooltipWidth}px`
         }
       case 'right':
         return {
-          top: `${rect.top + (rect.height / 2) - (tooltipHeight / 2)}px`,
-          left: `${rect.right + 20}px`
+          top: `${Math.max(padding, Math.min(viewportHeight - tooltipHeight - padding, rect.top + (rect.height / 2) - (tooltipHeight / 2)))}px`,
+          left: `${Math.min(viewportWidth - tooltipWidth - padding, rect.right + padding)}px`,
+          width: `${tooltipWidth}px`
         }
       default: // center
         return {
           top: '50%',
           left: '50%',
+          width: `${tooltipWidth}px`,
           transform: 'translate(-50%, -50%)'
         }
     }
@@ -153,11 +163,7 @@ export default function OnboardingTutorial({ onCompleteAction, onSkipAction }: O
         setTooltipPosition(getTooltipPosition(target))
       }
     } else {
-      setTooltipPosition({
-        top: '50%',
-        left: '50%',
-        transform: 'translate(-50%, -50%)'
-      })
+      setTooltipPosition(getTooltipPosition(null))
     }
   }, [currentStep])
 
@@ -181,8 +187,8 @@ export default function OnboardingTutorial({ onCompleteAction, onSkipAction }: O
 
         {/* Tutorial Tooltip */}
         <div
-          className="absolute bg-white rounded-xl shadow-2xl border border-gray-200 p-6 max-w-sm z-52"
-          style={tooltipPosition}
+          className="absolute bg-white rounded-xl shadow-2xl border border-gray-200 p-4 sm:p-6 max-w-[calc(100vw-32px)] w-[min(360px,calc(100vw-32px))] max-h-[calc(100vh-32px)] overflow-y-auto z-52"
+          style={{ ...tooltipPosition, maxWidth: 'calc(100vw - 32px)', maxHeight: 'calc(100vh - 32px)' }}
         >
           {/* Progress */}
           <div className="flex items-center justify-between mb-4">

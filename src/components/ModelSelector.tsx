@@ -48,15 +48,15 @@ export default function ModelSelector({ selectedModel, onSelectModel, selectedRe
 
       {/* Expanded View - Full Selector */}
       {isExpanded && (
-        <div className="mt-3 p-4 bg-gray-50 border-2 border-gray-200 rounded-lg">
-      <div className="grid grid-cols-2 gap-3">
+        <div className="mt-3 p-3 sm:p-4 bg-gray-50 border-2 border-gray-200 rounded-lg">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {/* Nano Banana - Regular */}
         <button
           type="button"
           disabled={disabled}
           onClick={() => onSelectModel('nano-banana')}
           className={`
-            relative p-4 rounded-lg border-2 transition-all text-left
+            relative p-3 sm:p-4 rounded-lg border-2 transition-all text-left
             ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:border-purple-300'}
             ${
               selectedModel === 'nano-banana'
@@ -93,7 +93,7 @@ export default function ModelSelector({ selectedModel, onSelectModel, selectedRe
           disabled={disabled}
           onClick={() => onSelectModel('nano-banana-pro')}
           className={`
-            relative p-4 rounded-lg border-2 transition-all text-left
+            relative p-3 sm:p-4 rounded-lg border-2 transition-all text-left
             ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:border-purple-300'}
             ${
               selectedModel === 'nano-banana-pro'
@@ -137,7 +137,7 @@ export default function ModelSelector({ selectedModel, onSelectModel, selectedRe
           <label className="block text-sm font-medium text-gray-700 mb-2">
             Resolution (Higher = Longer processing time)
           </label>
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
             <button
               type="button"
               disabled={disabled}
