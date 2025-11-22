@@ -27,7 +27,7 @@ const generateId = () => {
     return crypto.randomUUID()
   }
   // Fallback for server-side or older browsers
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
     const r = Math.random() * 16 | 0
     const v = c == 'x' ? r : (r & 0x3 | 0x8)
     return v.toString(16)
@@ -170,9 +170,9 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
         console.error('Failed to check discount:', err)
       }
     }
-    
+
     checkDiscount()
-    
+
     // Re-check every 30 seconds
     const interval = setInterval(checkDiscount, 30000)
     return () => clearInterval(interval)
@@ -235,7 +235,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
   // Check if feature is locked: only locked if marked as locked AND user has free status
   const isLocked = !!meta.locked && profile?.subscription_status === 'free'
   const chatContainerRef = useRef<HTMLDivElement | null>(null)
-  
+
   // Helper to get credit text based on user type
   const isFreeUser = profile?.subscription_status === 'free'
   const hasPro = profile?.subscription_status !== 'free'
@@ -245,7 +245,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
     }
     return `${profile.credits} credits`
   }
-  
+
   const getButtonCreditText = () => {
     let count: number
     if (meta.resultType === 'music') {
@@ -256,13 +256,13 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
       // Image generation - check selected model
       count = isImageMode && selectedModel === 'nano-banana-pro' ? 6 : 1
     }
-    
+
     if (isFreeUser) {
       return count === 1 ? '1 free image' : `${count} free images`
     }
     return `${count} credit${count > 1 ? 's' : ''}`
   }
-  
+
   // Get credit cost for current mode and model selection
   const getCreditCost = () => {
     if (meta.resultType === 'music') return 3
@@ -314,7 +314,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
     }))
     requestAnimationFrame(() => scrollToBottom('auto'))
   }
-  
+
   const handleSubscribe = async (plan: 'starter' | 'pro' | 'business', couponId?: string) => {
     setIsUpgrading(plan)
     const metaOptions = {
@@ -373,7 +373,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
       setIsUpgrading(null)
     }
   }
-  
+
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -430,7 +430,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
         // Group jobs by result type
         jobs.forEach(job => {
           let tabKey: keyof typeof gen.histories
-          
+
           if (job.result_type === 'music') {
             tabKey = 'text-to-music'
           } else if (job.has_images) {
@@ -438,50 +438,50 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
           } else {
             tabKey = job.result_type === 'video' ? 'text-to-video' : 'text-to-image'
           }
-          
+
           jobsByType[tabKey].push(job)
         })
 
         // Update histories with jobs converted to messages
         Object.entries(jobsByType).forEach(([tab, tabJobs]) => {
           const tabKey = tab as keyof typeof gen.histories
-          
+
           // Only build messages if this tab is empty (avoid duplicates)
           if (gen.histories[tabKey].length === 0) {
             tabJobs.forEach(job => {
-            // Add user message
-            const userMessage: ChatMessage = {
-              id: `user-${job.id}`,
-              role: 'user',
-              content: job.prompt,
-              createdAt: new Date(job.created_at).getTime()
-            }
-            gen.pushMessage(tabKey, userMessage)
+              // Add user message
+              const userMessage: ChatMessage = {
+                id: `user-${job.id}`,
+                role: 'user',
+                content: job.prompt,
+                createdAt: new Date(job.created_at).getTime()
+              }
+              gen.pushMessage(tabKey, userMessage)
 
-            // Add assistant message based on job status
-            const assistantMessage: ChatMessage = {
-              id: `assistant-${job.id}`,
-              role: 'assistant',
-              content: job.status === 'completed' ? `${job.result_type === 'video' ? 'Video' : 'Image'} generated ✅` : 
-                       job.status === 'failed' ? (job.error_message || 'Generation failed') :
-                       'Generating…',
-              createdAt: new Date(job.created_at).getTime() + 1000, // Slightly after user message
-              status: job.status === 'completed' ? 'complete' : 
-                      job.status === 'failed' ? 'error' : 'pending',
-              jobId: job.id
-            }
+              // Add assistant message based on job status
+              const assistantMessage: ChatMessage = {
+                id: `assistant-${job.id}`,
+                role: 'assistant',
+                content: job.status === 'completed' ? `${job.result_type === 'video' ? 'Video' : 'Image'} generated ✅` :
+                  job.status === 'failed' ? (job.error_message || 'Generation failed') :
+                    'Generating…',
+                createdAt: new Date(job.created_at).getTime() + 1000, // Slightly after user message
+                status: job.status === 'completed' ? 'complete' :
+                  job.status === 'failed' ? 'error' : 'pending',
+                jobId: job.id
+              }
 
-            gen.pushMessage(tabKey, assistantMessage)
+              gen.pushMessage(tabKey, assistantMessage)
 
-            // If completed, get signed URL for result immediately  
-            if (job.status === 'completed' && job.result_url) {
-              getSignedUrlForJob(job, tabKey, assistantMessage.id)
-            }
+              // If completed, get signed URL for result immediately  
+              if (job.status === 'completed' && job.result_url) {
+                getSignedUrlForJob(job, tabKey, assistantMessage.id)
+              }
 
-            // If job is still pending/processing, start polling
-            if (job.status === 'pending' || job.status === 'processing') {
-              startJobPolling(tabKey, assistantMessage.id, job.id)
-            }
+              // If job is still pending/processing, start polling
+              if (job.status === 'pending' || job.status === 'processing') {
+                startJobPolling(tabKey, assistantMessage.id, job.id)
+              }
             })
           }
         })
@@ -513,7 +513,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
           const { data: coverSignedUrl } = await supabase.storage
             .from('results')
             .createSignedUrl(job.cover_url, 3600)
-          
+
           if (coverSignedUrl?.signedUrl) {
             updateData.coverUrl = coverSignedUrl.signedUrl
           }
@@ -532,10 +532,10 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
       console.log(`🔄 [JobRecovery] Already polling job ${jobId}, skipping`)
       return
     }
-    
+
     activePolling.current.add(jobId)
     const startTime = Date.now()
-    
+
     // Type-specific polling configuration
     // Images: Fast (immediate, 3s interval, 10min timeout)
     // Music: Medium (immediate, 5s interval, 10min timeout)  
@@ -543,7 +543,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
     let maxDuration: number
     let pollInterval: number
     let initialDelay: number
-    
+
     if (tab.includes('video')) {
       maxDuration = 1200000  // 20 minutes for videos - DON'T GIVE UP!
       pollInterval = 10000   // Poll every 10 seconds
@@ -557,64 +557,64 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
       pollInterval = 3000    // Poll every 3 seconds
       initialDelay = 0       // Start immediately
     }
-    
+
     const pollJob = async () => {
       try {
         // Check if we've exceeded the maximum duration
         const elapsed = Date.now() - startTime
         if (elapsed > maxDuration) {
-          console.error(`⏱️ Polling timeout after ${Math.round(elapsed/1000)}s for job ${jobId}`)
-          gen.updateMessage(tab, messageId, { 
+          console.error(`⏱️ Polling timeout after ${Math.round(elapsed / 1000)}s for job ${jobId}`)
+          gen.updateMessage(tab, messageId, {
             status: 'error',
             content: 'Generation is taking longer than expected. Please check your library later.'
           })
           activePolling.current.delete(jobId)
           return
         }
-        
+
         // 🔥 CRITICAL: Call check-job-status Edge Function to actually check Kie.ai and download results
         const session = await supabase.auth.getSession()
         const token = session.data.session?.access_token
-        
+
         if (!token) {
           console.error('No auth token for polling')
           activePolling.current.delete(jobId)
           return
         }
-        
+
         const checkResponse = await fetch(`${CHECK_JOB_STATUS_ENDPOINT}?jobId=${jobId}`, {
           headers: {
             'Authorization': `Bearer ${token}`,
           },
         })
-        
+
         if (!checkResponse.ok) {
           console.error(`❌ check-job-status returned ${checkResponse.status}`)
           const timeoutId = setTimeout(pollJob, pollInterval)
           activeTimeouts.current.add(timeoutId)
           return
         }
-        
+
         const jobStatus = await checkResponse.json()
-        console.log(`🔍 Polling job ${jobId}: status=${jobStatus.status}, elapsed=${Math.round(elapsed/1000)}s`)
+        console.log(`🔍 Polling job ${jobId}: status=${jobStatus.status}, elapsed=${Math.round(elapsed / 1000)}s`)
 
         if (jobStatus.status === 'completed' && jobStatus.result_url) {
           console.log(`✅ Job ${jobId} completed! Getting signed URL...`)
-          
+
           // Show success toast notification
           const contentType = tab.includes('video') ? 'Video' : tab.includes('music') ? 'Music' : 'Image'
           toast.success(`${contentType} generated successfully! 🎉`, {
             description: 'Your content is ready to view',
             duration: 5000,
           })
-          
+
           // Get signed URL for the result
           const { data: signedUrl } = await supabase.storage
             .from('results')
             .createSignedUrl(jobStatus.result_url, 3600)
 
           if (signedUrl?.signedUrl) {
-            
+
             gen.updateMessage(tab, messageId, {
               status: 'complete',
               content: `${tab.includes('video') ? 'Video' : tab.includes('music') ? 'Music' : 'Image'} generated ✅`,
@@ -622,12 +622,12 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
               mediaType: tab.includes('video') ? 'video' : tab.includes('music') ? 'music' : 'image'
             })
           } else {
-            gen.updateMessage(tab, messageId, { 
+            gen.updateMessage(tab, messageId, {
               status: 'error',
               content: 'Error accessing generated content'
             })
           }
-          
+
           // Remove from active polling
           activePolling.current.delete(jobId)
         } else if (jobStatus.status === 'failed' || jobStatus.status === 'error') {
@@ -636,8 +636,8 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
             description: jobStatus.error_message || 'An error occurred during generation',
             duration: 5000,
           })
-          
-          gen.updateMessage(tab, messageId, { 
+
+          gen.updateMessage(tab, messageId, {
             status: 'error',
             content: jobStatus.error_message || 'Generation failed'
           })
@@ -645,13 +645,13 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
           activePolling.current.delete(jobId)
         } else {
           // Still processing, continue polling
-          console.log(`⏳ Job ${jobId} still ${jobStatus.status}, polling again in ${pollInterval/1000}s...`)
+          console.log(`⏳ Job ${jobId} still ${jobStatus.status}, polling again in ${pollInterval / 1000}s...`)
           const timeoutId = setTimeout(pollJob, pollInterval)
           activeTimeouts.current.add(timeoutId)
         }
       } catch (error) {
         console.error('Error in polling:', error)
-        gen.updateMessage(tab, messageId, { 
+        gen.updateMessage(tab, messageId, {
           status: 'error',
           content: 'Error checking generation status'
         })
@@ -660,7 +660,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
     }
 
     // Start polling after initial delay
-    console.log(`🚀 Starting polling for job ${jobId} after ${initialDelay/1000}s delay, max duration: ${maxDuration/1000}s, poll interval: ${pollInterval/1000}s`)
+    console.log(`🚀 Starting polling for job ${jobId} after ${initialDelay / 1000}s delay, max duration: ${maxDuration / 1000}s, poll interval: ${pollInterval / 1000}s`)
     const initialTimeoutId = setTimeout(pollJob, initialDelay)
     activeTimeouts.current.add(initialTimeoutId)
   }
@@ -711,7 +711,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
 
   // Drag & drop state
   const [isDragging, setIsDragging] = useState(false)
-  
+
   // Collapsible controls state
   const [showAspectRatio, setShowAspectRatio] = useState(false)
   const [showMusicOptions, setShowMusicOptions] = useState(false)
@@ -724,7 +724,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
     console.log(`[ChatGenerator] Is locked: ${isLocked}`)
     console.log(`[ChatGenerator] Requires image: ${requiresImage}`)
     console.log(`[ChatGenerator] Local files: ${localFiles.length} file(s)`)
-    
+
     if (!input.trim() || isSubmitting) {
       console.log(`[ChatGenerator] Blocked: No input or already submitting`)
       return
@@ -734,23 +734,23 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
       onLockedFeature?.()
       return
     }
-    
+
     // Check if user has sufficient credits BEFORE generation
     const requiredCredits = getCreditCost()
     if (profile.credits < requiredCredits) {
       console.log(`[ChatGenerator] Blocked: Insufficient credits (have: ${profile.credits}, need: ${requiredCredits})`)
-      
+
       // Check if this is a free user who ran out of credits - show upgrade prompt
       if (checkCreditsAndShowUpgrade()) {
         // Upgrade prompt will be shown
         return
       }
-      
+
       // Otherwise show regular credit popup
       setShowCreditPopup(true)
       return
     }
-    
+
     if (requiresImage && localFiles.length === 0) {
       console.log(`[ChatGenerator] Blocked: Image required but not provided`)
       onLockedFeature?.()
@@ -793,13 +793,13 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
           content: messages[messageIndex]
         })
       }, 4000)
-      
+
       // Store interval to clear it later
       activeTimeouts.current.add(progressInterval as any)
     }
 
     setInput('')
-    
+
     // Clear the local files and previews after sending
     localPreviews.forEach(url => URL.revokeObjectURL(url)) // Free memory
     setLocalFiles([])
@@ -813,22 +813,22 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
       const imageIds: string[] = []
       if (requiresImage && localFiles.length > 0) {
         console.log(`[ChatGenerator] Starting upload of ${localFiles.length} image(s)...`)
-        
+
         for (let i = 0; i < localFiles.length; i++) {
           const file = localFiles[i]
           console.log(`[ChatGenerator] Uploading image ${i + 1}/${localFiles.length}:`, { name: file.name, size: file.size, type: file.type })
-          
+
           const fileName = `${user.id}/${Date.now()}-${i}-${file.name}`
           console.log(`[ChatGenerator] Upload filename: ${fileName}`)
-          
+
           const { data: uploadData, error: uploadErr } = await supabase.storage.from('uploads').upload(fileName, file)
-          
+
           if (uploadErr) {
             console.error(`[ChatGenerator] Upload error:`, uploadErr)
             throw new Error(`Upload failed: ${uploadErr.message}`)
           }
           console.log(`[ChatGenerator] Upload successful:`, uploadData)
-          
+
           console.log(`[ChatGenerator] Creating image record in database...`)
           const { data: imageData, error: imageDbErr } = await supabase.from('images').insert({
             user_id: user.id,
@@ -836,7 +836,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
             original_name: file.name,
             folder_id: null
           }).select().single()
-          
+
           if (imageDbErr) {
             console.error(`[ChatGenerator] Image DB error:`, imageDbErr)
             // Clean up uploaded file if DB insert fails
@@ -865,11 +865,11 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
         image_id: imageIds.length > 0 ? imageIds[0] : null,
         aspect_ratio: gen.aspectRatio // Aspect ratio passed separately for all modes
       }
-      
+
       console.log(`[ChatGenerator] 🎯 Job payload aspect_ratio:`, jobPayload.aspect_ratio)
       console.log(`[ChatGenerator] Full job payload:`, JSON.stringify(jobPayload, null, 2))
 
-      
+
       // Add music-specific parameters
       if (isMusicMode) {
         jobPayload.music_options = {
@@ -881,9 +881,9 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
           cover_prompt: coverPrompt.trim() || undefined
         }
       }
-      
+
       console.log(`[ChatGenerator] Job payload:`, jobPayload)
-      
+
       const { data: job, error: jobErr } = await supabase.from('jobs').insert(jobPayload).select().single()
       if (jobErr) {
         console.error(`[ChatGenerator] Job creation error:`, jobErr)
@@ -900,15 +900,15 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
       console.log(`[ChatGenerator] Endpoint: ${endpoint}`)
       console.log(`[ChatGenerator] JobId: ${job.id}`)
       console.log(`[ChatGenerator] Job data:`, job)
-      
+
       // Add timeout to detect hanging requests
       // Music generation takes longer (30-90 seconds), so use 5 minute timeout
       const controller = new AbortController()
       const timeoutId = setTimeout(() => controller.abort(), 300000) // 5 minute timeout for music
-      
+
       console.log(`[ChatGenerator] Making fetch request...`)
       const requestBody: any = { jobId: job.id }
-      
+
       // Add model parameter for image generation modes
       if (isImageMode) {
         requestBody.model = selectedModel
@@ -920,17 +920,17 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
           console.log(`[ChatGenerator] Selected model: ${selectedModel}`)
         }
       }
-      
+
       const resp = await fetch(endpoint, {
         method: 'POST',
-        headers: { 
+        headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`
         },
         body: JSON.stringify(requestBody),
         signal: controller.signal
       })
-      
+
       clearTimeout(timeoutId)
       console.log(`[ChatGenerator] Response status: ${resp.status}`)
       console.log(`[ChatGenerator] Response headers:`, Object.fromEntries(resp.headers.entries()))
@@ -942,7 +942,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
       }
       const responseData = await resp.json()
       console.log(`[ChatGenerator] Response from ${gen.activeTab}:`, responseData)
-      
+
       if (!responseData.success) {
         throw new Error(responseData.error || 'Generation failed')
       }
@@ -954,7 +954,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
       })
 
       console.log(`[ChatGenerator] 🔔 Setting up realtime subscription for job ${job.id}`)
-      
+
       // Subscribe to database changes for this specific job
       const channel = supabase
         .channel(`job-${job.id}`)
@@ -969,13 +969,13 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
           async (payload) => {
             console.log(`[ChatGenerator] 🔔 Received realtime update for job ${job.id}:`, payload)
             const updatedJob = payload.new as any
-            
+
             if (updatedJob.status === 'completed' && updatedJob.result_url) {
               console.log(`[ChatGenerator] 🎉 Job completed via realtime! Result: ${updatedJob.result_url}`)
-              
+
               // Unsubscribe from further updates
               channel.unsubscribe()
-              
+
               // Show success notification
               const contentType = meta.resultType === 'image' ? 'Image' : meta.resultType === 'video' ? 'Video' : 'Music'
               if (shouldHighlightGenerate && !profile.tutorial_completed) {
@@ -990,27 +990,27 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
                   duration: 5000,
                 })
               }
-              
+
               // Get signed URL for the result
               const { data: signedUrl } = await supabase.storage
                 .from('results')
                 .createSignedUrl(updatedJob.result_url, 3600)
-              
+
               const mediaUrl = signedUrl?.signedUrl || ''
               console.log(`[ChatGenerator] 🖼️ Media URL: ${mediaUrl}`)
-              
+
               // For music, also get cover URL if available
               let coverUrl = ''
               if (meta.resultType === 'music' && updatedJob.cover_url) {
                 const { data: coverSignedUrl } = await supabase.storage
                   .from('results')
                   .createSignedUrl(updatedJob.cover_url, 3600)
-                
+
                 if (coverSignedUrl?.signedUrl) {
                   coverUrl = coverSignedUrl.signedUrl
                 }
               }
-              
+
               // Update the message with the result
               gen.updateMessage(gen.activeTab, assistantPlaceholder.id, {
                 status: 'complete',
@@ -1019,25 +1019,25 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
                 mediaType: meta.resultType,
                 coverUrl: coverUrl || undefined
               })
-              
+
               gen.setIsGenerating(false)
               router.refresh()
-              
+
               // Track first generation for onboarding
               if (shouldHighlightGenerate) {
                 handleFirstGeneration()
               }
             } else if (updatedJob.status === 'failed') {
               console.error(`[ChatGenerator] ❌ Job failed:`, updatedJob.error_message)
-              
+
               // Unsubscribe from further updates
               channel.unsubscribe()
-              
+
               gen.updateMessage(gen.activeTab, assistantPlaceholder.id, {
                 status: 'error',
                 content: updatedJob.error_message || 'Generation failed. Please try again.'
               })
-              
+
               gen.setIsGenerating(false)
             }
           }
@@ -1045,212 +1045,212 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
         .subscribe((status) => {
           console.log(`[ChatGenerator] 🔔 Realtime subscription status:`, status)
         })
-      
+
       // Fallback: If no update after 10 minutes, check manually once
       const fallbackTimeout = setTimeout(async () => {
         console.log(`[ChatGenerator] ⏰ Fallback timeout reached, checking job status manually...`)
         const pollForResult = async (): Promise<void> => {
-        try {
-          const statusResp = await fetch(`${CHECK_JOB_STATUS_ENDPOINT}?jobId=${job.id}`, {
-            method: 'GET',
-            headers: {
-              'Authorization': `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`
-            }
-          })
-
-          if (!statusResp.ok) {
-            throw new Error(`Status check failed: ${statusResp.status}`)
-          }
-
-          const statusData = await statusResp.json()
-
-          if (statusData.status === 'completed' && statusData.result_url) {
-            console.log(`[ChatGenerator] 🎉 GENERATION COMPLETED! Result URL: ${statusData.result_url}`)
-            
-            // Show success toast notification with special message for first-time users
-            const contentType = meta.resultType === 'image' ? 'Image' : meta.resultType === 'video' ? 'Video' : 'Music'
-            
-            if (shouldHighlightGenerate && !profile.tutorial_completed) {
-              // First-time user - show special encouragement message
-              const remainingCredits = profile.credits - 1 // They just used 1
-              toast.success('🔥 That\'s your first AI-generated ad!', {
-                description: `Try another — you've got ${remainingCredits} free ${remainingCredits === 1 ? 'image' : 'images'} left.`,
-                duration: 6000,
-              })
-            } else {
-              // Regular success message
-              toast.success(`${contentType} generated successfully! 🎉`, {
-                description: 'Your content is ready to view',
-                duration: 5000,
-              })
-            }
-            
-            // Create signed URL - same as library does
-            console.log(`[ChatGenerator] 🔗 Creating signed URL...`)
-            const { data: signedUrl } = await supabase.storage
-              .from('results')
-              .createSignedUrl(statusData.result_url, 3600)
-
-            console.log(`[ChatGenerator] 🔗 Signed URL result:`, signedUrl)
-            
-            const mediaUrl = signedUrl?.signedUrl || ''
-            console.log(`[ChatGenerator] 🖼️ FINAL MEDIA URL: ${mediaUrl}`)
-            
-            if (!mediaUrl) {
-              console.error(`[ChatGenerator] ❌ NO MEDIA URL - CANNOT SHOW IMAGE!`)
-              console.error(`[ChatGenerator] signedUrl:`, signedUrl)
-              console.error(`[ChatGenerator] statusData:`, statusData)
-            }
-
-            // For music, also get cover URL if available
-            let coverUrl = ''
-            if (meta.resultType === 'music' && statusData.cover_url) {
-              console.log(`[ChatGenerator] 🎨 Creating cover signed URL...`)
-              const { data: coverSignedUrl } = await supabase.storage
-                .from('results')
-                .createSignedUrl(statusData.cover_url, 3600)
-              
-              if (coverSignedUrl?.signedUrl) {
-                coverUrl = coverSignedUrl.signedUrl
-                console.log(`[ChatGenerator] 🎨 Cover URL: ${coverUrl}`)
+          try {
+            const statusResp = await fetch(`${CHECK_JOB_STATUS_ENDPOINT}?jobId=${job.id}`, {
+              method: 'GET',
+              headers: {
+                'Authorization': `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`
               }
-            }
-
-            console.log(`[ChatGenerator] 📝 Updating message with data:`, {
-              messageId: assistantPlaceholder.id,
-              activeTab: gen.activeTab,
-              status: 'complete',
-              content: meta.resultType === 'image' ? 'Image generated ✅' : meta.resultType === 'video' ? 'Video generated ✅' : 'Music generated ✅',
-              mediaUrl,
-              coverUrl: coverUrl || undefined,
-              mediaType: meta.resultType
             })
 
-            const updateData: any = {
-              status: 'complete',
-              content: meta.resultType === 'image' ? 'Image generated ✅' : meta.resultType === 'video' ? 'Video generated ✅' : 'Music generated ✅',
-              mediaUrl,
-              mediaType: meta.resultType
+            if (!statusResp.ok) {
+              throw new Error(`Status check failed: ${statusResp.status}`)
             }
 
-            if (coverUrl) {
-              updateData.coverUrl = coverUrl
-            }
+            const statusData = await statusResp.json()
 
-            gen.updateMessage(gen.activeTab, assistantPlaceholder.id, updateData)
-            
-            console.log(`[ChatGenerator] ✅ MESSAGE UPDATE COMPLETED!`)
-            console.log(`[ChatGenerator] 🎯 Final message should show image with URL: ${mediaUrl}`)
-            
-            // Refresh profile to get updated credit count
-            console.log(`[ChatGenerator] 💳 Refreshing profile to get updated credits...`)
-            try {
-              const { data: updatedProfile } = await supabase
-                .from('profiles')
-                .select('*')
-                .eq('id', user.id)
-                .single()
-              
-              if (updatedProfile) {
-                console.log(`[ChatGenerator] 💳 Credits updated: ${profile.credits} → ${updatedProfile.credits}`)
-                // Update the local profile object to reflect new credit count
-                Object.assign(profile, updatedProfile)
-                
-                // Refresh the router to update credits display in sidebar and other components
-                router.refresh()
-                
-                // Check if user has 1 credit left (trigger Pro upsell modal)
-                if (updatedProfile.credits === 1 && profile.tutorial_completed && !hasCheckedProUpsell.current) {
-                  console.log(`[ChatGenerator] 🎯 User has 1 credit left! Activating Pro discount...`)
-                  hasCheckedProUpsell.current = true
-                  
-                  // IMMEDIATELY activate the discount by calling POST
-                  setTimeout(async () => {
-                    try {
-                      // First check if discount already exists
-                      const checkResponse = await fetch('/api/pro-discount-status')
-                      const checkData = await checkResponse.json()
-                      
-                      if (checkData.discount_never_activated) {
-                        // Activate discount NOW (set expiry timestamp in Supabase)
-                        console.log(`[ChatGenerator] 🎬 Activating Pro discount for the first time!`)
-                        const activateResponse = await fetch('/api/pro-discount-status', {
-                          method: 'POST'
-                        })
-                        
-                        if (activateResponse.ok) {
-                          console.log(`[ChatGenerator] ✅ Pro discount activated! Showing modal...`)
+            if (statusData.status === 'completed' && statusData.result_url) {
+              console.log(`[ChatGenerator] 🎉 GENERATION COMPLETED! Result URL: ${statusData.result_url}`)
+
+              // Show success toast notification with special message for first-time users
+              const contentType = meta.resultType === 'image' ? 'Image' : meta.resultType === 'video' ? 'Video' : 'Music'
+
+              if (shouldHighlightGenerate && !profile.tutorial_completed) {
+                // First-time user - show special encouragement message
+                const remainingCredits = profile.credits - 1 // They just used 1
+                toast.success('🔥 That\'s your first AI-generated ad!', {
+                  description: `Try another — you've got ${remainingCredits} free ${remainingCredits === 1 ? 'image' : 'images'} left.`,
+                  duration: 6000,
+                })
+              } else {
+                // Regular success message
+                toast.success(`${contentType} generated successfully! 🎉`, {
+                  description: 'Your content is ready to view',
+                  duration: 5000,
+                })
+              }
+
+              // Create signed URL - same as library does
+              console.log(`[ChatGenerator] 🔗 Creating signed URL...`)
+              const { data: signedUrl } = await supabase.storage
+                .from('results')
+                .createSignedUrl(statusData.result_url, 3600)
+
+              console.log(`[ChatGenerator] 🔗 Signed URL result:`, signedUrl)
+
+              const mediaUrl = signedUrl?.signedUrl || ''
+              console.log(`[ChatGenerator] 🖼️ FINAL MEDIA URL: ${mediaUrl}`)
+
+              if (!mediaUrl) {
+                console.error(`[ChatGenerator] ❌ NO MEDIA URL - CANNOT SHOW IMAGE!`)
+                console.error(`[ChatGenerator] signedUrl:`, signedUrl)
+                console.error(`[ChatGenerator] statusData:`, statusData)
+              }
+
+              // For music, also get cover URL if available
+              let coverUrl = ''
+              if (meta.resultType === 'music' && statusData.cover_url) {
+                console.log(`[ChatGenerator] 🎨 Creating cover signed URL...`)
+                const { data: coverSignedUrl } = await supabase.storage
+                  .from('results')
+                  .createSignedUrl(statusData.cover_url, 3600)
+
+                if (coverSignedUrl?.signedUrl) {
+                  coverUrl = coverSignedUrl.signedUrl
+                  console.log(`[ChatGenerator] 🎨 Cover URL: ${coverUrl}`)
+                }
+              }
+
+              console.log(`[ChatGenerator] 📝 Updating message with data:`, {
+                messageId: assistantPlaceholder.id,
+                activeTab: gen.activeTab,
+                status: 'complete',
+                content: meta.resultType === 'image' ? 'Image generated ✅' : meta.resultType === 'video' ? 'Video generated ✅' : 'Music generated ✅',
+                mediaUrl,
+                coverUrl: coverUrl || undefined,
+                mediaType: meta.resultType
+              })
+
+              const updateData: any = {
+                status: 'complete',
+                content: meta.resultType === 'image' ? 'Image generated ✅' : meta.resultType === 'video' ? 'Video generated ✅' : 'Music generated ✅',
+                mediaUrl,
+                mediaType: meta.resultType
+              }
+
+              if (coverUrl) {
+                updateData.coverUrl = coverUrl
+              }
+
+              gen.updateMessage(gen.activeTab, assistantPlaceholder.id, updateData)
+
+              console.log(`[ChatGenerator] ✅ MESSAGE UPDATE COMPLETED!`)
+              console.log(`[ChatGenerator] 🎯 Final message should show image with URL: ${mediaUrl}`)
+
+              // Refresh profile to get updated credit count
+              console.log(`[ChatGenerator] 💳 Refreshing profile to get updated credits...`)
+              try {
+                const { data: updatedProfile } = await supabase
+                  .from('profiles')
+                  .select('*')
+                  .eq('id', user.id)
+                  .single()
+
+                if (updatedProfile) {
+                  console.log(`[ChatGenerator] 💳 Credits updated: ${profile.credits} → ${updatedProfile.credits}`)
+                  // Update the local profile object to reflect new credit count
+                  Object.assign(profile, updatedProfile)
+
+                  // Refresh the router to update credits display in sidebar and other components
+                  router.refresh()
+
+                  // Check if user has 1 credit left (trigger Pro upsell modal)
+                  if (updatedProfile.credits === 1 && profile.tutorial_completed && !hasCheckedProUpsell.current) {
+                    console.log(`[ChatGenerator] 🎯 User has 1 credit left! Activating Pro discount...`)
+                    hasCheckedProUpsell.current = true
+
+                    // IMMEDIATELY activate the discount by calling POST
+                    setTimeout(async () => {
+                      try {
+                        // First check if discount already exists
+                        const checkResponse = await fetch('/api/pro-discount-status')
+                        const checkData = await checkResponse.json()
+
+                        if (checkData.discount_never_activated) {
+                          // Activate discount NOW (set expiry timestamp in Supabase)
+                          console.log(`[ChatGenerator] 🎬 Activating Pro discount for the first time!`)
+                          const activateResponse = await fetch('/api/pro-discount-status', {
+                            method: 'POST'
+                          })
+
+                          if (activateResponse.ok) {
+                            console.log(`[ChatGenerator] ✅ Pro discount activated! Showing modal...`)
+                            setShowProUpsellModal(true)
+                          } else {
+                            console.error(`[ChatGenerator] ❌ Failed to activate discount`)
+                          }
+                        } else if (checkData.is_valid) {
+                          // Discount already active and still valid
+                          console.log(`[ChatGenerator] ⏰ Pro discount already active, showing modal...`)
                           setShowProUpsellModal(true)
                         } else {
-                          console.error(`[ChatGenerator] ❌ Failed to activate discount`)
+                          console.log(`[ChatGenerator] ⏱️ Pro discount expired, not showing modal`)
                         }
-                      } else if (checkData.is_valid) {
-                        // Discount already active and still valid
-                        console.log(`[ChatGenerator] ⏰ Pro discount already active, showing modal...`)
-                        setShowProUpsellModal(true)
-                      } else {
-                        console.log(`[ChatGenerator] ⏱️ Pro discount expired, not showing modal`)
+                      } catch (err) {
+                        console.error(`[ChatGenerator] Failed to activate Pro discount:`, err)
                       }
-                    } catch (err) {
-                      console.error(`[ChatGenerator] Failed to activate Pro discount:`, err)
-                    }
-                  }, 2000)
+                    }, 2000)
+                  }
+
+                  // Check if user just used their last credit and show upgrade modal
+                  if (updatedProfile.credits === 0 && !hasShownLastCreditModal.current) {
+                    console.log(`[ChatGenerator] 🎉 Last free credit used! Showing upgrade popup...`)
+                    hasShownLastCreditModal.current = true
+                    // Wait 3 seconds (after toast appears) then show the upgrade modal
+                    setTimeout(() => {
+                      console.log(`[ChatGenerator] 💳 Showing upgrade popup`)
+                      setShowCreditPopup(true)
+                    }, 3000)
+                  }
                 }
-                
-                // Check if user just used their last credit and show upgrade modal
-                if (updatedProfile.credits === 0 && !hasShownLastCreditModal.current) {
-                  console.log(`[ChatGenerator] 🎉 Last free credit used! Showing upgrade popup...`)
-                  hasShownLastCreditModal.current = true
-                  // Wait 3 seconds (after toast appears) then show the upgrade modal
-                  setTimeout(() => {
-                    console.log(`[ChatGenerator] 💳 Showing upgrade popup`)
-                    setShowCreditPopup(true)
-                  }, 3000)
-                }
+              } catch (err) {
+                console.error(`[ChatGenerator] Failed to refresh profile:`, err)
               }
-            } catch (err) {
-              console.error(`[ChatGenerator] Failed to refresh profile:`, err)
+
+              // Clear all active timeouts (except the wheel/popup timeout which is not tracked)
+              activeTimeouts.current.forEach(timeoutId => clearTimeout(timeoutId))
+              activeTimeouts.current.clear()
+
+              // Make sure to reset generating state
+              gen.setIsGenerating(false)
+              console.log(`[ChatGenerator] 🔄 isGenerating set to false`)
+              return
             }
-            
-            // Clear all active timeouts (except the wheel/popup timeout which is not tracked)
-            activeTimeouts.current.forEach(timeoutId => clearTimeout(timeoutId))
-            activeTimeouts.current.clear()
-            
-            // Make sure to reset generating state
-            gen.setIsGenerating(false)
-            console.log(`[ChatGenerator] 🔄 isGenerating set to false`)
-            return
-          }
 
-          if (statusData.status === 'failed') {
-            // Show error toast notification
-            toast.error('Generation failed', {
-              description: statusData.error || 'An error occurred during generation',
-              duration: 5000,
+            if (statusData.status === 'failed') {
+              // Show error toast notification
+              toast.error('Generation failed', {
+                description: statusData.error || 'An error occurred during generation',
+                duration: 5000,
+              })
+
+              // Clear all active timeouts
+              activeTimeouts.current.forEach(timeoutId => clearTimeout(timeoutId))
+              activeTimeouts.current.clear()
+              gen.setIsGenerating(false)
+              throw new Error(statusData.error || 'Generation failed')
+            }
+
+            // Still processing, continue polling
+            gen.updateMessage(gen.activeTab, assistantPlaceholder.id, {
+              status: 'pending',
+              content: statusData.message || 'Still processing...'
             })
-            
-            // Clear all active timeouts
-            activeTimeouts.current.forEach(timeoutId => clearTimeout(timeoutId))
-            activeTimeouts.current.clear()
-            gen.setIsGenerating(false)
-            throw new Error(statusData.error || 'Generation failed')
+
+          } catch (error) {
+            console.error('[ChatGenerator] Fallback polling error:', error)
           }
-
-          // Still processing, continue polling
-          gen.updateMessage(gen.activeTab, assistantPlaceholder.id, {
-            status: 'pending',
-            content: statusData.message || 'Still processing...'
-          })
-
-        } catch (error) {
-          console.error('[ChatGenerator] Fallback polling error:', error)
         }
-      }
-      
-      // Execute fallback once
-      pollForResult()
+
+        // Execute fallback once
+        pollForResult()
       }, 600000) // 10 minutes
-      
+
       activeTimeouts.current.add(fallbackTimeout)
     } catch (e: any) {
       console.error(`[ChatGenerator] *** GENERATION ERROR ***`)
@@ -1258,12 +1258,12 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
       console.error(`[ChatGenerator] Error name:`, e.name)
       console.error(`[ChatGenerator] Error message:`, e.message)
       console.error(`[ChatGenerator] Full error:`, e)
-      
+
       let errorMessage = e.message || 'Failed to generate.'
       if (e.name === 'AbortError') {
         errorMessage = 'Request timed out after 30 seconds. Please try again.'
       }
-      
+
       gen.updateMessage(gen.activeTab, assistantPlaceholder.id, {
         status: 'error',
         content: errorMessage
@@ -1287,7 +1287,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
       {shouldHighlightGenerate && (
         <div className="fixed inset-0 bg-black/50 z-[9997] pointer-events-none" />
       )}
-      
+
       {/* Pro Upsell Modal (20% discount for 15 minutes) */}
       {showProUpsellModal && (
         <ProUpsellModal
@@ -1298,7 +1298,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
           }}
         />
       )}
-      
+
       {/* Credit Popup - DISABLED: Now handled by DashboardLayout with new ProDiscountModal and ProTrialModal */}
       {/* {showCreditPopup && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -1345,7 +1345,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
           </div>
         </div>
       )} */}
-      
+
       {/* Header */}
       {/* Fixed header inside generator area */}
       <div
@@ -1377,7 +1377,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
               ✨ $5 Pro Trial
             </button>
           )}
-          
+
           {/* Credits Pill */}
           <button
             onClick={() => {
@@ -1394,7 +1394,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
 
       {/* Chat scroll area */}
       {/* Scrollable chat body only */}
-      <div 
+      <div
         ref={chatContainerRef}
         className="flex-1 min-h-0 overflow-y-auto px-6 py-4 bg-[#f7f7f8] space-y-4 relative"
         onDragOver={(e) => { e.preventDefault(); if (requiresImage) setIsDragging(true) }}
@@ -1421,13 +1421,12 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
         )}
         {history.length === 0 && (
           <div className="flex items-center justify-center h-full px-4">
-            <div 
+            <div
               onClick={requiresImage ? handleUploadClick : undefined}
-              className={`max-w-lg w-full text-center px-4 py-6 sm:px-6 sm:py-8 lg:px-8 lg:py-12 rounded-xl border-2 ${
-                requiresImage 
-                  ? 'border-dashed border-purple-300 bg-purple-50/30 cursor-pointer hover:bg-purple-50/50 hover:border-purple-400 transition-all' 
+              className={`max-w-lg w-full text-center px-4 py-6 sm:px-6 sm:py-8 lg:px-8 lg:py-12 rounded-xl border-2 ${requiresImage
+                  ? 'border-dashed border-purple-300 bg-purple-50/30 cursor-pointer hover:bg-purple-50/50 hover:border-purple-400 transition-all'
                   : 'border-gray-200 bg-white'
-              }`}
+                }`}
             >
               {requiresImage ? (
                 <>
@@ -1516,7 +1515,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
           </div>
         )}
         {visibleHistory.map(m => (
-            <div key={m.id} className={`flex w-full ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+          <div key={m.id} className={`flex w-full ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
             <div className={`${m.role === 'user' ? 'bg-purple-600 text-white rounded-2xl rounded-br-sm' : 'bg-white border border-gray-200 rounded-2xl rounded-bl-sm'} px-3 sm:px-4 py-2 sm:py-3 shadow-sm text-xs sm:text-sm max-w-[85%] sm:max-w-[75%] lg:max-w-[65%]`}>
               <div className="whitespace-pre-wrap leading-relaxed">
                 {m.content}
@@ -1525,19 +1524,19 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
                 <div className="mt-2 sm:mt-3 w-full sm:w-[220px] lg:w-[260px] h-[120px] sm:h-[140px] lg:h-[170px] rounded-lg bg-gradient-to-br from-purple-50 via-pink-50 to-purple-50 relative overflow-hidden border border-purple-200/50">
                   {/* Animated shimmer */}
                   <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/50 to-transparent animate-[shimmer_2s_infinite] -translate-x-full" />
-                  
+
                   {/* Pulsing dots */}
                   <div className="absolute top-2 sm:top-3 lg:top-4 left-2 sm:left-3 lg:left-4 flex gap-0.5 sm:gap-1">
                     <div className="w-1.5 sm:w-2 h-1.5 sm:h-2 bg-purple-400 rounded-full animate-bounce [animation-delay:-0.3s]" />
                     <div className="w-1.5 sm:w-2 h-1.5 sm:h-2 bg-pink-400 rounded-full animate-bounce [animation-delay:-0.15s]" />
                     <div className="w-1.5 sm:w-2 h-1.5 sm:h-2 bg-purple-400 rounded-full animate-bounce" />
                   </div>
-                  
+
                   {/* Rotating spinner */}
                   <div className="absolute top-2 sm:top-3 lg:top-4 right-2 sm:right-3 lg:right-4">
                     <div className="w-3 sm:w-4 h-3 sm:h-4 border-2 border-purple-300 border-t-purple-600 rounded-full animate-spin" />
                   </div>
-                  
+
                   {/* Center text with typing animation */}
                   <div className="absolute inset-0 flex flex-col items-center justify-center text-center px-2">
                     <div className="text-purple-600 font-medium text-xs sm:text-sm mb-0.5 sm:mb-1">
@@ -1547,7 +1546,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
                       {meta.resultType === 'video' ? '2-5 min' : '30-60 sec'}
                     </div>
                   </div>
-                  
+
                   {/* Progress bar */}
                   <div className="absolute bottom-2 sm:bottom-3 lg:bottom-4 left-2 sm:left-3 lg:left-4 right-2 sm:right-3 lg:right-4 h-0.5 sm:h-1 bg-purple-100 rounded-full overflow-hidden">
                     <div className="h-full bg-gradient-to-r from-purple-500 to-pink-500 rounded-full animate-[progress_3s_ease-in-out_infinite]" />
@@ -1556,12 +1555,13 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
               )}
               {m.mediaUrl && m.mediaType === 'image' && (
                 <div className="mt-2 sm:mt-3 relative group">
-                  <Image 
-                    src={m.mediaUrl} 
-                    alt="Generated result" 
-                    width={400} 
-                    height={400} 
-                    className="rounded-lg w-full max-w-full sm:max-w-[350px] lg:max-w-[400px] shadow-sm cursor-pointer hover:shadow-lg transition-shadow" 
+                  <Image
+                    src={m.mediaUrl}
+                    alt="Generated result"
+                    width={400}
+                    height={400}
+                    unoptimized
+                    className="rounded-lg w-full max-w-full sm:max-w-[350px] lg:max-w-[400px] shadow-sm cursor-pointer hover:shadow-lg transition-shadow"
                     onClick={() => m.mediaUrl && window.open(m.mediaUrl, '_blank')}
                   />
                   <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -1592,10 +1592,10 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
               )}
               {m.mediaUrl && m.mediaType === 'video' && (
                 <div className="mt-2 sm:mt-3 relative group">
-                  <video 
-                    src={m.mediaUrl} 
-                    controls 
-                    className="rounded-lg w-full max-w-full sm:max-w-[400px] lg:max-w-[500px] shadow-md" 
+                  <video
+                    src={m.mediaUrl}
+                    controls
+                    className="rounded-lg w-full max-w-full sm:max-w-[400px] lg:max-w-[500px] shadow-md"
                   />
                   <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
                     <button
@@ -1638,7 +1638,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
                         />
                       </div>
                     )}
-                    
+
                     {/* Music Info and Player */}
                     <div className="p-4">
                       <div className="flex items-center gap-3 mb-2">
@@ -1650,9 +1650,9 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
                           <div className="text-xs opacity-90">AI-Generated Audio</div>
                         </div>
                       </div>
-                      <audio 
-                        src={m.mediaUrl} 
-                        controls 
+                      <audio
+                        src={m.mediaUrl}
+                        controls
                         className="w-full"
                       />
                     </div>
@@ -1708,7 +1708,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
             </button>
           ))}
         </div>
-        
+
         {/* Collapsible Settings Bar */}
         <div className="flex flex-wrap items-center gap-2 mb-3">
           {/* Upload Button - only for image-to-image/video */}
@@ -1724,7 +1724,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
               </span>
             </button>
           )}
-          
+
           {/* Aspect Ratio Preview/Toggle - only for images/videos */}
           {!isMusicMode && (
             <button
@@ -1740,7 +1740,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
               </svg>
             </button>
           )}
-          
+
           {/* Model Selector Preview/Toggle - only for image generation modes */}
           {isImageMode && (
             <button
@@ -1756,7 +1756,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
               </svg>
             </button>
           )}
-          
+
           {/* Music Options Preview/Toggle */}
           {isMusicMode && (
             <button
@@ -1775,7 +1775,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
             </button>
           )}
         </div>
-        
+
         {/* Expandable Aspect Ratio Controls */}
         {!isMusicMode && showAspectRatio && (
           <div className="flex justify-center gap-3 mb-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
@@ -1783,29 +1783,25 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
               <button
                 key={opt.value}
                 onClick={() => gen.setAspectRatio(opt.value)}
-                className={`flex flex-col items-center justify-center gap-2 p-3 rounded-lg transition ${
-                  gen.aspectRatio === opt.value 
-                    ? 'bg-purple-100 border-2 border-purple-500' 
+                className={`flex flex-col items-center justify-center gap-2 p-3 rounded-lg transition ${gen.aspectRatio === opt.value
+                    ? 'bg-purple-100 border-2 border-purple-500'
                     : 'bg-white border-2 border-gray-200 hover:bg-gray-50'
-                }`}
-              >
-                <div 
-                  className={`rounded border-2 ${
-                    gen.aspectRatio === opt.value ? 'border-purple-500 bg-purple-200' : 'border-gray-400 bg-gray-200'
-                  } ${
-                    opt.value === 'landscape' ? 'w-10 h-6' : 'w-6 h-10'
                   }`}
+              >
+                <div
+                  className={`rounded border-2 ${gen.aspectRatio === opt.value ? 'border-purple-500 bg-purple-200' : 'border-gray-400 bg-gray-200'
+                    } ${opt.value === 'landscape' ? 'w-10 h-6' : 'w-6 h-10'
+                    }`}
                 />
-                <span className={`text-sm font-medium ${
-                  gen.aspectRatio === opt.value ? 'text-purple-700' : 'text-gray-600'
-                }`}>
+                <span className={`text-sm font-medium ${gen.aspectRatio === opt.value ? 'text-purple-700' : 'text-gray-600'
+                  }`}>
                   {opt.label}
                 </span>
               </button>
             ))}
           </div>
         )}
-        
+
         {/* Expandable Model Selector */}
         {isImageMode && showModelSelector && (
           <div className="mb-3">
@@ -1818,7 +1814,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
             />
           </div>
         )}
-        
+
         {/* Expandable Music Options */}
         {isMusicMode && showMusicOptions && (
           <div className="flex flex-col gap-3 p-4 bg-gradient-to-br from-purple-50 to-pink-50 rounded-xl border border-purple-200/50 mb-3">
@@ -1830,18 +1826,17 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
                   <button
                     key={duration}
                     onClick={() => setMusicDuration(duration as 10 | 30 | 60 | 120 | 180)}
-                    className={`flex-1 text-sm px-3 py-2 rounded-lg transition font-medium ${
-                      musicDuration === duration 
-                        ? 'bg-purple-600 text-white shadow-sm' 
+                    className={`flex-1 text-sm px-3 py-2 rounded-lg transition font-medium ${musicDuration === duration
+                        ? 'bg-purple-600 text-white shadow-sm'
                         : 'bg-white text-gray-600 hover:bg-gray-50 border border-purple-200'
-                    }`}
+                      }`}
                   >
                     {duration < 60 ? `${duration}s` : `${duration / 60}m`}
                   </button>
                 ))}
               </div>
             </div>
-            
+
             {/* Lyrics Mode */}
             <div className="flex flex-col gap-2">
               <label className="text-sm font-medium text-gray-700">✍️ Lyrics</label>
@@ -1849,22 +1844,20 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
                 <button
                   type="button"
                   onClick={() => setLyricsMode('ai')}
-                  className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition ${
-                    lyricsMode === 'ai'
+                  className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition ${lyricsMode === 'ai'
                       ? 'bg-purple-600 text-white shadow-sm'
                       : 'bg-white text-gray-600 hover:bg-gray-50 border border-purple-200'
-                  }`}
+                    }`}
                 >
                   🤖 AI Generate
                 </button>
                 <button
                   type="button"
                   onClick={() => setLyricsMode('custom')}
-                  className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition ${
-                    lyricsMode === 'custom'
+                  className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition ${lyricsMode === 'custom'
                       ? 'bg-purple-600 text-white shadow-sm'
                       : 'bg-white text-gray-600 hover:bg-gray-50 border border-purple-200'
-                  }`}
+                    }`}
                 >
                   📝 Your Own
                 </button>
@@ -1875,7 +1868,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
                 </p>
               )}
             </div>
-            
+
             {/* Cover Prompt */}
             <div className="flex flex-col gap-2">
               <label className="text-sm font-medium text-gray-700">
@@ -1891,7 +1884,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
             </div>
           </div>
         )}
-        
+
         {/* Image Previews - show when images are uploaded */}
         {requiresImage && localPreviews.length > 0 && (
           <div className="flex gap-2 flex-wrap mb-2 p-2 bg-gray-50 rounded-lg border border-gray-200">
@@ -1909,10 +1902,10 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
             ))}
           </div>
         )}
-        
+
         {/* Hidden file input */}
         <input ref={fileInputRef} onChange={handleFileChange} type="file" accept="image/*" multiple className="hidden" />
-        
+
         {/* Prompt Row */}
         <div className="flex flex-col gap-2">
           <div className="flex items-end gap-2">
@@ -1922,10 +1915,10 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
               onChange={handleInputChange}
               onKeyDown={onKeyDown}
               placeholder={
-                isMusicMode 
-                  ? (lyricsMode === 'custom' 
-                      ? "Paste your lyrics here (verse, chorus, etc.)..." 
-                      : "Describe your music: style, mood, instruments, tempo...")
+                isMusicMode
+                  ? (lyricsMode === 'custom'
+                    ? "Paste your lyrics here (verse, chorus, etc.)..."
+                    : "Describe your music: style, mood, instruments, tempo...")
                   : "Describe your idea or drop an image…"
               }
               rows={1}
