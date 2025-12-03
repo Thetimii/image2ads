@@ -237,8 +237,17 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
   const chatContainerRef = useRef<HTMLDivElement | null>(null)
 
   // Helper to get credit text based on user type
-  const isFreeUser = profile?.subscription_status === 'free'
-  const hasPro = profile?.subscription_status !== 'free'
+  // Treat any status other than 'active' or 'trialing' as free
+  const isPro = profile?.subscription_status === 'active' || profile?.subscription_status === 'trialing'
+  const isFreeUser = !isPro
+  const hasPro = isPro
+
+  console.log(`[ChatGenerator] User Status Debug:`, {
+    status: profile?.subscription_status,
+    isPro,
+    isFreeUser
+  })
+
   const getCreditText = () => {
     if (isFreeUser) {
       return profile.credits === 1 ? '1 free image remaining' : `${profile.credits} free images remaining`
@@ -894,7 +903,25 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
       // Update the assistant message with the job ID so we can resume polling after refresh
       gen.updateMessage(gen.activeTab, assistantPlaceholder.id, { jobId: job.id })
 
-      const endpoint = ENDPOINT_MAP[gen.activeTab]
+      // Determine endpoint based on user status and tab
+      let endpoint = ENDPOINT_MAP[gen.activeTab]
+
+      console.log(`[ChatGenerator] 🔍 ROUTING CHECK:`, {
+        isFreeUser,
+        isPro,
+        activeTab: gen.activeTab,
+        subscriptionStatus: profile?.subscription_status,
+        originalEndpoint: endpoint
+      })
+
+      // Route free users to separate edge functions for image generation
+      if (isFreeUser && (gen.activeTab === 'text-to-image' || gen.activeTab === 'image-to-image')) {
+        endpoint = endpoint + '-free'
+        console.log(`[ChatGenerator] 🚦 Routing free user to: ${endpoint}`)
+      } else {
+        console.log(`[ChatGenerator] ✅ Routing paid user to: ${endpoint}`)
+      }
+
       console.log(`[ChatGenerator] *** STARTING REQUEST ***`)
       console.log(`[ChatGenerator] Active tab: ${gen.activeTab}`)
       console.log(`[ChatGenerator] Endpoint: ${endpoint}`)
