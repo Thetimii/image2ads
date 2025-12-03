@@ -1378,17 +1378,19 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
             </button>
           )}
 
-          {/* Credits Pill */}
-          <button
-            onClick={() => {
-              // Call onLockedFeature to show 3-plan upgrade modal
-              onLockedFeature?.()
-            }}
-            className="text-xs bg-gradient-to-r from-purple-500 to-pink-500 text-white px-3 py-1.5 rounded-full font-medium shadow-sm hover:shadow-lg hover:scale-105 transition-all cursor-pointer whitespace-nowrap"
-            title="Click to get more credits"
-          >
-            ⭐ {getCreditText()}
-          </button>
+          {/* Credits Pill - Only show for paid users */}
+          {!isFreeUser && (
+            <button
+              onClick={() => {
+                // Call onLockedFeature to show 3-plan upgrade modal
+                onLockedFeature?.()
+              }}
+              className="text-xs bg-gradient-to-r from-purple-500 to-pink-500 text-white px-3 py-1.5 rounded-full font-medium shadow-sm hover:shadow-lg hover:scale-105 transition-all cursor-pointer whitespace-nowrap"
+              title="Click to get more credits"
+            >
+              ⭐ {getCreditText()}
+            </button>
+          )}
         </div>
       </div>
 
@@ -1693,19 +1695,19 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
       {/* Fixed input section inside generator area */}
       <div
         className="flex-shrink-0 border-t border-gray-200 bg-white px-6 py-3 flex flex-col gap-2 shadow-inner"
-        style={shouldHighlightGenerate ? { 
+        style={shouldHighlightGenerate ? {
           paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 10px)',
           position: 'relative',
           zIndex: 10001
-        } : { 
-          paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 10px)' 
+        } : {
+          paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 10px)'
         }}
       >
         {/* Local overlay for this section only */}
         {shouldHighlightGenerate && (
           <div className="absolute inset-0 bg-black/60 pointer-events-none" style={{ zIndex: 1 }} />
         )}
-        
+
         {/* Examples */}
         <div className="flex gap-2 overflow-x-auto text-xs text-gray-600 pb-1 scrollbar-hide pr-4 -mx-1 px-1 relative" style={{ zIndex: 0 }}>
           {EXAMPLES[gen.activeTab].map(ex => (
@@ -1821,7 +1823,9 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
               onSelectModel={setSelectedModel}
               selectedResolution={selectedResolution}
               onSelectResolution={setSelectedResolution}
-              disabled={gen.isGenerating || isSubmitting}
+              disabled={isSubmitting || isLocked}
+              isPro={hasPro}
+              onShowUpgrade={onShowUpgrade}
             />
           </div>
         )}

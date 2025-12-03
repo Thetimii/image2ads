@@ -17,6 +17,11 @@ export function billableCredits(
     return per * n;
   }
 
+  // For nano-banana, it's free!
+  if (model === "nano-banana") {
+    return 0;
+  }
+
   // For other models (gemini, seedream), use default 1 credit
   return 1 * n;
 }

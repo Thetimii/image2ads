@@ -71,7 +71,50 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (profile.credits < credits_used) {
+    // Check subscription status
+    const isPro =
+      profile.subscription_status === "active" ||
+      profile.subscription_status === "trialing";
+
+    // RESTRICTION: Nano Banana Pro is for Pro users only
+    if (model === "nano-banana-pro" && !isPro) {
+      return NextResponse.json(
+        {
+          error: "Nano Banana Pro is available only on paid plans",
+          code: "PRO_ONLY",
+        },
+        { status: 403 }
+      );
+    }
+
+    // LIMITS & THROTTLING for Free Users
+    if (!isPro) {
+      // 1. Throttle: Artificial delay of 5 seconds
+      await new Promise((resolve) => setTimeout(resolve, 5000));
+
+      // 2. Daily Limit: Check jobs created in the last 24 hours
+      const oneDayAgo = new Date();
+      oneDayAgo.setDate(oneDayAgo.getDate() - 1);
+
+      const { count, error: countError } = await supabase
+        .from("jobs")
+        .select("*", { count: "exact", head: true })
+        .eq("user_id", user.id)
+        .gte("created_at", oneDayAgo.toISOString());
+
+      if (!countError && count !== null && count >= 100) {
+        return NextResponse.json(
+          {
+            error: "Daily free limit reached (100 images/day). Upgrade to Pro for unlimited generation.",
+            code: "LIMIT_REACHED",
+          },
+          { status: 429 }
+        );
+      }
+    }
+
+    // Credit check (only if cost > 0)
+    if (credits_used > 0 && profile.credits < credits_used) {
       return NextResponse.json(
         {
           error: "Insufficient credits",

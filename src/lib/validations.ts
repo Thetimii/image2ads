@@ -77,6 +77,8 @@ export const createJobSchema = z
       .enum([
         "gemini",
         "seedream",
+        "nano-banana",
+        "nano-banana-pro",
         "openai-low-square",
         "openai-low-landscape",
         "openai-low-portrait",
