@@ -36,7 +36,7 @@ async function getImageUrl(filePath: string): Promise<string> {
   const { data: uploadData, error: uploadError } = await supabase.storage
     .from("uploads")
     .createSignedUrl(filePath, 3600); // 1 hour expiry
-  
+
   if (!uploadError && uploadData?.signedUrl) {
     return uploadData.signedUrl;
   }
@@ -45,7 +45,7 @@ async function getImageUrl(filePath: string): Promise<string> {
   const { data: resultData, error: resultError } = await supabase.storage
     .from("results")
     .createSignedUrl(filePath, 3600); // 1 hour expiry
-  
+
   if (!resultError && resultData?.signedUrl) {
     return resultData.signedUrl;
   }
@@ -75,7 +75,7 @@ async function handler(req: Request) {
     jobId = body?.jobId ?? null;
     const selectedModel = body?.model ?? 'nano-banana'; // Default to regular model
     const selectedResolution = body?.resolution ?? '2K'; // Default to 2K for Pro model
-    
+
     if (!jobId) {
       console.log(`[generate-image-image] ERROR: No jobId provided in body`);
       return new Response("Job ID required", { status: 400, headers: cors });
@@ -91,7 +91,7 @@ async function handler(req: Request) {
       .select("*")
       .eq("id", jobId)
       .single();
-    
+
     if (jobErr || !job)
       return new Response("Job not found", { status: 404, headers: cors });
 
@@ -106,7 +106,7 @@ async function handler(req: Request) {
       .from("images")
       .select("file_path")
       .in("id", imageIds);
-    
+
     if (imagesError || !images || images.length === 0) {
       return new Response("Reference images not found", { status: 404, headers: cors });
     }
@@ -121,22 +121,34 @@ async function handler(req: Request) {
     console.log(`[generate-image-image] Processing ${imageUrls.length} image(s)`);
     console.log(`[generate-image-image] Image URLs:`, imageUrls);
 
-    // Determine credit cost based on model
-    const creditAmount = selectedModel === 'nano-banana-pro' ? 6 : 1;
-    console.log(`[generate-image-image] Model: ${selectedModel}, Credits: ${creditAmount}`);
+    // FREE TIER: No credit deduction
+    // Instead, check daily limit (100 images/day)
+    const oneDayAgo = new Date();
+    oneDayAgo.setDate(oneDayAgo.getDate() - 1);
 
-    // Check and consume credits
-    const { data: creditResult, error: creditError } = await supabase.rpc("consume_credit", {
-      user_uuid: job.user_id,
-      credit_amount: creditAmount
-    });
-    
-    if (creditError || !creditResult) {
-      return new Response("Insufficient credits", {
-        status: creditError ? 500 : 402,
-        headers: cors
-      });
+    const { count, error: countError } = await supabase
+      .from("jobs")
+      .select("*", { count: "exact", head: true })
+      .eq("user_id", job.user_id)
+      .gte("created_at", oneDayAgo.toISOString());
+
+    if (countError) {
+      console.error(`[generate-image-image-free] Error checking daily limit:`, countError);
+      return new Response("Error checking limits", { status: 500, headers: cors });
     }
+
+    if (count !== null && count >= 100) {
+      console.log(`[generate-image-image-free] Daily limit reached for user ${job.user_id}: ${count}/100`);
+      return new Response(
+        JSON.stringify({
+          error: "Daily free limit reached (100 images/day). Upgrade to Pro for unlimited generation.",
+          code: "LIMIT_REACHED"
+        }),
+        { status: 429, headers: { ...cors, "Content-Type": "application/json" } }
+      );
+    }
+
+    console.log(`[generate-image-image-free] Daily limit check passed: ${count}/100`);
 
     // Update job status to processing
     await supabase.from("jobs").update({ status: "processing" }).eq("id", jobId);
@@ -193,27 +205,27 @@ async function handler(req: Request) {
     console.log(`[generate-image-image] Task created: ${taskId}`);
 
     // Update job with task_id and keep status as processing
-    await supabase.from("jobs").update({ 
+    await supabase.from("jobs").update({
       task_id: taskId,
       result_type: "image",
       status: "processing"
     }).eq("id", jobId);
 
-    // Log usage event immediately (credits already consumed)
+    // Log usage event (0 credits consumed)
     const userId = job.user_id as string;
-    console.log(`[generate-image-image] Consuming ${creditAmount} credit(s) for user ${userId}, job ${jobId}`);
+    console.log(`[generate-image-image-free] Logging usage for user ${userId}, job ${jobId}`);
     await supabase.from("usage_events").insert({
       user_id: userId,
       event_type: "image-to-image",
-      credits_consumed: creditAmount
+      credits_consumed: 0 // Free tier consumes 0 credits
     });
 
     // Return immediately with task info - frontend will poll for results
     return new Response(
-      JSON.stringify({ 
-        success: true, 
-        jobId, 
-        taskId, 
+      JSON.stringify({
+        success: true,
+        jobId,
+        taskId,
         status: "processing",
         message: "Task created successfully. Result will be available shortly."
       }),
@@ -222,18 +234,18 @@ async function handler(req: Request) {
 
   } catch (err: any) {
     console.error(`[generate-image-image] Error:`, err);
-    
+
     if (jobId) {
       await supabase
         .from("jobs")
-        .update({ 
-          status: "failed", 
+        .update({
+          status: "failed",
           error_message: String(err?.message ?? err),
           updated_at: new Date().toISOString()
         })
         .eq("id", jobId);
     }
-    
+
     return new Response(
       JSON.stringify({ error: String(err?.message ?? err) }),
       { status: 500, headers: { ...cors, "Content-Type": "application/json" } }
