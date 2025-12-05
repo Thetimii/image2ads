@@ -14,6 +14,7 @@ import UpgradePrompt from './UpgradePrompt'
 import { useOnboarding } from '@/hooks/useOnboarding'
 import dynamic from 'next/dynamic'
 import ProUpsellModal from './ProUpsellModal'
+import ProTrialModal from './ProTrialModal'
 import ModelSelector from './ModelSelector'
 import {
   trackMetaAddPaymentInfo,
@@ -154,9 +155,11 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
   const activePolling = useRef<Set<string>>(new Set()) // Track active polling jobs
   const [showCreditPopup, setShowCreditPopup] = useState(false)
   const [showProUpsellModal, setShowProUpsellModal] = useState(false)
+  const [showProTrialModal, setShowProTrialModal] = useState(false)
   const [isUpgrading, setIsUpgrading] = useState<string | null>(null)
   const hasShownLastCreditModal = useRef(false) // Prevent multiple modals in same session
   const hasCheckedProUpsell = useRef(false) // Track if we've checked for pro upsell eligibility
+  const hasShownFirstGenModal = useRef(false) // Track if we've shown the 1st generation modal
   const [hasActiveDiscount, setHasActiveDiscount] = useState(false)
 
   // Check for active discount on mount
@@ -1186,8 +1189,8 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
                   // Refresh the router to update credits display in sidebar and other components
                   router.refresh()
 
-                  // FOR FREE USERS: Check if they've completed 3 generations (trigger upsell)
-                  if (isFreeUser && !hasCheckedProUpsell.current) {
+                  // FOR FREE USERS: Check generation count for upsells
+                  if (isFreeUser) {
                     console.log(`[ChatGenerator] 🔍 Checking free user generation count...`)
 
                     // Count total jobs for this free user
@@ -1196,15 +1199,29 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
                       .select('*', { count: 'exact', head: true })
                       .eq('user_id', user.id)
 
-                    if (!countError && totalJobs !== null && totalJobs >= 3) {
-                      console.log(`[ChatGenerator] 🎯 Free user has completed ${totalJobs} generations! Showing upsell...`)
-                      hasCheckedProUpsell.current = true
+                    if (!countError && totalJobs !== null) {
+                      console.log(`[ChatGenerator] 📊 Free user has completed ${totalJobs} generations`)
 
-                      // Show upsell modal after 3 seconds
-                      setTimeout(() => {
-                        console.log(`[ChatGenerator] 💳 Showing upgrade popup for free user`)
-                        setShowCreditPopup(true)
-                      }, 3000)
+                      // Show $5 trial modal after 1st generation
+                      if (totalJobs === 1 && !hasShownFirstGenModal.current) {
+                        console.log(`[ChatGenerator] 🎯 First generation complete! Showing $5 trial modal...`)
+                        hasShownFirstGenModal.current = true
+
+                        setTimeout(() => {
+                          console.log(`[ChatGenerator] 💎 Showing $5 trial modal`)
+                          setShowProTrialModal(true)
+                        }, 3000)
+                      }
+                      // Show full pricing popup after 3rd generation
+                      else if (totalJobs >= 3 && !hasCheckedProUpsell.current) {
+                        console.log(`[ChatGenerator] 🎯 3+ generations complete! Showing upgrade popup...`)
+                        hasCheckedProUpsell.current = true
+
+                        setTimeout(() => {
+                          console.log(`[ChatGenerator] 💳 Showing upgrade popup for free user`)
+                          setShowCreditPopup(true)
+                        }, 3000)
+                      }
                     }
                   }
 
@@ -1345,6 +1362,14 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
             // Redirect to billing page with promo parameter
             window.location.href = '/billing?promo=pro20limited'
           }}
+        />
+      )}
+
+      {/* Pro Trial Modal ($5 for 3 days) - shown after 1st generation for free users */}
+      {showProTrialModal && (
+        <ProTrialModal
+          onCloseAction={() => setShowProTrialModal(false)}
+          source="auto"
         />
       )}
 
