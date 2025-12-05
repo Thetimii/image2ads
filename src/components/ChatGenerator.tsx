@@ -1189,39 +1189,30 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
                   // Refresh the router to update credits display in sidebar and other components
                   router.refresh()
 
-                  // FOR FREE USERS: Check generation count for upsells
-                  if (isFreeUser) {
-                    console.log(`[ChatGenerator] 🔍 Checking free user generation count...`)
+                  // FOR FREE USERS: Check generation count for upsells using total_generations
+                  if (isFreeUser && updatedProfile.total_generations) {
+                    const totalGens = updatedProfile.total_generations
+                    console.log(`[ChatGenerator] 📊 Free user total_generations: ${totalGens}`)
 
-                    // Count total jobs for this free user
-                    const { count: totalJobs, error: countError } = await supabase
-                      .from('jobs')
-                      .select('*', { count: 'exact', head: true })
-                      .eq('user_id', user.id)
+                    // Show $5 trial modal after 1st generation
+                    if (totalGens === 1 && !hasShownFirstGenModal.current) {
+                      console.log(`[ChatGenerator] 🎯 First generation complete! Showing $5 trial modal...`)
+                      hasShownFirstGenModal.current = true
 
-                    if (!countError && totalJobs !== null) {
-                      console.log(`[ChatGenerator] 📊 Free user has completed ${totalJobs} generations`)
+                      setTimeout(() => {
+                        console.log(`[ChatGenerator] 💎 Showing $5 trial modal`)
+                        setShowProTrialModal(true)
+                      }, 3000)
+                    }
+                    // Show full pricing popup after 3rd generation
+                    else if (totalGens === 3 && !hasCheckedProUpsell.current) {
+                      console.log(`[ChatGenerator] 🎯 3rd generation complete! Showing upgrade popup...`)
+                      hasCheckedProUpsell.current = true
 
-                      // Show $5 trial modal after 1st generation
-                      if (totalJobs === 1 && !hasShownFirstGenModal.current) {
-                        console.log(`[ChatGenerator] 🎯 First generation complete! Showing $5 trial modal...`)
-                        hasShownFirstGenModal.current = true
-
-                        setTimeout(() => {
-                          console.log(`[ChatGenerator] 💎 Showing $5 trial modal`)
-                          setShowProTrialModal(true)
-                        }, 3000)
-                      }
-                      // Show full pricing popup after 3rd generation
-                      else if (totalJobs >= 3 && !hasCheckedProUpsell.current) {
-                        console.log(`[ChatGenerator] 🎯 3+ generations complete! Showing upgrade popup...`)
-                        hasCheckedProUpsell.current = true
-
-                        setTimeout(() => {
-                          console.log(`[ChatGenerator] 💳 Showing upgrade popup for free user`)
-                          setShowCreditPopup(true)
-                        }, 3000)
-                      }
+                      setTimeout(() => {
+                        console.log(`[ChatGenerator] 💳 Showing upgrade popup for free user`)
+                        setShowCreditPopup(true)
+                      }, 3000)
                     }
                   }
 
