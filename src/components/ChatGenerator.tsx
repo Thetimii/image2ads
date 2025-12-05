@@ -1186,8 +1186,30 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
                   // Refresh the router to update credits display in sidebar and other components
                   router.refresh()
 
-                  // Check if user has 1 credit left (trigger Pro upsell modal)
-                  if (updatedProfile.credits === 1 && profile.tutorial_completed && !hasCheckedProUpsell.current) {
+                  // FOR FREE USERS: Check if they've completed 3 generations (trigger upsell)
+                  if (isFreeUser && !hasCheckedProUpsell.current) {
+                    console.log(`[ChatGenerator] 🔍 Checking free user generation count...`)
+
+                    // Count total jobs for this free user
+                    const { count: totalJobs, error: countError } = await supabase
+                      .from('jobs')
+                      .select('*', { count: 'exact', head: true })
+                      .eq('user_id', user.id)
+
+                    if (!countError && totalJobs !== null && totalJobs >= 3) {
+                      console.log(`[ChatGenerator] 🎯 Free user has completed ${totalJobs} generations! Showing upsell...`)
+                      hasCheckedProUpsell.current = true
+
+                      // Show upsell modal after 3 seconds
+                      setTimeout(() => {
+                        console.log(`[ChatGenerator] 💳 Showing upgrade popup for free user`)
+                        setShowCreditPopup(true)
+                      }, 3000)
+                    }
+                  }
+
+                  // FOR PAID USERS: Check if user has 1 credit left (trigger Pro upsell modal)
+                  if (!isFreeUser && updatedProfile.credits === 1 && profile.tutorial_completed && !hasCheckedProUpsell.current) {
                     console.log(`[ChatGenerator] 🎯 User has 1 credit left! Activating Pro discount...`)
                     hasCheckedProUpsell.current = true
 
@@ -1225,7 +1247,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
                   }
 
                   // Check if user just used their last credit and show upgrade modal
-                  if (updatedProfile.credits === 0 && !hasShownLastCreditModal.current) {
+                  if (!isFreeUser && updatedProfile.credits === 0 && !hasShownLastCreditModal.current) {
                     console.log(`[ChatGenerator] 🎉 Last free credit used! Showing upgrade popup...`)
                     hasShownLastCreditModal.current = true
                     // Wait 3 seconds (after toast appears) then show the upgrade modal
