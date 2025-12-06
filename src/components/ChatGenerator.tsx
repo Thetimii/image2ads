@@ -1111,6 +1111,11 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
           console.log(`[ChatGenerator] 🔔 Realtime subscription status:`, status)
         })
 
+      // CRITICAL: Start polling to actually check job status and update database
+      // This calls check-job-status which polls Kie.ai and updates the DB
+      console.log(`[ChatGenerator] 🚀 Starting polling for job ${job.id}`)
+      startJobPolling(gen.activeTab, assistantPlaceholder.id, job.id)
+
       // Fallback: If no update after 10 minutes, check manually once
       const fallbackTimeout = setTimeout(async () => {
         console.log(`[ChatGenerator] ⏰ Fallback timeout reached, checking job status manually...`)
