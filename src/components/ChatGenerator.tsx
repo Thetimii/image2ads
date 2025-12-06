@@ -14,6 +14,7 @@ import UpgradePrompt from './UpgradePrompt'
 import { useOnboarding } from '@/hooks/useOnboarding'
 import dynamic from 'next/dynamic'
 import ProUpsellModal from './ProUpsellModal'
+import ProTrialModal from './ProTrialModal'
 import ModelSelector from './ModelSelector'
 import {
   trackMetaAddPaymentInfo,
@@ -2053,6 +2054,27 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
           setShowCreditPopup(true)
         }}
       />
+
+      {/* Pro Trial Modal - $5 trial after 1st generation */}
+      {showProTrialModal && (
+        <ProTrialModal
+          onCloseAction={() => setShowProTrialModal(false)}
+          onStartTrialAction={() => {
+            setShowProTrialModal(false)
+            // Redirect to trial checkout
+            window.location.href = '/billing?trial=true'
+          }}
+        />
+      )}
+
+      {/* Credit Popup - Full pricing after 3rd generation */}
+      {showCreditPopup && (
+        <PricingPlans
+          onClose={() => setShowCreditPopup(false)}
+          onSubscribe={handleSubscribe}
+          isUpgrading={isUpgrading}
+        />
+      )}
     </div>
   )
 }
