@@ -23,11 +23,11 @@ export default function ProDiscountModal({ onCloseAction, onUpgradeAction }: Pro
     const startTimer = async () => {
       try {
         console.log('🚀 Checking/starting Pro discount timer...')
-        
+
         // First check if already activated
         const checkResponse = await fetch('/api/pro-discount-status')
         const checkData = await checkResponse.json()
-        
+
         if (checkData.is_valid) {
           // Already activated, use the remaining time
           console.log('⏰ Discount already active, syncing time:', checkData)
@@ -42,7 +42,7 @@ export default function ProDiscountModal({ onCloseAction, onUpgradeAction }: Pro
           const response = await fetch('/api/pro-discount-status', {
             method: 'POST',
           })
-          
+
           if (response.ok) {
             const data = await response.json()
             console.log('✅ Pro discount timer started:', data)
@@ -75,12 +75,12 @@ export default function ProDiscountModal({ onCloseAction, onUpgradeAction }: Pro
     const countdownInterval = setInterval(() => {
       setTimeLeft(prev => {
         const totalSeconds = prev.minutes * 60 + prev.seconds - 1
-        
+
         if (totalSeconds <= 0) {
           setIsExpired(true)
           return { minutes: 0, seconds: 0 }
         }
-        
+
         return {
           minutes: Math.floor(totalSeconds / 60),
           seconds: totalSeconds % 60
@@ -175,7 +175,7 @@ export default function ProDiscountModal({ onCloseAction, onUpgradeAction }: Pro
           >
             ×
           </button>
-          
+
           <div className="text-center mb-4">
             <div className="inline-block bg-gradient-to-r from-purple-500 to-pink-500 rounded-xl px-6 py-3 mb-4">
               <div className="text-3xl font-mono font-bold text-white tracking-wider">
@@ -185,12 +185,12 @@ export default function ProDiscountModal({ onCloseAction, onUpgradeAction }: Pro
                 Offer expires in
               </div>
             </div>
-            
+
             <h2 className="text-2xl font-bold text-gray-900 mb-2">
               ✨ Unlock Pro with 20% Off
             </h2>
             <p className="text-gray-600">
-              Your next level is here — get 200 monthly credits, HD quality, and AI video generation.
+              Your next level is here — get 200 ad-ready images, HD quality, and AI video generation.
             </p>
           </div>
         </div>
@@ -201,7 +201,7 @@ export default function ProDiscountModal({ onCloseAction, onUpgradeAction }: Pro
             <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-gradient-to-r from-purple-500 to-pink-500 text-white px-4 py-1 rounded-full text-xs font-semibold">
               LIMITED TIME OFFER
             </div>
-            
+
             <div className="text-center mb-4 pt-2">
               <h3 className="text-xl font-bold text-gray-900">Pro Plan</h3>
               <div className="mt-2 flex flex-col items-center">
@@ -214,7 +214,7 @@ export default function ProDiscountModal({ onCloseAction, onUpgradeAction }: Pro
                   <span className="bg-pink-500 text-white text-xs px-2 py-1 rounded-full font-semibold">-20%</span>
                 </div>
               </div>
-              <p className="text-sm text-gray-600 mt-2">200 credits per month</p>
+              <p className="text-sm text-gray-600 mt-2">200 ad-ready images per month</p>
             </div>
 
             {/* Features */}
@@ -225,7 +225,7 @@ export default function ProDiscountModal({ onCloseAction, onUpgradeAction }: Pro
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
                 </div>
-                <span className="text-gray-700">200 image credits per month</span>
+                <span className="text-gray-700">200 ad-ready images per month</span>
               </li>
               <li className="flex items-start gap-3">
                 <div className="flex-shrink-0 w-5 h-5 rounded-full bg-purple-500 flex items-center justify-center mt-0.5">
@@ -269,7 +269,7 @@ export default function ProDiscountModal({ onCloseAction, onUpgradeAction }: Pro
             disabled={isUpgrading}
             className="w-full mt-4 text-gray-600 hover:text-gray-800 py-2 text-sm font-medium transition-colors disabled:opacity-50"
           >
-            Continue (use last free credit)
+            Continue with free credits and miss out on this amazing deal
           </button>
         </div>
 
