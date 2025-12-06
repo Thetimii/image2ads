@@ -15,6 +15,7 @@ import { useOnboarding } from '@/hooks/useOnboarding'
 import dynamic from 'next/dynamic'
 import ProUpsellModal from './ProUpsellModal'
 import ProTrialModal from './ProTrialModal'
+import ProDiscountModal from './ProDiscountModal'
 import ModelSelector from './ModelSelector'
 import {
   trackMetaAddPaymentInfo,
@@ -155,6 +156,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
   const activePolling = useRef<Set<string>>(new Set()) // Track active polling jobs
   const [showCreditPopup, setShowCreditPopup] = useState(false)
   const [showProTrialModal, setShowProTrialModal] = useState(false)
+  const [showProDiscountModal, setShowProDiscountModal] = useState(false)
   const [showProUpsellModal, setShowProUpsellModal] = useState(false)
   const [isUpgrading, setIsUpgrading] = useState<string | null>(null)
   const hasShownLastCreditModal = useRef(false) // Prevent multiple modals in same session
@@ -665,12 +667,12 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
                     setShowProTrialModal(true)
                   }, 3000)
                 }
-                // Show full pricing popup after 3rd generation
+                // Show Pro Discount Modal (20% off for 15min) after 3rd generation
                 else if (totalGens === 3 && !hasCheckedProUpsell.current) {
-                  console.log(`[ChatGenerator] 🎯 3rd generation complete! Showing upgrade popup...`)
+                  console.log(`[ChatGenerator] 🎯 3rd generation complete! Showing 20% discount modal...`)
                   hasCheckedProUpsell.current = true
                   setTimeout(() => {
-                    setShowCreditPopup(true)
+                    setShowProDiscountModal(true)
                   }, 3000)
                 }
               }
@@ -2067,7 +2069,19 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
         />
       )}
 
-      {/* Credit Popup - Full pricing after 3rd generation */}
+      {/* Pro Discount Modal - 20% off for 15min after 3rd generation */}
+      {showProDiscountModal && (
+        <ProDiscountModal
+          onCloseAction={() => setShowProDiscountModal(false)}
+          onUpgradeAction={() => {
+            setShowProDiscountModal(false)
+            // Redirect to billing with Pro plan
+            window.location.href = '/billing?plan=pro&discount=true'
+          }}
+        />
+      )}
+
+      {/* Credit Popup - Full pricing (fallback) */}
       {showCreditPopup && (
         <PricingPlans
           onSubscribeAction={handleSubscribe}
