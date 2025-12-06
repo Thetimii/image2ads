@@ -2070,9 +2070,9 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
       {/* Credit Popup - Full pricing after 3rd generation */}
       {showCreditPopup && (
         <PricingPlans
-          onClose={() => setShowCreditPopup(false)}
-          onSubscribe={handleSubscribe}
-          isUpgrading={isUpgrading}
+          onSubscribeAction={handleSubscribe}
+          isLoading={isUpgrading}
+          variant="popup"
         />
       )}
     </div>
