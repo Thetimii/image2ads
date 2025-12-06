@@ -153,9 +153,11 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
   const activeTimeouts = useRef<Set<NodeJS.Timeout>>(new Set())
   const activePolling = useRef<Set<string>>(new Set()) // Track active polling jobs
   const [showCreditPopup, setShowCreditPopup] = useState(false)
+  const [showProTrialModal, setShowProTrialModal] = useState(false)
   const [showProUpsellModal, setShowProUpsellModal] = useState(false)
   const [isUpgrading, setIsUpgrading] = useState<string | null>(null)
   const hasShownLastCreditModal = useRef(false) // Prevent multiple modals in same session
+  const hasShownFirstGenModal = useRef(false) // Track if we've shown the $5 trial modal
   const hasCheckedProUpsell = useRef(false) // Track if we've checked for pro upsell eligibility
   const [hasActiveDiscount, setHasActiveDiscount] = useState(false)
 
@@ -639,6 +641,42 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
 
           // Remove from active polling
           activePolling.current.delete(jobId)
+
+          // Check for upsell modals for free users
+          if (isFreeUser) {
+            try {
+              // Refresh profile to get updated total_generations count
+              const { data: updatedProfile } = await supabase
+                .from('profiles')
+                .select('total_generations')
+                .eq('id', user.id)
+                .single()
+
+              if (updatedProfile) {
+                const totalGens = updatedProfile.total_generations || 0
+                console.log(`[ChatGenerator] ✅ Generation complete! total_generations: ${totalGens}`)
+
+                // Show $5 trial modal after 1st generation
+                if (totalGens === 1 && !hasShownFirstGenModal.current) {
+                  console.log(`[ChatGenerator] 🎯 First generation complete! Showing $5 trial modal...`)
+                  hasShownFirstGenModal.current = true
+                  setTimeout(() => {
+                    setShowProTrialModal(true)
+                  }, 3000)
+                }
+                // Show full pricing popup after 3rd generation
+                else if (totalGens === 3 && !hasCheckedProUpsell.current) {
+                  console.log(`[ChatGenerator] 🎯 3rd generation complete! Showing upgrade popup...`)
+                  hasCheckedProUpsell.current = true
+                  setTimeout(() => {
+                    setShowCreditPopup(true)
+                  }, 3000)
+                }
+              }
+            } catch (err) {
+              console.error(`[ChatGenerator] Failed to check for upsells:`, err)
+            }
+          }
         } else if (jobStatus.status === 'failed' || jobStatus.status === 'error') {
           // Show error toast notification
           toast.error('Generation failed', {
