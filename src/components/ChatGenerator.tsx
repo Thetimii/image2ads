@@ -57,7 +57,7 @@ const ENDPOINT_MAP: Record<string, string> = {
 const CHECK_JOB_STATUS_ENDPOINT = `${SUPABASE_FUNCTIONS_BASE}/check-job-status`
 
 const TAB_META: Record<string, { title: string; subtitle: string; locked?: boolean; model: string; resultType: 'image' | 'video' | 'music' }> = {
-  'text-to-image': { title: '📝 Text to Image', subtitle: 'Generate product-ready visuals from ideas', model: 'gemini', resultType: 'image' },
+  'text-to-image': { title: '✨ Create Image', subtitle: 'Generate product-ready visuals from ideas', model: 'gemini', resultType: 'image' },
   'image-to-image': { title: '🖼 Image to Image', subtitle: 'Transform or restyle an input image', model: 'gemini', resultType: 'image' },
   'text-to-video': { title: '🎬 Text to Video', subtitle: 'Bring concepts to motion with AI video', locked: true, model: 'veo3_fast', resultType: 'video' },
   'image-to-video': { title: '🎥 Image to Video', subtitle: 'Animate a still into dynamic video', locked: true, model: 'veo3_fast', resultType: 'video' },
@@ -448,7 +448,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
           if (job.result_type === 'music') {
             tabKey = 'text-to-music'
           } else if (job.has_images) {
-            tabKey = job.result_type === 'video' ? 'image-to-video' : 'image-to-image'
+            tabKey = job.result_type === 'video' ? 'image-to-video' : 'text-to-image' // Merge image-to-image into text-to-image
           } else {
             tabKey = job.result_type === 'video' ? 'text-to-video' : 'text-to-image'
           }
@@ -861,7 +861,8 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
 
       // Upload images if needed
       const imageIds: string[] = []
-      if (requiresImage && localFiles.length > 0) {
+      // Allow upload if files exist, regardless of mode (supports text-to-image with reference)
+      if (localFiles.length > 0) {
         console.log(`[ChatGenerator] Starting upload of ${localFiles.length} image(s)...`)
 
         for (let i = 0; i < localFiles.length; i++) {
@@ -946,6 +947,12 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
 
       // Determine endpoint based on user status and tab
       let endpoint = ENDPOINT_MAP[gen.activeTab]
+
+      // DYNAMIC ROUTING: If in text-to-image mode but images were uploaded, switch to image-to-image endpoint
+      if (gen.activeTab === 'text-to-image' && imageIds.length > 0) {
+        console.log(`[ChatGenerator] 🔀 Switching to image-to-image endpoint due to uploaded images`)
+        endpoint = ENDPOINT_MAP['image-to-image']
+      }
 
       console.log(`[ChatGenerator] 🔍 ROUTING CHECK:`, {
         isFreeUser,
@@ -1797,8 +1804,8 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
 
         {/* Collapsible Settings Bar */}
         <div className="flex flex-wrap items-center gap-2 mb-3 relative" style={{ zIndex: 0 }}>
-          {/* Upload Button - only for image-to-image/video */}
-          {requiresImage && (
+          {/* Upload Button - enabled for image-to-image/video AND text-to-image (merged) */}
+          {(requiresImage || gen.activeTab === 'text-to-image') && (
             <button
               onClick={handleUploadClick}
               className="flex items-center gap-2 px-3 py-2 bg-white border border-gray-200 rounded-lg hover:border-purple-300 hover:bg-purple-50/50 transition text-sm h-[38px]"

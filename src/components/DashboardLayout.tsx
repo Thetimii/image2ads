@@ -31,8 +31,8 @@ interface DashboardLayoutProps {
 
 interface NavItem { name: string; href: string; locked?: boolean }
 const navigation: NavItem[] = [
-  { name: '📝 Text to Image', href: '/dashboard/generate/text-to-image' },
-  { name: '🖼 Image to Image', href: '/dashboard/generate/image-to-image' },
+  { name: '✨ Create Image', href: '/dashboard/generate/text-to-image' },
+  // { name: '🖼 Image to Image', href: '/dashboard/generate/image-to-image' }, // Merged into Text to Image
   { name: '🎬 Text to Video', href: '/dashboard/generate/text-to-video', locked: true },
   { name: '🎥 Image to Video', href: '/dashboard/generate/image-to-video', locked: true },
   { name: '🎵 Text to Music', href: '/dashboard/generate/text-to-music', locked: true },
@@ -77,7 +77,7 @@ export default function DashboardLayout({ user, profile, children, onDemoOpen, i
   const router = useRouter()
   const pathname = usePathname()
   const supabase = createClient()
-  
+
   // Generator context removed for now to fix build issues
   const generator = null
 
@@ -147,7 +147,7 @@ export default function DashboardLayout({ user, profile, children, onDemoOpen, i
     try {
       const response = await fetch('/api/pro-discount-status')
       const data = await response.json()
-      
+
       if (data.is_valid) {
         setShowProUpsellModal(true)
       } else {
@@ -209,7 +209,7 @@ export default function DashboardLayout({ user, profile, children, onDemoOpen, i
       try {
         const response = await fetch('/api/pro-discount-status')
         const data = await response.json()
-        
+
         if (data.is_valid) {
           console.log('✅ Showing discount modal')
           setShowProUpsellModal(true)
@@ -223,12 +223,12 @@ export default function DashboardLayout({ user, profile, children, onDemoOpen, i
       }
       return
     }
-    
+
     // Close sidebar immediately for instant feel
     setSidebarOpen(false)
-    
+
     // Generator context removed for build fix - navigation will work without this
-    
+
     // Use router.push for proper Next.js navigation
     router.push(href)
   }
@@ -294,7 +294,7 @@ export default function DashboardLayout({ user, profile, children, onDemoOpen, i
     <div className="h-screen bg-gray-50 flex">
       {/* Mobile sidebar overlay */}
       {sidebarOpen && (
-        <div 
+        <div
           className="fixed inset-0 z-40 lg:hidden"
           onClick={() => setSidebarOpen(false)}
         >
@@ -314,8 +314,8 @@ export default function DashboardLayout({ user, profile, children, onDemoOpen, i
               {isSafari ? (
                 // Safari-specific PNG fallback
                 <Image
-                  src="/logo.png" 
-                  alt="Image2Ad Logo" 
+                  src="/logo.png"
+                  alt="Image2Ad Logo"
                   width={32}
                   height={32}
                   className="w-8 h-8"
@@ -326,8 +326,8 @@ export default function DashboardLayout({ user, profile, children, onDemoOpen, i
               ) : (
                 // Standard SVG for other browsers
                 <Image
-                  src="/logo.svg" 
-                  alt="Image2Ad Logo" 
+                  src="/logo.svg"
+                  alt="Image2Ad Logo"
                   width={32}
                   height={32}
                   className="w-8 h-8"
@@ -352,7 +352,7 @@ export default function DashboardLayout({ user, profile, children, onDemoOpen, i
               try {
                 const response = await fetch('/api/pro-discount-status')
                 const data = await response.json()
-                
+
                 if (data.is_valid) {
                   setShowProUpsellModal(true)
                 } else {
@@ -396,7 +396,7 @@ export default function DashboardLayout({ user, profile, children, onDemoOpen, i
               const isLocked = item.locked && !hasPro
               const isDisabledByOnboarding = isNavigationLocked && item.href !== pathname
               const shouldDisable = isDisabledByOnboarding && !isLocked
-              
+
               return (
                 <button
                   key={item.name}
@@ -407,7 +407,7 @@ export default function DashboardLayout({ user, profile, children, onDemoOpen, i
                       try {
                         const response = await fetch('/api/pro-discount-status')
                         const data = await response.json()
-                        
+
                         if (data.is_valid) {
                           console.log('✅ Showing discount modal')
                           setShowProUpsellModal(true)
@@ -484,7 +484,7 @@ export default function DashboardLayout({ user, profile, children, onDemoOpen, i
                 )}
               </button>
             ))}
-            
+
             {/* Sign out button */}
             <button
               onClick={handleSignOut}
@@ -498,79 +498,79 @@ export default function DashboardLayout({ user, profile, children, onDemoOpen, i
 
       {/* Main content */}
       <div className="flex-1 flex flex-col overflow-hidden lg:ml-64">
-          {/* Pro Discount Modal (20% off at 1 credit) */}
-          {showProDiscountModal && (
-            <ProDiscountModal
-              onCloseAction={() => {
-                setShowProDiscountModal(false)
-                setDiscountModalDismissed(true)
-              }}
-              onUpgradeAction={() => {}}
-            />
-          )}
+        {/* Pro Discount Modal (20% off at 1 credit) */}
+        {showProDiscountModal && (
+          <ProDiscountModal
+            onCloseAction={() => {
+              setShowProDiscountModal(false)
+              setDiscountModalDismissed(true)
+            }}
+            onUpgradeAction={() => { }}
+          />
+        )}
 
-          {/* Pro Trial Modal ($5 at 0 credits) */}
-          {showProTrialModal && (
-            <ProTrialModal
-              onCloseAction={() => {
-                setShowProTrialModal(false)
-                setTrialModalDismissed(true)
-                // Save to localStorage to persist across page navigations
-                localStorage.setItem(`trial-modal-dismissed-${user.id}`, 'true')
-              }}
-              onStartTrialAction={() => {}}
-            />
-          )}
+        {/* Pro Trial Modal ($5 at 0 credits) */}
+        {showProTrialModal && (
+          <ProTrialModal
+            onCloseAction={() => {
+              setShowProTrialModal(false)
+              setTrialModalDismissed(true)
+              // Save to localStorage to persist across page navigations
+              localStorage.setItem(`trial-modal-dismissed-${user.id}`, 'true')
+            }}
+            onStartTrialAction={() => { }}
+          />
+        )}
 
-          {/* Pro Upsell Modal with discount */}
-          {showProUpsellModal && (
-            <ProUpsellModal
-              onCloseAction={() => setShowProUpsellModal(false)}
-              isUpgrading={isUpgrading}
-            />
-          )}
-          
-          {/* Normal Upgrade Modal */}
-          {showUpgrade && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-              <div className="bg-white rounded-2xl shadow-2xl max-w-5xl w-full max-h-[90vh] overflow-y-auto">
-                {/* Header */}
-                <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex justify-between items-center rounded-t-2xl">
-                  <div>
-                    <h2 className="text-xl font-bold text-gray-900">✨ Upgrade Your Plan</h2>
-                    <p className="text-sm text-gray-500 mt-1">
-                      {hasPro 
-                        ? 'Get more credits with a higher tier plan'
-                        : 'Unlock video generation, music creation, and get more credits. Choose a plan to get started:'
-                      }
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => setShowUpgrade(false)}
-                    className="text-gray-400 hover:text-gray-600 text-2xl leading-none"
-                  >
-                    ×
-                  </button>
-                </div>
+        {/* Pro Upsell Modal with discount */}
+        {showProUpsellModal && (
+          <ProUpsellModal
+            onCloseAction={() => setShowProUpsellModal(false)}
+            isUpgrading={isUpgrading}
+          />
+        )}
 
-                {/* Plans Grid */}
-                <PricingPlans 
-                  onSubscribeAction={handleSubscribe}
-                  isLoading={isUpgrading}
-                  variant="popup"
-                />
-
-                {/* Footer */}
-                <div className="border-t border-gray-200 px-6 py-4 bg-gray-50 rounded-b-2xl">
-                  <p className="text-xs text-gray-500 text-center">
-                    💳 Secure payment powered by Stripe • Auto-renews monthly • Cancel anytime
+        {/* Normal Upgrade Modal */}
+        {showUpgrade && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+            <div className="bg-white rounded-2xl shadow-2xl max-w-5xl w-full max-h-[90vh] overflow-y-auto">
+              {/* Header */}
+              <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex justify-between items-center rounded-t-2xl">
+                <div>
+                  <h2 className="text-xl font-bold text-gray-900">✨ Upgrade Your Plan</h2>
+                  <p className="text-sm text-gray-500 mt-1">
+                    {hasPro
+                      ? 'Get more credits with a higher tier plan'
+                      : 'Unlock video generation, music creation, and get more credits. Choose a plan to get started:'
+                    }
                   </p>
                 </div>
+                <button
+                  onClick={() => setShowUpgrade(false)}
+                  className="text-gray-400 hover:text-gray-600 text-2xl leading-none"
+                >
+                  ×
+                </button>
+              </div>
+
+              {/* Plans Grid */}
+              <PricingPlans
+                onSubscribeAction={handleSubscribe}
+                isLoading={isUpgrading}
+                variant="popup"
+              />
+
+              {/* Footer */}
+              <div className="border-t border-gray-200 px-6 py-4 bg-gray-50 rounded-b-2xl">
+                <p className="text-xs text-gray-500 text-center">
+                  💳 Secure payment powered by Stripe • Auto-renews monthly • Cancel anytime
+                </p>
               </div>
             </div>
-          )}
+          </div>
+        )}
         {/* Mobile header */}
-        <div 
+        <div
           className="lg:hidden bg-white border-b border-gray-200 px-4 py-3 sticky top-0 z-30"
           style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 6px)' }}
         >
@@ -587,8 +587,8 @@ export default function DashboardLayout({ user, profile, children, onDemoOpen, i
               {isSafari ? (
                 // Safari-specific PNG fallback
                 <Image
-                  src="/logo.png" 
-                  alt="Image2Ad Logo" 
+                  src="/logo.png"
+                  alt="Image2Ad Logo"
                   width={24}
                   height={24}
                   className="w-6 h-6"
@@ -599,8 +599,8 @@ export default function DashboardLayout({ user, profile, children, onDemoOpen, i
               ) : (
                 // Standard SVG for other browsers
                 <Image
-                  src="/logo.svg" 
-                  alt="Image2Ad Logo" 
+                  src="/logo.svg"
+                  alt="Image2Ad Logo"
                   width={24}
                   height={24}
                   className="w-6 h-6"
@@ -612,12 +612,11 @@ export default function DashboardLayout({ user, profile, children, onDemoOpen, i
         </div>
 
         {/* Page content */}
-        <main className={`flex-1 flex flex-col min-h-0 overflow-hidden ${
-          !isGeneratorPage && (pathname === '/dashboard/library' || pathname === '/dashboard/settings' || pathname === '/billing')
-            ? 'overflow-y-auto'
-            : ''
-        }`}>
-          {React.isValidElement(children) 
+        <main className={`flex-1 flex flex-col min-h-0 overflow-hidden ${!isGeneratorPage && (pathname === '/dashboard/library' || pathname === '/dashboard/settings' || pathname === '/billing')
+          ? 'overflow-y-auto'
+          : ''
+          }`}>
+          {React.isValidElement(children)
             ? React.cloneElement(children, { onShowUpgrade: handleShowUpgradeModal } as any)
             : children
           }
