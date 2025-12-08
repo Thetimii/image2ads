@@ -9,7 +9,7 @@ import type { User } from '@supabase/supabase-js'
 import type { Profile } from '@/lib/validations'
 import PricingPlans from './PricingPlans'
 import { toast } from 'sonner'
-import FirstTimeOnboarding from './FirstTimeOnboarding'
+import OnboardingQuestionnaire from './OnboardingQuestionnaire'
 import UpgradePrompt from './UpgradePrompt'
 import { useOnboarding } from '@/hooks/useOnboarding'
 import dynamic from 'next/dynamic'
@@ -190,9 +190,11 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
     shouldShowUpgrade,
     prefillPrompt,
     handleOnboardingComplete,
+    handleSkipOnboarding,
     handleFirstGeneration,
     checkCreditsAndShowUpgrade,
-    closeUpgradePrompt
+    closeUpgradePrompt,
+    tutorialMode
   } = useOnboarding(user, profile)
 
   // Auto-fill prompt when onboarding completes
@@ -1778,18 +1780,18 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
         style={shouldHighlightGenerate ? {
           paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 10px)',
           position: 'relative',
-          zIndex: 10001
+          zIndex: shouldHighlightGenerate && !shouldShowOnboarding ? 10001 : 0
         } : {
           paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 10px)'
         }}
       >
-        {/* Local overlay for this section only */}
-        {shouldHighlightGenerate && (
+        {/* Local overlay for this section only - only show when highlight is active AND modal is closed */}
+        {shouldHighlightGenerate && !shouldShowOnboarding && (
           <div className="absolute inset-0 bg-black/60 pointer-events-none" style={{ zIndex: 1 }} />
         )}
 
         {/* Examples */}
-        <div className="flex gap-2 overflow-x-auto text-xs text-gray-600 pb-1 scrollbar-hide pr-4 -mx-1 px-1 relative" style={{ zIndex: 0 }}>
+        <div className="flex gap-2 overflow-x-auto text-xs text-gray-600 pb-1 scrollbar-hide pr-4 -mx-1 px-1 relative">
           {EXAMPLES[gen.activeTab].map(ex => (
             <button
               key={ex.short}
@@ -1803,12 +1805,15 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
         </div>
 
         {/* Collapsible Settings Bar */}
-        <div className="flex flex-wrap items-center gap-2 mb-3 relative" style={{ zIndex: 0 }}>
+        <div className="flex flex-wrap items-center gap-2 mb-3 relative">
           {/* Upload Button - enabled for image-to-image/video AND text-to-image (merged) */}
           {(requiresImage || gen.activeTab === 'text-to-image') && (
             <button
               onClick={handleUploadClick}
-              className="flex items-center gap-2 px-3 py-2 bg-white border border-gray-200 rounded-lg hover:border-purple-300 hover:bg-purple-50/50 transition text-sm h-[38px]"
+              className={`flex items-center gap-2 px-3 py-2 bg-white border border-gray-200 rounded-lg hover:border-purple-300 hover:bg-purple-50/50 transition text-sm h-[38px] ${shouldHighlightGenerate && !shouldShowOnboarding && tutorialMode === 'product' && localFiles.length === 0
+                ? 'ring-4 ring-purple-400 ring-opacity-50 animate-pulse relative z-10'
+                : ''
+                }`}
               title="Upload reference images"
             >
               <span className="text-gray-600">📎 Upload:</span>
@@ -2047,10 +2052,11 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
 
       {/* First-Time Onboarding */}
       {shouldShowOnboarding && (
-        <FirstTimeOnboarding
+        <OnboardingQuestionnaire
           user={user}
           profile={profile}
           onCompleteAction={handleOnboardingComplete}
+          onSkipAction={handleSkipOnboarding}
         />
       )}
 
