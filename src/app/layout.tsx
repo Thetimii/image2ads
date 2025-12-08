@@ -6,6 +6,7 @@ import AuthDebug from "@/components/AuthDebug";
 import MetaPixel from "@/components/MetaPixel";
 import { TutorialProvider } from "@/contexts/TutorialContext";
 import { Toaster } from 'sonner';
+import { Analytics } from "@vercel/analytics/react";
 import "./globals.css";
 
 const poppins = Poppins({
@@ -32,7 +33,7 @@ export default function RootLayout({
       <head>
         {/* Meta Pixel with Advanced Matching */}
         <MetaPixel />
-        
+
         {/* Hotjar Tracking Code */}
         <Script
           id="hotjar"
@@ -57,6 +58,7 @@ export default function RootLayout({
           <CookieBanner />
           <AuthDebug />
           <Toaster position="top-right" richColors closeButton />
+          <Analytics />
         </TutorialProvider>
       </body>
     </html>
