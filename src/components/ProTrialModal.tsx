@@ -153,10 +153,11 @@ export default function ProTrialModal({ onCloseAction, onStartTrialAction, sourc
         </div>
 
         {/* Footer */}
-        <div className="border-t border-gray-200 px-4 py-2 md:px-5 md:py-3 bg-gray-50 rounded-b-2xl">
-          <p className="text-xs text-gray-500 text-center">
+        <div className="border-t border-gray-200 px-4 py-2 md:px-5 md:py-3 bg-gray-50 rounded-b-2xl flex justify-between items-center">
+          <p className="text-xs text-gray-500 text-center flex-1">
             💳 Secure payment • Auto-renews monthly • Cancel anytime
           </p>
+          <span className="text-[10px] text-gray-300">v1.0.1</span>
         </div>
       </div>
     </div >
