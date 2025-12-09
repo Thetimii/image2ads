@@ -498,7 +498,7 @@ export default function DashboardLayout({ user, profile, children, onDemoOpen, i
 
       {/* Main content */}
       <div className="flex-1 flex flex-col overflow-hidden lg:ml-64">
-        {/* Pro Discount Modal (20% off at 1 credit) */}
+        {/* Pro Discount Modal (50% off at 1 credit) */}
         {showProDiscountModal && (
           <ProDiscountModal
             onCloseAction={() => {

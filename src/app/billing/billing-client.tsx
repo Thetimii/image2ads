@@ -31,9 +31,9 @@ export default function BillingClient({ user, profile }: BillingClientProps) {
         const data = await response.json()
 
         if (data.is_valid) {
-          console.log('✅ Active 20% discount detected on billing page')
+          console.log('✅ Active 50% discount detected on billing page')
           setHasActiveDiscount(true)
-          setDiscountPercentage(20)
+          setDiscountPercentage(50)
         }
       } catch (error) {
         console.error('Error checking discount:', error)
@@ -56,11 +56,11 @@ export default function BillingClient({ user, profile }: BillingClientProps) {
           const data = await response.json()
 
           if (data.is_valid) {
-            console.log('✨ Pro 20% discount is valid, redirecting to checkout...')
+            console.log('✨ Pro 50% discount is valid, redirecting to checkout...')
             setIsLoading('pro')
             const metaOptions = {
               plan: 'pro' as const,
-              couponId: 'VbLhruZu',
+              couponId: 'fqVEydW3',
               source: 'billing_promo_redirect',
             }
             trackMetaSubscribedButtonClick(metaOptions)
@@ -354,12 +354,12 @@ export default function BillingClient({ user, profile }: BillingClientProps) {
                 </p>
               </div>
               <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${(profile.subscription_status === 'active' || profile.subscription_status === 'trialing') ? 'bg-green-100' :
-                  (profile.subscription_status === 'canceled' || profile.subscription_status === 'cancelled') ? 'bg-red-100' :
-                    'bg-gray-100'
+                (profile.subscription_status === 'canceled' || profile.subscription_status === 'cancelled') ? 'bg-red-100' :
+                  'bg-gray-100'
                 }`}>
                 <svg className={`w-6 h-6 ${(profile.subscription_status === 'active' || profile.subscription_status === 'trialing') ? 'text-green-600' :
-                    (profile.subscription_status === 'canceled' || profile.subscription_status === 'cancelled') ? 'text-red-600' :
-                      'text-gray-600'
+                  (profile.subscription_status === 'canceled' || profile.subscription_status === 'cancelled') ? 'text-red-600' :
+                    'text-gray-600'
                   }`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   {(profile.subscription_status === 'active' || profile.subscription_status === 'trialing') ? (
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
@@ -441,8 +441,8 @@ export default function BillingClient({ user, profile }: BillingClientProps) {
             isLoading={isLoading}
             variant="page"
             showAllPlans={true}
-            discountPercentage={hasActiveDiscount ? discountPercentage : undefined}
-            couponId={hasActiveDiscount ? 'VbLhruZu' : undefined}
+            discountPercentage={hasActiveDiscount ? 50 : undefined}
+            couponId={hasActiveDiscount ? 'fqVEydW3' : undefined}
           />
         </div>
 

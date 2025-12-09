@@ -14,7 +14,7 @@ import UpgradePrompt from './UpgradePrompt'
 import { useOnboarding } from '@/hooks/useOnboarding'
 import dynamic from 'next/dynamic'
 import ProUpsellModal from './ProUpsellModal'
-import ProTrialModal from './ProTrialModal'
+
 import ProDiscountModal from './ProDiscountModal'
 import ModelSelector from './ModelSelector'
 import {
@@ -155,12 +155,12 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
   const activeTimeouts = useRef<Set<NodeJS.Timeout>>(new Set())
   const activePolling = useRef<Set<string>>(new Set()) // Track active polling jobs
   const [showCreditPopup, setShowCreditPopup] = useState(false)
-  const [showProTrialModal, setShowProTrialModal] = useState(false)
+
   const [showProDiscountModal, setShowProDiscountModal] = useState(false)
   const [showProUpsellModal, setShowProUpsellModal] = useState(false)
   const [isUpgrading, setIsUpgrading] = useState<string | null>(null)
   const hasShownLastCreditModal = useRef(false) // Prevent multiple modals in same session
-  const hasShownFirstGenModal = useRef(false) // Track if we've shown the $5 trial modal
+  const hasShownFirstGenModal = useRef(false) // Track if we've shown the 20% discount modal
   const hasCheckedProUpsell = useRef(false) // Track if we've checked for pro upsell eligibility
   const [hasActiveDiscount, setHasActiveDiscount] = useState(false)
 
@@ -661,18 +661,10 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
                 const totalGens = updatedProfile.total_generations || 0
                 console.log(`[ChatGenerator] ✅ Generation complete! total_generations: ${totalGens}`)
 
-                // Show $5 trial modal after 1st generation
+                // Show Pro Discount Modal (20% off for 15min) after 1st generation
                 if (totalGens === 1 && !hasShownFirstGenModal.current) {
-                  console.log(`[ChatGenerator] 🎯 First generation complete! Showing $5 trial modal...`)
+                  console.log(`[ChatGenerator] 🎯 First generation complete! Showing 20% discount modal...`)
                   hasShownFirstGenModal.current = true
-                  setTimeout(() => {
-                    setShowProTrialModal(true)
-                  }, 3000)
-                }
-                // Show Pro Discount Modal (20% off for 15min) after 3rd generation
-                else if (totalGens === 3 && !hasCheckedProUpsell.current) {
-                  console.log(`[ChatGenerator] 🎯 3rd generation complete! Showing 20% discount modal...`)
-                  hasCheckedProUpsell.current = true
                   setTimeout(() => {
                     setShowProDiscountModal(true)
                   }, 3000)
@@ -2070,19 +2062,9 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
         }}
       />
 
-      {/* Pro Trial Modal - $5 trial after 1st generation */}
-      {showProTrialModal && (
-        <ProTrialModal
-          onCloseAction={() => setShowProTrialModal(false)}
-          onStartTrialAction={() => {
-            setShowProTrialModal(false)
-            // Redirect to trial checkout
-            window.location.href = '/billing?trial=true'
-          }}
-        />
-      )}
 
-      {/* Pro Discount Modal - 20% off for 15min after 3rd generation */}
+
+      {/* Pro Discount Modal - 50% off for 3min after 1st generation */}
       {showProDiscountModal && (
         <ProDiscountModal
           onCloseAction={() => setShowProDiscountModal(false)}

@@ -13,7 +13,7 @@ interface ProDiscountModalProps {
 }
 
 export default function ProDiscountModal({ onCloseAction, onUpgradeAction }: ProDiscountModalProps) {
-  const [timeLeft, setTimeLeft] = useState({ minutes: 15, seconds: 0 })
+  const [timeLeft, setTimeLeft] = useState({ minutes: 3, seconds: 0 })
   const [isExpired, setIsExpired] = useState(false)
   const [isStarting, setIsStarting] = useState(true)
   const [isUpgrading, setIsUpgrading] = useState(false)
@@ -46,8 +46,8 @@ export default function ProDiscountModal({ onCloseAction, onUpgradeAction }: Pro
           if (response.ok) {
             const data = await response.json()
             console.log('✅ Pro discount timer started:', data)
-            // Set initial time to 15:00
-            setTimeLeft({ minutes: 15, seconds: 0 })
+            // Set initial time to 3:00
+            setTimeLeft({ minutes: 3, seconds: 0 })
             setIsStarting(false)
           } else {
             console.error('❌ Failed to start timer:', response.status, response.statusText)
@@ -126,7 +126,7 @@ export default function ProDiscountModal({ onCloseAction, onUpgradeAction }: Pro
     setIsUpgrading(true)
     const metaOptions = {
       plan: 'pro' as const,
-      couponId: 'VbLhruZu',
+      couponId: 'fqVEydW3',
       source: 'pro_discount_modal',
     }
     trackMetaSubscribedButtonClick(metaOptions)
@@ -161,7 +161,7 @@ export default function ProDiscountModal({ onCloseAction, onUpgradeAction }: Pro
   }
 
   const originalPrice = 19.99
-  const discountedPrice = (originalPrice * 0.8).toFixed(2) // 20% off
+  const discountedPrice = (originalPrice * 0.5).toFixed(2) // 50% off
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -187,10 +187,10 @@ export default function ProDiscountModal({ onCloseAction, onUpgradeAction }: Pro
             </div>
 
             <h2 className="text-2xl font-bold text-gray-900 mb-2">
-              ✨ Unlock Pro with 20% Off
+              ✨ Unlock Pro with 50% Off
             </h2>
             <p className="text-gray-600">
-              Your next level is here — get 200 ad-ready images, HD quality, and AI video generation.
+              Your next level is here — get 200 ad-ready images, 4K quality, and AI video generation.
             </p>
           </div>
         </div>
@@ -211,7 +211,7 @@ export default function ProDiscountModal({ onCloseAction, onUpgradeAction }: Pro
                 </div>
                 <div className="flex items-center gap-2 mt-1">
                   <span className="text-gray-500">/month</span>
-                  <span className="bg-pink-500 text-white text-xs px-2 py-1 rounded-full font-semibold">-20%</span>
+                  <span className="bg-pink-500 text-white text-xs px-2 py-1 rounded-full font-semibold">-50%</span>
                 </div>
               </div>
               <p className="text-sm text-gray-600 mt-2">200 ad-ready images per month</p>

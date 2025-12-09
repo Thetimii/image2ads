@@ -6,10 +6,10 @@ export const runtime = 'nodejs'
 export async function GET(req: NextRequest) {
   try {
     const supabase = await createClient()
-    
+
     // Get authenticated user
     const { data: { user }, error: authError } = await supabase.auth.getUser()
-    
+
     if (authError || !user) {
       return NextResponse.json(
         { error: 'Unauthorized' },
@@ -84,10 +84,10 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const supabase = await createClient()
-    
+
     // Get authenticated user
     const { data: { user }, error: authError } = await supabase.auth.getUser()
-    
+
     if (authError || !user) {
       return NextResponse.json(
         { error: 'Unauthorized' },
@@ -95,16 +95,16 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // Set expiry to NOW + 15 minutes
+    // Set expiry to NOW + 3 minutes
     const expiresAt = new Date()
-    expiresAt.setMinutes(expiresAt.getMinutes() + 15)
+    expiresAt.setMinutes(expiresAt.getMinutes() + 3)
 
     console.log('💾 Activating Pro discount for user:', user.id)
     console.log('⏰ Expiry time will be:', expiresAt.toISOString())
 
     const { error: updateError } = await supabase
       .from('profiles')
-      .update({ 
+      .update({
         pro_discount_expires_at: expiresAt.toISOString()
       })
       .eq('id', user.id)

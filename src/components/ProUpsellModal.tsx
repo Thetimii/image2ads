@@ -25,11 +25,11 @@ export default function ProUpsellModal({ onCloseAction, onUpgradeAction, isUpgra
     const startTimer = async () => {
       try {
         console.log('🚀 Checking/starting Pro discount timer...')
-        
+
         // First check if already activated
         const checkResponse = await fetch('/api/pro-discount-status')
         const checkData = await checkResponse.json()
-        
+
         if (checkData.is_valid) {
           // Already activated, use the remaining time
           console.log('⏰ Discount already active, syncing time:', checkData)
@@ -44,7 +44,7 @@ export default function ProUpsellModal({ onCloseAction, onUpgradeAction, isUpgra
           const response = await fetch('/api/pro-discount-status', {
             method: 'POST',
           })
-          
+
           if (response.ok) {
             const data = await response.json()
             console.log('✅ Pro discount timer started:', data)
@@ -78,12 +78,12 @@ export default function ProUpsellModal({ onCloseAction, onUpgradeAction, isUpgra
     const countdownInterval = setInterval(() => {
       setTimeLeft(prev => {
         const totalSeconds = prev.minutes * 60 + prev.seconds - 1
-        
+
         if (totalSeconds <= 0) {
           setIsExpired(true)
           return { minutes: 0, seconds: 0 }
         }
-        
+
         return {
           minutes: Math.floor(totalSeconds / 60),
           seconds: totalSeconds % 60
@@ -174,10 +174,10 @@ export default function ProUpsellModal({ onCloseAction, onUpgradeAction, isUpgra
           <div className="flex-1">
             <h2 className="text-xl font-bold text-gray-900">⚠️ You have 1 credit left</h2>
             <p className="text-sm text-gray-600 mt-1">
-              <span className="font-semibold text-purple-600">Limited Time: 20% off Pro Plan</span> — expires in:
+              <span className="font-semibold text-purple-600">Limited Time: 50% off Pro Plan</span> — expires in:
             </p>
           </div>
-          
+
           {/* Countdown Timer - compact */}
           <div className="flex items-center gap-4">
             <div className="bg-gradient-to-r from-purple-500 to-pink-500 rounded-xl px-6 py-3 shadow-lg">
@@ -190,7 +190,7 @@ export default function ProUpsellModal({ onCloseAction, onUpgradeAction, isUpgra
                 </div>
               </div>
             </div>
-            
+
             <button
               onClick={onCloseAction}
               className="text-gray-400 hover:text-gray-600 text-2xl leading-none"
@@ -201,12 +201,12 @@ export default function ProUpsellModal({ onCloseAction, onUpgradeAction, isUpgra
         </div>
 
         {/* Plans Grid - same as normal popup */}
-        <PricingPlans 
+        <PricingPlans
           onSubscribeAction={handleSubscribe}
           isLoading={isUpgradingLocal}
           variant="popup"
-          discountPercentage={20}
-          couponId="VbLhruZu"
+          discountPercentage={50}
+          couponId="fqVEydW3"
         />
 
         {/* Footer */}

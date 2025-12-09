@@ -6,10 +6,10 @@ import { createCheckoutSession } from '@/lib/stripe'
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient()
-    
+
     // Check authentication
     const { data: { user }, error: authError } = await supabase.auth.getUser()
-    
+
     if (authError || !user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
@@ -33,7 +33,7 @@ export async function POST(request: NextRequest) {
     // Parse and validate request body
     const body = await request.json()
     const validation = createCheckoutSessionSchema.safeParse(body)
-    
+
     if (!validation.success) {
       return NextResponse.json(
         { error: 'Invalid request data', details: validation.error.issues },
@@ -41,7 +41,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-  const { plan, successUrl, cancelUrl, couponId, applyProDiscount } = validation.data
+    const { plan, successUrl, cancelUrl, couponId, applyProDiscount } = validation.data
 
     console.log('Creating checkout session with:', {
       userId: user.id,
@@ -68,7 +68,7 @@ export async function POST(request: NextRequest) {
 
         if (now < expiresAt) {
           // Discount still valid - use the coupon
-          finalCouponId = process.env.STRIPE_PRO_DISCOUNT_COUPON_ID || 'VbLhruZu'
+          finalCouponId = process.env.STRIPE_PRO_DISCOUNT_COUPON_ID || 'fqVEydW3'
           console.log('✨ Applying Pro 20% discount coupon:', finalCouponId)
         } else {
           console.log('⏰ Pro discount expired')
@@ -87,9 +87,9 @@ export async function POST(request: NextRequest) {
       couponId: finalCouponId || undefined,
     })
 
-    return NextResponse.json({ 
+    return NextResponse.json({
       sessionId: session.id,
-      url: session.url 
+      url: session.url
     })
 
   } catch (error) {
@@ -98,7 +98,7 @@ export async function POST(request: NextRequest) {
       stack: error instanceof Error ? error.stack : undefined,
     })
     return NextResponse.json(
-      { 
+      {
         error: 'Internal server error',
         details: error instanceof Error ? error.message : String(error)
       },
