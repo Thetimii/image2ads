@@ -4,5 +4,11 @@
     "src/app/api/upload-png/route.ts": {
       "maxDuration": 60
     }
-  }
+  },
+  "crons": [
+    {
+      "path": "/api/cron/send-reminders",
+      "schedule": "*/10 * * * *"
+    }
+  ]
 }

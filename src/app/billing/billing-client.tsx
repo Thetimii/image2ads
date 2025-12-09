@@ -52,10 +52,25 @@ export default function BillingClient({ user, profile }: BillingClientProps) {
       // Verify discount is still valid before redirecting
       const checkAndRedirect = async () => {
         try {
+          // First check status
           const response = await fetch('/api/pro-discount-status')
           const data = await response.json()
 
-          if (data.is_valid) {
+          let isValid = data.is_valid
+
+          // If expired but user has the special email link, REACTIVATE it for 1 hour
+          if (!isValid) {
+            console.log('🔄 Reactivating expired discount for email user...')
+            const activateResponse = await fetch('/api/pro-discount-status', {
+              method: 'POST',
+            })
+            if (activateResponse.ok) {
+              isValid = true
+              console.log('✅ Discount reactivated successfully')
+            }
+          }
+
+          if (isValid) {
             console.log('✨ Pro 50% discount is valid, redirecting to checkout...')
             setIsLoading('pro')
             const metaOptions = {
@@ -72,7 +87,7 @@ export default function BillingClient({ user, profile }: BillingClientProps) {
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 plan: 'pro',
-                applyProDiscount: true, // Special flag for 20% discount
+                applyProDiscount: true, // Special flag for discount
                 successUrl: `${window.location.origin}/billing?success=true`,
                 cancelUrl: `${window.location.origin}/billing`,
               }),
@@ -85,12 +100,10 @@ export default function BillingClient({ user, profile }: BillingClientProps) {
             } else {
               console.error('Failed to create checkout session')
               setIsLoading(null)
-              // Clear promo parameter if checkout fails
               window.history.replaceState({}, '', '/billing')
             }
           } else {
             console.log('⏰ Pro discount expired or not available')
-            // Clear promo parameter if expired
             window.history.replaceState({}, '', '/billing')
           }
         } catch (error) {
