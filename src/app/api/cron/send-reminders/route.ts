@@ -43,9 +43,6 @@ export async function GET(req: NextRequest) {
         for (const profile of profiles) {
             const reminders = (profile.email_reminders_sent as any) || {}
 
-            // Skip if already sent
-            if (reminders.reminder_15min) continue
-
             // Check if user has generated anything
             const { data: jobs, error: jobsError } = await supabase
                 .from('jobs')
@@ -60,11 +57,9 @@ export async function GET(req: NextRequest) {
             const now = new Date()
             const diffInMinutes = (now.getTime() - firstJobTime.getTime()) / 1000 / 60
 
-            // Check if it's been at least 15 minutes (and less than 24 hours to avoid spamming old users)
-            if (diffInMinutes >= 15 && diffInMinutes < 1440) {
-                console.log(`Sending 15min reminder to ${profile.email} (First gen: ${Math.round(diffInMinutes)} mins ago)`)
-
-                // Send Email
+            // 1. 15 Minute Reminder (Window: 15m - 59m)
+            if (diffInMinutes >= 15 && diffInMinutes < 60 && !reminders.reminder_15min) {
+                console.log(`Sending 15min reminder to ${profile.email}`)
                 await sendEmail({
                     to: [{ email: profile.email, name: profile.full_name || undefined }],
                     subject: 'Your 50% discount is still available (ending soon)',
@@ -86,18 +81,70 @@ export async function GET(req: NextRequest) {
             </div>
           `
                 })
+                await supabase.from('profiles').update({
+                    email_reminders_sent: { ...reminders, reminder_15min: new Date().toISOString() }
+                }).eq('id', profile.id)
+                sentCount++
+            }
 
-                // Update profile
-                await supabase
-                    .from('profiles')
-                    .update({
-                        email_reminders_sent: {
-                            ...reminders,
-                            reminder_15min: new Date().toISOString()
-                        }
-                    })
-                    .eq('id', profile.id)
+            // 2. 1 Hour Reminder (Window: 60m - 23h 59m)
+            else if (diffInMinutes >= 60 && diffInMinutes < 1440 && !reminders.reminder_1h) {
+                console.log(`Sending 1h reminder to ${profile.email}`)
+                await sendEmail({
+                    to: [{ email: profile.email, name: profile.full_name || undefined }],
+                    subject: 'Did you forget something? 🎨',
+                    htmlContent: `
+            <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
+              <h1>Did you forget something?</h1>
+              <p>Hi ${profile.full_name || 'there'},</p>
+              <p>You're so close to creating amazing professional ads.</p>
+              <p>With <strong>Image2Ad Pro</strong>, you get:</p>
+              <ul>
+                <li>✨ <strong>200 Ad-Ready Images</strong> per month</li>
+                <li>🎥 <strong>AI Video Generation</strong> for engaging ads</li>
+                <li>🖼️ <strong>4K Ultra-HD Quality</strong> exports</li>
+                <li>🚀 <strong>Priority Generation</strong> speed</li>
+              </ul>
+              
+              <div style="text-align: center; margin: 30px 0;">
+                <a href="${process.env.NEXT_PUBLIC_APP_URL || 'https://image2ad.com'}/billing?promo=pro20limited" style="display: inline-block; background-color: #7c3aed; color: white; padding: 12px 24px; border-radius: 6px; text-decoration: none; font-weight: bold;">Unlock Pro Features (-50%)</a>
+              </div>
 
+              <p>Best,<br/>The Image2Ad Team</p>
+            </div>
+          `
+                })
+                await supabase.from('profiles').update({
+                    email_reminders_sent: { ...reminders, reminder_1h: new Date().toISOString() }
+                }).eq('id', profile.id)
+                sentCount++
+            }
+
+            // 3. 24 Hour Reminder (Window: 24h - 48h)
+            else if (diffInMinutes >= 1440 && diffInMinutes < 2880 && !reminders.reminder_24h) {
+                console.log(`Sending 24h reminder to ${profile.email}`)
+                await sendEmail({
+                    to: [{ email: profile.email, name: profile.full_name || undefined }],
+                    subject: 'Last chance: 50% off expires today ⏳',
+                    htmlContent: `
+            <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
+              <h1>Last chance! ⏳</h1>
+              <p>Hi ${profile.full_name || 'there'},</p>
+              <p>This is it. Your special <strong>50% discount</strong> on Image2Ad Pro is expiring today.</p>
+              <p>Don't let this offer slip away. Upgrade now to get 200 images, 4K quality, and video generation for just <strong>CHF 9.50</strong>.</p>
+              
+              <div style="background-color: #fff1f2; padding: 20px; border-radius: 10px; text-align: center; margin: 20px 0; border: 1px solid #fda4af;">
+                <h2 style="color: #be123c; margin: 0;">Offer Expires Today</h2>
+                <a href="${process.env.NEXT_PUBLIC_APP_URL || 'https://image2ad.com'}/billing?promo=pro20limited" style="display: inline-block; background-color: #be123c; color: white; padding: 12px 24px; border-radius: 6px; text-decoration: none; font-weight: bold; margin-top: 15px;">Claim Last Chance Offer</a>
+              </div>
+
+              <p>Best,<br/>The Image2Ad Team</p>
+            </div>
+          `
+                })
+                await supabase.from('profiles').update({
+                    email_reminders_sent: { ...reminders, reminder_24h: new Date().toISOString() }
+                }).eq('id', profile.id)
                 sentCount++
             }
         }
