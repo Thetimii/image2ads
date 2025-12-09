@@ -164,92 +164,92 @@ export default function ProDiscountModal({ onCloseAction, onUpgradeAction }: Pro
   const discountedPrice = (originalPrice * 0.5).toFixed(2) // 50% off
 
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl max-w-lg w-full shadow-2xl">
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-2 sm:p-4 overflow-y-auto">
+      <div className="bg-white rounded-2xl max-w-lg w-full shadow-2xl my-auto max-h-[95vh] overflow-y-auto">
         {/* Header */}
-        <div className="relative px-6 pt-6 pb-4">
+        <div className="relative px-4 sm:px-6 pt-6 pb-2 sm:pb-4">
           <button
             onClick={onCloseAction}
-            className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 text-2xl leading-none"
+            className="absolute top-3 right-3 sm:top-4 sm:right-4 text-gray-400 hover:text-gray-600 text-2xl leading-none p-2 z-10"
             disabled={isUpgrading}
           >
             ×
           </button>
 
-          <div className="text-center mb-4">
-            <div className="inline-block bg-gradient-to-r from-purple-500 to-pink-500 rounded-xl px-6 py-3 mb-4">
-              <div className="text-3xl font-mono font-bold text-white tracking-wider">
+          <div className="text-center mb-2 sm:mb-4">
+            <div className="inline-block bg-gradient-to-r from-purple-500 to-pink-500 rounded-xl px-4 sm:px-6 py-2 sm:py-3 mb-3 sm:mb-4">
+              <div className="text-2xl sm:text-3xl font-mono font-bold text-white tracking-wider">
                 {formatTime()}
               </div>
-              <div className="text-xs text-white/90">
+              <div className="text-[10px] sm:text-xs text-white/90">
                 Offer expires in
               </div>
             </div>
 
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">
+            <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-2">
               ✨ Unlock Pro with 50% Off
             </h2>
-            <p className="text-gray-600">
+            <p className="text-sm sm:text-base text-gray-600">
               Your next level is here — get 200 ad-ready images, 4K quality, and AI video generation.
             </p>
           </div>
         </div>
 
         {/* Plan Card */}
-        <div className="px-6 pb-6">
-          <div className="relative rounded-xl p-6 bg-gradient-to-br from-purple-50 to-pink-50 border-2 border-purple-500">
-            <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-gradient-to-r from-purple-500 to-pink-500 text-white px-4 py-1 rounded-full text-xs font-semibold">
+        <div className="px-4 sm:px-6 pb-4 sm:pb-6">
+          <div className="relative rounded-xl p-4 sm:p-6 bg-gradient-to-br from-purple-50 to-pink-50 border-2 border-purple-500">
+            <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-gradient-to-r from-purple-500 to-pink-500 text-white px-3 sm:px-4 py-0.5 sm:py-1 rounded-full text-[10px] sm:text-xs font-semibold whitespace-nowrap">
               LIMITED TIME OFFER
             </div>
 
             <div className="text-center mb-4 pt-2">
-              <h3 className="text-xl font-bold text-gray-900">Pro Plan</h3>
+              <h3 className="text-lg sm:text-xl font-bold text-gray-900">Pro Plan</h3>
               <div className="mt-2 flex flex-col items-center">
                 <div className="flex items-baseline gap-2">
-                  <span className="text-2xl font-bold text-gray-400 line-through">CHF {originalPrice}</span>
-                  <span className="text-4xl font-bold text-gray-900">CHF {discountedPrice}</span>
+                  <span className="text-xl sm:text-2xl font-bold text-gray-400 line-through">CHF {originalPrice}</span>
+                  <span className="text-3xl sm:text-4xl font-bold text-gray-900">CHF {discountedPrice}</span>
                 </div>
                 <div className="flex items-center gap-2 mt-1">
-                  <span className="text-gray-500">/month</span>
-                  <span className="bg-pink-500 text-white text-xs px-2 py-1 rounded-full font-semibold">-50%</span>
+                  <span className="text-gray-500 text-sm sm:text-base">/month</span>
+                  <span className="bg-pink-500 text-white text-[10px] sm:text-xs px-2 py-0.5 sm:py-1 rounded-full font-semibold">-50%</span>
                 </div>
               </div>
-              <p className="text-sm text-gray-600 mt-2">200 ad-ready images per month</p>
+              <p className="text-xs sm:text-sm text-gray-600 mt-2">200 ad-ready images per month</p>
             </div>
 
             {/* Features */}
-            <ul className="space-y-3 mb-6">
+            <ul className="space-y-2 sm:space-y-3 mb-4 sm:mb-6">
               <li className="flex items-start gap-3">
-                <div className="flex-shrink-0 w-5 h-5 rounded-full bg-purple-500 flex items-center justify-center mt-0.5">
-                  <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className="flex-shrink-0 w-4 h-4 sm:w-5 sm:h-5 rounded-full bg-purple-500 flex items-center justify-center mt-0.5">
+                  <svg className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
                 </div>
-                <span className="text-gray-700">200 ad-ready images per month</span>
+                <span className="text-sm sm:text-base text-gray-700">200 ad-ready images per month</span>
               </li>
               <li className="flex items-start gap-3">
-                <div className="flex-shrink-0 w-5 h-5 rounded-full bg-purple-500 flex items-center justify-center mt-0.5">
-                  <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className="flex-shrink-0 w-4 h-4 sm:w-5 sm:h-5 rounded-full bg-purple-500 flex items-center justify-center mt-0.5">
+                  <svg className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
                 </div>
-                <span className="text-gray-700">AI video generator</span>
+                <span className="text-sm sm:text-base text-gray-700">AI video generator</span>
               </li>
               <li className="flex items-start gap-3">
-                <div className="flex-shrink-0 w-5 h-5 rounded-full bg-purple-500 flex items-center justify-center mt-0.5">
-                  <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className="flex-shrink-0 w-4 h-4 sm:w-5 sm:h-5 rounded-full bg-purple-500 flex items-center justify-center mt-0.5">
+                  <svg className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
                 </div>
-                <span className="text-gray-700">AI music generator</span>
+                <span className="text-sm sm:text-base text-gray-700">AI music generator</span>
               </li>
               <li className="flex items-start gap-3">
-                <div className="flex-shrink-0 w-5 h-5 rounded-full bg-purple-500 flex items-center justify-center mt-0.5">
-                  <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className="flex-shrink-0 w-4 h-4 sm:w-5 sm:h-5 rounded-full bg-purple-500 flex items-center justify-center mt-0.5">
+                  <svg className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
                 </div>
-                <span className="text-gray-700">Commercial license</span>
+                <span className="text-sm sm:text-base text-gray-700">Commercial license</span>
               </li>
             </ul>
 
@@ -257,7 +257,7 @@ export default function ProDiscountModal({ onCloseAction, onUpgradeAction }: Pro
             <button
               onClick={handleUpgrade}
               disabled={isUpgrading}
-              className="w-full bg-gradient-to-r from-purple-500 to-pink-500 text-white py-3 px-6 rounded-xl font-semibold hover:from-purple-600 hover:to-pink-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full bg-gradient-to-r from-purple-500 to-pink-500 text-white py-2.5 sm:py-3 px-6 rounded-xl font-semibold hover:from-purple-600 hover:to-pink-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed text-sm sm:text-base"
             >
               {isUpgrading ? 'Processing...' : 'Upgrade to Pro'}
             </button>
@@ -267,15 +267,15 @@ export default function ProDiscountModal({ onCloseAction, onUpgradeAction }: Pro
           <button
             onClick={onCloseAction}
             disabled={isUpgrading}
-            className="w-full mt-4 text-gray-600 hover:text-gray-800 py-2 text-sm font-medium transition-colors disabled:opacity-50"
+            className="w-full mt-3 sm:mt-4 text-gray-600 hover:text-gray-800 py-2 text-xs sm:text-sm font-medium transition-colors disabled:opacity-50 px-2"
           >
             Continue with free credits and miss out on this amazing deal
           </button>
         </div>
 
         {/* Footer */}
-        <div className="border-t border-gray-200 px-6 py-4 bg-gray-50 rounded-b-2xl">
-          <p className="text-xs text-gray-500 text-center">
+        <div className="border-t border-gray-200 px-4 sm:px-6 py-3 sm:py-4 bg-gray-50 rounded-b-2xl">
+          <p className="text-[10px] sm:text-xs text-gray-500 text-center">
             💳 Secure payment • Auto-renews monthly • Cancel anytime
           </p>
         </div>
