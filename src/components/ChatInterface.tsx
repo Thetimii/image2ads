@@ -7,6 +7,7 @@ import { createClient } from '@/lib/supabase/client'
 import type { User } from '@supabase/supabase-js'
 import type { Profile } from '@/lib/validations'
 import { ToastContainer, useToast } from '@/components/Toast'
+import ProUpsellModal from '@/components/ProUpsellModal'
 
 interface ChatInterfaceProps {
   user: User
@@ -40,21 +41,23 @@ export default function ChatInterface({ user, profile }: ChatInterfaceProps) {
   const [dragOver, setDragOver] = useState(false)
   const [isMobile, setIsMobile] = useState(false)
 
-  
+
   const fileInputRef = useRef<HTMLInputElement>(null)
   const supabase = createClient()
+
   const { toasts, addToast, removeToast, updateToast } = useToast()
   const [loadingToastId, setLoadingToastId] = useState<string | null>(null)
+  const [showUpsellModal, setShowUpsellModal] = useState(false)
 
   // Check if mobile on mount and resize
   useEffect(() => {
     const checkMobile = () => {
       setIsMobile(window.innerWidth < 640)
     }
-    
+
     checkMobile()
     window.addEventListener('resize', checkMobile)
-    
+
     return () => window.removeEventListener('resize', checkMobile)
   }, [])
 
@@ -74,11 +77,11 @@ export default function ChatInterface({ user, profile }: ChatInterfaceProps) {
 
         const latestPendingJob = pendingJobs[0]
         const jobAge = Date.now() - new Date(latestPendingJob.created_at).getTime()
-        
+
         // Only show loading for jobs less than 5 minutes old
         if (jobAge < 5 * 60 * 1000) {
           console.log('[ChatInterface] Found pending job on refresh:', latestPendingJob)
-          
+
           const toastId = addToast({
             message: 'Continuing your ad generation... This usually takes 30-60 seconds.',
             type: 'loading'
@@ -148,7 +151,7 @@ export default function ChatInterface({ user, profile }: ChatInterfaceProps) {
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault()
     setDragOver(false)
-    
+
     const files = e.dataTransfer.files
     if (files.length > 0) {
       handleFileUpload(files)
@@ -210,7 +213,7 @@ export default function ChatInterface({ user, profile }: ChatInterfaceProps) {
       // Upload images if any exist
       if (images.length > 0) {
         console.log(`[ChatInterface] Starting upload of ${images.length} images`)
-        
+
         for (const image of images) {
           if (!image.file) {
             console.log(`[ChatInterface] Skipping image ${image.id} - no file object`)
@@ -233,7 +236,7 @@ export default function ChatInterface({ user, profile }: ChatInterfaceProps) {
             // Upload to storage
             const fileName = `${user.id}/uploads/${Date.now()}_${image.file.name}`
             console.log(`[ChatInterface] Uploading to storage: ${fileName}`)
-            
+
             const { data: uploadData, error: uploadError } = await supabase.storage
               .from('uploads')
               .upload(fileName, resized.arrayBuffer, {
@@ -269,13 +272,13 @@ export default function ChatInterface({ user, profile }: ChatInterfaceProps) {
 
             console.log(`[ChatInterface] Database insert successful: ${imageData.id}`)
             imageIds.push(imageData.id)
-            
+
           } catch (imageProcessError) {
             console.error(`[ChatInterface] Error processing image ${image.file.name}:`, imageProcessError)
             throw imageProcessError
           }
         }
-        
+
         console.log(`[ChatInterface] All images processed. Final imageIds:`, imageIds)
       }
 
@@ -295,7 +298,7 @@ export default function ChatInterface({ user, profile }: ChatInterfaceProps) {
         textarea.style.transition = 'transform 0.3s ease-out, opacity 0.3s ease-out'
         textarea.style.transform = 'translateY(-10px)'
         textarea.style.opacity = '0.5'
-        
+
         // Clear after animation
         setTimeout(() => {
           setPrompt('')
@@ -304,7 +307,7 @@ export default function ChatInterface({ user, profile }: ChatInterfaceProps) {
           textarea.style.opacity = '1'
         }, 300)
       }
-      
+
       const generateResponse = await fetch('/api/generate-ad', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -316,7 +319,7 @@ export default function ChatInterface({ user, profile }: ChatInterfaceProps) {
           folderId: folderId
         })
       })
-      
+
       console.log('[ChatInterface] Generate-ad API response:', generateResponse.status, generateResponse.statusText)
 
       if (!generateResponse.ok) {
@@ -332,11 +335,28 @@ export default function ChatInterface({ user, profile }: ChatInterfaceProps) {
           }, 2000)
           return
         }
+
+        // Handle Limit Reached (429)
+        if (generateResponse.status === 429) {
+          addToast({
+            message: errorData.error || 'Usage limit reached. Upgrade to Pro for more.',
+            type: 'error'
+          })
+          // Optionally open the upsell modal immediately if it's a limit issue
+          setShowUpsellModal(true)
+          return
+        }
+
         throw new Error(errorData.error || 'Failed to generate ad')
       }
 
       const result = await generateResponse.json()
-      
+
+      // Check for Upsell Trigger (Free user >= 5 daily generations)
+      if (result.usage && result.usage.is_free_user && result.usage.daily_count >= 5) {
+        setShowUpsellModal(true)
+      }
+
       if (result.success && result.result_path) {
         // Generation completed immediately! Update loading toast to success
         if (loadingToastId) {
@@ -348,16 +368,16 @@ export default function ChatInterface({ user, profile }: ChatInterfaceProps) {
             if (loadingToastId) removeToast(loadingToastId)
           }, 1500)
         }
-        
+
         // Redirect to library immediately
         setTimeout(() => {
           window.location.href = `/dashboard/library`
         }, 1500)
-        
+
       } else {
         // Fallback to real-time subscription if needed
         const { jobId } = result
-        
+
         // Start real-time subscription for result with original prompt
         subscribeToJobUpdates(jobId, prompt.trim(), folderId || 'uploads')
       }
@@ -370,13 +390,13 @@ export default function ChatInterface({ user, profile }: ChatInterfaceProps) {
         imagesLength: images.length,
         promptLength: prompt.length
       })
-      
+
       // Clean up loading toast if it exists
       if (loadingToastId) {
         removeToast(loadingToastId)
         setLoadingToastId(null)
       }
-      
+
       addToast({
         message: `Failed to generate ad: ${error instanceof Error ? error.message : 'Unknown error'}`,
         type: 'error'
@@ -387,7 +407,7 @@ export default function ChatInterface({ user, profile }: ChatInterfaceProps) {
   // Subscribe to job status changes using Supabase real-time
   const subscribeToJobUpdates = (jobId: string, originalPrompt: string, folderId: string) => {
     console.log(`[ChatInterface] Subscribing to job updates for ${jobId}`)
-    
+
     const channel = supabase
       .channel(`job-${jobId}`)
       .on(
@@ -401,10 +421,10 @@ export default function ChatInterface({ user, profile }: ChatInterfaceProps) {
         (payload) => {
           console.log('[ChatInterface] Job update received:', payload)
           const job = payload.new
-          
+
           if (job.status === 'completed' && job.result_url) {
             console.log('[ChatInterface] Job completed successfully!')
-            
+
             // Update loading toast to success
             if (loadingToastId) {
               updateToast(loadingToastId, {
@@ -415,18 +435,18 @@ export default function ChatInterface({ user, profile }: ChatInterfaceProps) {
                 if (loadingToastId) removeToast(loadingToastId)
               }, 1500)
             }
-            
+
             // Navigate to library to see the generated image
             setTimeout(() => {
               window.location.href = `/dashboard/library`
             }, 1500)
-            
+
             // Unsubscribe from channel
             channel.unsubscribe()
-            
+
           } else if (job.status === 'failed') {
             console.error('[ChatInterface] Generation failed:', job.error_message)
-            
+
             // Update loading toast to error
             if (loadingToastId) {
               updateToast(loadingToastId, {
@@ -440,7 +460,7 @@ export default function ChatInterface({ user, profile }: ChatInterfaceProps) {
                 type: 'error'
               })
             }
-            
+
             // Unsubscribe from channel
             channel.unsubscribe()
           }
@@ -449,11 +469,11 @@ export default function ChatInterface({ user, profile }: ChatInterfaceProps) {
       .subscribe((status) => {
         console.log('[ChatInterface] Subscription status:', status)
       })
-    
+
     // Set up a timeout as fallback (5 minutes)
     const timeoutId = setTimeout(() => {
       console.log('[ChatInterface] Job subscription timeout reached')
-      
+
       if (loadingToastId) {
         updateToast(loadingToastId, {
           message: 'Generation timed out. Please check your library.',
@@ -466,28 +486,27 @@ export default function ChatInterface({ user, profile }: ChatInterfaceProps) {
           type: 'error'
         })
       }
-      
+
       // Unsubscribe from channel
       channel.unsubscribe()
     }, 5 * 60 * 1000) // 5 minutes
-    
+
     // Clean up timeout when component unmounts or job completes
     const originalUnsubscribe = channel.unsubscribe
     channel.unsubscribe = () => {
       clearTimeout(timeoutId)
       return originalUnsubscribe.call(channel)
     }
-    
+
     return channel
   }
 
   return (
     <div className="h-full flex flex-col">
       {/* Main Content Area */}
-      <div 
-        className={`flex-1 relative transition-all duration-200 ${
-          dragOver ? 'bg-blue-50 border-2 border-dashed border-blue-300' : ''
-        }`}
+      <div
+        className={`flex-1 relative transition-all duration-200 ${dragOver ? 'bg-blue-50 border-2 border-dashed border-blue-300' : ''
+          }`}
         onDrop={handleDrop}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
@@ -640,11 +659,10 @@ export default function ChatInterface({ user, profile }: ChatInterfaceProps) {
                     <button
                       key={key}
                       onClick={() => setAspectRatio(key)}
-                      className={`px-2 py-1 sm:px-3 sm:py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all ${
-                        aspectRatio === key
-                          ? 'bg-blue-100 text-blue-700 border border-blue-200'
-                          : 'bg-gray-50 text-gray-600 hover:bg-gray-100 border border-transparent'
-                      }`}
+                      className={`px-2 py-1 sm:px-3 sm:py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all ${aspectRatio === key
+                        ? 'bg-blue-100 text-blue-700 border border-blue-200'
+                        : 'bg-gray-50 text-gray-600 hover:bg-gray-100 border border-transparent'
+                        }`}
                     >
                       <span className="mr-1">{icon}</span>
                       <span className="hidden sm:inline">{label}</span>
@@ -678,7 +696,7 @@ export default function ChatInterface({ user, profile }: ChatInterfaceProps) {
                   <textarea
                     value={prompt}
                     onChange={(e) => setPrompt(e.target.value)}
-                    placeholder={isMobile 
+                    placeholder={isMobile
                       ? "Describe the image you want to create..."
                       : "Describe the image you want to create... (e.g., 'A summer lifestyle photo with bright colors' or 'Professional product showcase for a tech gadget')"
                     }
@@ -698,11 +716,10 @@ export default function ChatInterface({ user, profile }: ChatInterfaceProps) {
                 <button
                   onClick={handleGenerate}
                   disabled={!prompt.trim() || isGenerating}
-                  className={`flex-shrink-0 w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center transition-all mt-1 ${
-                    prompt.trim() && !isGenerating
-                      ? 'bg-blue-600 hover:bg-blue-700 text-white'
-                      : 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                  }`}
+                  className={`flex-shrink-0 w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center transition-all mt-1 ${prompt.trim() && !isGenerating
+                    ? 'bg-blue-600 hover:bg-blue-700 text-white'
+                    : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                    }`}
                 >
                   {isGenerating ? (
                     <div className="w-3 h-3 sm:w-4 sm:h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
@@ -717,8 +734,8 @@ export default function ChatInterface({ user, profile }: ChatInterfaceProps) {
               {/* Credits Info */}
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mt-3 gap-1 sm:gap-0 text-xs text-gray-500">
                 <span className="text-center sm:text-left">
-                  {images.length > 0 
-                    ? `${images.length} reference image${images.length !== 1 ? 's' : ''} • ` 
+                  {images.length > 0
+                    ? `${images.length} reference image${images.length !== 1 ? 's' : ''} • `
                     : ''
                   }
                 </span>
@@ -744,6 +761,17 @@ export default function ChatInterface({ user, profile }: ChatInterfaceProps) {
           className="hidden"
         />
       </div>
+
+      {/* Upsell Modal */}
+      {showUpsellModal && (
+        <ProUpsellModal
+          onCloseAction={() => setShowUpsellModal(false)}
+          onUpgradeAction={() => {
+            setShowUpsellModal(false)
+            // Redirect happens in the modal component
+          }}
+        />
+      )}
 
       {/* Toast Notifications */}
       <ToastContainer toasts={toasts} onCloseAction={removeToast} />

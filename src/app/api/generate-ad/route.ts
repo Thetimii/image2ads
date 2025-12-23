@@ -81,6 +81,53 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Check limits for Free users
+    const isPro = profile.subscription_status === 'active' || profile.subscription_status === 'trialing';
+    let dailyCount = 0;
+
+    if (!isPro) {
+      // 1. Throttle
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+
+      // 2. Daily Limit
+      const oneDayAgo = new Date();
+      oneDayAgo.setDate(oneDayAgo.getDate() - 1);
+
+      const { count: daily, error: dailyError } = await supabase
+        .from("jobs")
+        .select("*", { count: "exact", head: true })
+        .eq("user_id", user.id)
+        .gte("created_at", oneDayAgo.toISOString());
+
+      dailyCount = daily || 0;
+
+      if (dailyCount >= 10) {
+        return NextResponse.json(
+          {
+            error: "Daily free limit reached (10 images/day). Upgrade to Pro for unlimited generation.",
+            code: "DAILY_LIMIT_REACHED",
+          },
+          { status: 429 }
+        );
+      }
+
+      // 3. Total Limit
+      const { count: total, error: totalError } = await supabase
+        .from("jobs")
+        .select("*", { count: "exact", head: true })
+        .eq("user_id", user.id);
+
+      if (total !== null && total >= 400) {
+        return NextResponse.json(
+          {
+            error: "Total free limit reached (400 images). Upgrade to Pro to continue.",
+            code: "TOTAL_LIMIT_REACHED",
+          },
+          { status: 429 }
+        );
+      }
+    }
+
     if (profile.credits < credits_used) {
       return NextResponse.json(
         {
@@ -152,7 +199,7 @@ export async function POST(request: NextRequest) {
     });
 
     console.log('Edge function response:', edgeResponse.status, edgeResponse.statusText);
-    
+
     if (!edgeResponse.ok) {
       const errorText = await edgeResponse.text();
       console.error('Edge function error:', errorText);
@@ -164,10 +211,14 @@ export async function POST(request: NextRequest) {
 
     if (edgeResult.success && edgeResult.result_path) {
       // Return success with result path for immediate redirect
-      return NextResponse.json({ 
+      return NextResponse.json({
         success: true,
-        jobId: job.id, 
-        result_path: edgeResult.result_path 
+        jobId: job.id,
+        result_path: edgeResult.result_path,
+        usage: {
+          daily_count: !isPro ? (dailyCount || 0) + 1 : 0,
+          is_free_user: !isPro
+        }
       }, { status: 200 });
     } else {
       throw new Error(edgeResult.error || 'Generation failed');

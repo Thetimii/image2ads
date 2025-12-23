@@ -88,25 +88,50 @@ export async function POST(request: NextRequest) {
     }
 
     // LIMITS & THROTTLING for Free Users
+    let dailyCount = 0;
+
     if (!isPro) {
-      // 1. Throttle: Artificial delay of 5 seconds
-      await new Promise((resolve) => setTimeout(resolve, 5000));
+      // 1. Throttle: Artificial delay of 2 seconds (reduced from 5)
+      await new Promise((resolve) => setTimeout(resolve, 2000));
 
       // 2. Daily Limit: Check jobs created in the last 24 hours
       const oneDayAgo = new Date();
       oneDayAgo.setDate(oneDayAgo.getDate() - 1);
 
-      const { count, error: countError } = await supabase
+      const { count: daily, error: dailyError } = await supabase
         .from("jobs")
         .select("*", { count: "exact", head: true })
         .eq("user_id", user.id)
         .gte("created_at", oneDayAgo.toISOString());
 
-      if (!countError && count !== null && count >= 100) {
+      if (dailyError) {
+        console.error("Error checking daily limit:", dailyError);
+      }
+
+      dailyCount = daily || 0;
+
+      // HARD LIMIT: 10 per day
+      if (dailyCount >= 10) {
         return NextResponse.json(
           {
-            error: "Daily free limit reached (100 images/day). Upgrade to Pro for unlimited generation.",
-            code: "LIMIT_REACHED",
+            error: "Daily free limit reached (10 images/day). Upgrade to Pro for unlimited generation.",
+            code: "DAILY_LIMIT_REACHED",
+          },
+          { status: 429 }
+        );
+      }
+
+      // 3. Total Limit: Check all jobs ever created
+      const { count: total, error: totalError } = await supabase
+        .from("jobs")
+        .select("*", { count: "exact", head: true })
+        .eq("user_id", user.id);
+
+      if (!totalError && total !== null && total >= 400) {
+        return NextResponse.json(
+          {
+            error: "Total free limit reached (400 images). Upgrade to Pro to continue.",
+            code: "TOTAL_LIMIT_REACHED",
           },
           { status: 429 }
         );
@@ -174,7 +199,13 @@ export async function POST(request: NextRequest) {
       body: JSON.stringify({ jobId: job.id }),
     }).catch((e) => console.error("Failed to trigger edge function:", e));
 
-    return NextResponse.json({ job }, { status: 201 });
+    return NextResponse.json({
+      job,
+      usage: {
+        daily_count: !isPro ? (dailyCount || 0) + 1 : 0, // +1 for the current job
+        is_free_user: !isPro
+      }
+    }, { status: 201 });
   } catch (error) {
     console.error("Job generation error:", error);
     return NextResponse.json(

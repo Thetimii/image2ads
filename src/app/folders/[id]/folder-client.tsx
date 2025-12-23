@@ -8,6 +8,7 @@ import type { User } from '@supabase/supabase-js'
 import type { Profile, Folder, Image as ImageType, Job } from '@/lib/validations'
 import DashboardLayout from '@/components/DashboardLayout'
 import { ToastContainer, useToast } from '@/components/Toast'
+import ProUpsellModal from '@/components/ProUpsellModal'
 import LoadingAdCard from '@/components/LoadingAdCard'
 import FailedAdCard from '@/components/FailedAdCard'
 import { useTutorial } from '@/contexts/TutorialContext'
@@ -27,6 +28,7 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
   const [isUploading, setIsUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
   const [selectedImage, setSelectedImage] = useState<string>('')
+  const [showUpsellModal, setShowUpsellModal] = useState(false)
   const [selectedImages, setSelectedImages] = useState<string[]>([])
   const [multipleImagesMode, setMultipleImagesMode] = useState(false)
   const [prompt, setPrompt] = useState('')
@@ -65,15 +67,15 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
         const jobIdFromFilename = ad.id.match(/^(.+)-\d+$/)?.[1]
         return ad.id === previewId || jobIdFromFilename === previewId
       })
-      
+
       if (adToPreview) {
         // Convert path to public URL if needed
-        const imageUrl = adToPreview.url.startsWith('http') 
-          ? adToPreview.url 
+        const imageUrl = adToPreview.url.startsWith('http')
+          ? adToPreview.url
           : supabase.storage.from('results').getPublicUrl(adToPreview.url).data.publicUrl
-        
+
         setSelectedImage(imageUrl)
-        
+
         // Clear the preview parameter from URL
         const newUrl = new URL(window.location.href)
         newUrl.searchParams.delete('preview')
@@ -110,21 +112,21 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
         const response = await fetch(`/api/generated-ads?folder_id=${folder.id}`)
         if (response.ok) {
           const { generatedAds } = await response.json()
-          
+
           // Check if any loading jobs are now complete
           const completedJobIds = generatedAds.map((ad: { id: string }) => {
             // Extract job ID from filename (format: jobId-timestamp.png)
             const match = ad.id.match(/^(.+)-\d+$/)
             return match ? match[1] : ad.id
           })
-          
+
           const stillLoading = loadingJobs.filter(loading => !completedJobIds.includes(loading.id))
-          
+
           if (stillLoading.length !== loadingJobs.length) {
             // Some jobs completed, update the state
             setLoadingJobs(stillLoading)
             setGeneratedAds(generatedAds || [])
-            
+
             // Show success toast for completed jobs
             const justCompleted = loadingJobs.filter(loading => completedJobIds.includes(loading.id))
             justCompleted.forEach(completed => {
@@ -154,7 +156,7 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
       if (response.ok) {
         const { jobs } = await response.json()
         setJobs(jobs)
-        
+
         // Initialize jobNames from custom_name field in database
         const initialJobNames: Record<string, string> = {}
         jobs.forEach((job: Job) => {
@@ -245,16 +247,16 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
       const { data, error } = await supabase.storage
         .from('uploads')
         .createSignedUrl(image.file_path, 3600)
-      
+
       if (data?.signedUrl) {
         return data.signedUrl
       }
-      
+
       // Fallback to public URL if signed URL fails
       const { data: publicUrl } = supabase.storage
         .from('uploads')
         .getPublicUrl(image.file_path)
-      
+
       return publicUrl?.publicUrl || ''
     } catch (error) {
       console.error('Error getting image URL:', error)
@@ -344,7 +346,7 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
       for (const file of Array.from(files)) {
         try {
           console.log(`[UPLOAD] Processing file: ${file.name}, size: ${file.size} bytes`)
-          
+
           // Check file size limit (20MB)
           if (file.size > 20 * 1024 * 1024) {
             throw new Error(`File too large: ${(file.size / (1024 * 1024)).toFixed(1)}MB. Maximum 20MB allowed.`)
@@ -355,7 +357,7 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
           const randomId = Math.random().toString(36).substring(2)
           const ext = file.name.split('.').pop()?.toLowerCase() || 'bin'
           const fileName = `${timestamp}-${randomId}.${ext}`
-          
+
           // Get signed upload URL
           const signedUrlResponse = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/create-signed-upload-url`, {
             method: 'POST',
@@ -381,7 +383,7 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
           // Upload directly to storage with progress tracking
           await new Promise<void>((resolve, reject) => {
             const xhr = new XMLHttpRequest()
-            
+
             // Track upload progress
             xhr.upload.onprogress = (e) => {
               if (e.lengthComputable) {
@@ -404,7 +406,7 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
 
             xhr.open('PUT', signedUrl)
             xhr.timeout = 120000 // 2 minutes timeout
-            
+
             // Set headers from signed URL response
             Object.entries(uploadHeaders || {}).forEach(([key, value]) => {
               xhr.setRequestHeader(key, value as string)
@@ -453,7 +455,7 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
             error: error instanceof Error ? error.message : 'Unknown error'
           })
         }
-        
+
         completedFiles++
       }
 
@@ -475,7 +477,7 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
       if (tutorialActive && uploadedImages.length > 0) {
         checkStepTrigger('upload', 'file-upload')
       }
-      
+
       // Show success message with toast instead of alert
       if (uploadedImages.length === files.length) {
         addToast({
@@ -520,7 +522,7 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
   const handleGenerateAd = async () => {
     // Check if any images are selected
     const imagesToGenerate = multipleImagesMode ? selectedImages : (selectedImage ? [selectedImage] : []);
-    
+
     if (imagesToGenerate.length === 0 || !prompt.trim()) {
       addToast({
         message: 'Please select at least one image and enter a prompt',
@@ -547,7 +549,7 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
     try {
       // Construct the model string with openai-medium + aspect ratio
       const model = `openai-medium-${aspectRatio}`
-      
+
       const requestBody = {
         image_ids: imagesToGenerate, // Send array of image IDs
         prompt: prompt.trim(),
@@ -556,26 +558,27 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
         aspect_ratio: aspectRatio,
         custom_name: jobName.trim(), // Required ad name
       }
-      
+
       console.log('Sending generation request:', requestBody)
-      
+
       const response = await fetch('/api/generate', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+```
         },
         body: JSON.stringify(requestBody),
       })
 
       if (response.ok) {
-        const { job } = await response.json()
-        
+        const { job, usage } = await response.json()
+
         // Add to loading jobs for placeholder
-        setLoadingJobs(prev => [...prev, { 
-          id: job.id, 
-          customName: jobName.trim() || undefined 
+        setLoadingJobs(prev => [...prev, {
+          id: job.id,
+          customName: jobName.trim() || undefined
         }])
-        
+
         setJobs([job, ...jobs])
         setShowGenerateModal(false)
         // Clear selections based on mode
@@ -587,7 +590,7 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
         setPrompt('')
         setJobName('')
         setAspectRatio('square')
-        
+
         // Trigger tutorial step AFTER successful generation start
         if (tutorialActive) {
           // Add a delay to ensure modal closes and then trigger tutorial to show results section
@@ -595,31 +598,44 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
             checkStepTrigger('generation-started')
           }, 500) // Delay for modal close animation
         }
-        
+
         // Update toast to success
         removeToast(loadingToastId)
         addToast({
-          message: `Ad generation started${jobName.trim() ? ` for "${jobName.trim()}"` : ''}! Your ad${imagesToGenerate.length !== 1 ? 's' : ''} will appear here when ready.`,
+          message: `Ad generation started${ jobName.trim() ? ` for "${jobName.trim()}"` : '' }! Your ad${ imagesToGenerate.length !== 1 ? 's' : '' } will appear here when ready.`,
           type: 'success'
         })
+
+        // Check for Upsell Trigger (Free user >= 5 daily generations)
+        if (usage && usage.is_free_user && usage.daily_count >= 5) {
+          setShowUpsellModal(true)
+        }
+
       } else {
         const errorData = await response.json()
         removeToast(loadingToastId)
-        
+
         // Check if it's an insufficient credits error
         if (response.status === 402 || errorData.error?.toLowerCase().includes('insufficient credits')) {
           addToast({
             message: 'Insufficient credits! Redirecting to billing page...',
             type: 'error'
           })
-          
+
           // Redirect to billing page after a short delay
           setTimeout(() => {
             router.push('/billing')
           }, 2000)
+        } else if (response.status === 429) {
+          // Handle Limit Reached
+          addToast({
+            message: errorData.error || 'Usage limit reached. Upgrade to Pro for more.',
+            type: 'error'
+          })
+          setShowUpsellModal(true)
         } else {
           addToast({
-            message: `Failed to start generation: ${errorData.error}`,
+            message: `Failed to start generation: ${ errorData.error }`,
             type: 'error'
           })
         }
@@ -640,7 +656,7 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
     if (!newName.trim()) return
 
     try {
-      const response = await fetch(`/api/jobs/${jobId}/rename`, {
+      const response = await fetch(`/ api / jobs / ${ jobId } / rename`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
@@ -651,29 +667,29 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
       })
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
+        throw new Error(`HTTP error! status: ${ response.status }`)
       }
 
       const result = await response.json()
-      
+
       if (result.success) {
         // Store the custom name in local state for immediate UI update
-        setJobNames(prev => ({ 
-          ...prev, 
-          [jobId]: newName.trim() 
+        setJobNames(prev => ({
+          ...prev,
+          [jobId]: newName.trim()
         }))
-        
+
         // Reset renaming state
         setRenamingJob(null)
         setNewJobName('')
-        
-        console.log(`Job ${jobId} renamed to: ${newName.trim()}`)
+
+        console.log(`Job ${ jobId } renamed to: ${ newName.trim() }`)
       } else {
         throw new Error(result.error || 'Failed to rename job')
       }
     } catch (error) {
       console.error('Error renaming job:', error)
-      alert(`Failed to rename ad: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      alert(`Failed to rename ad: ${ error instanceof Error ? error.message : 'Unknown error' }`)
     }
   }
 
@@ -681,7 +697,7 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
     if (!newName.trim()) return
 
     try {
-      const response = await fetch(`/api/generated-ads/${adId}/rename-metadata`, {
+      const response = await fetch(`/ api / generated - ads / ${ adId } / rename - metadata`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
@@ -692,35 +708,35 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
       })
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
+        throw new Error(`HTTP error! status: ${ response.status }`)
       }
 
       const result = await response.json()
-      
+
       if (result.success) {
         // Update the generated ad name in local state
-        setGeneratedAds(prev => prev.map(ad => 
+        setGeneratedAds(prev => prev.map(ad =>
           ad.id === adId ? { ...ad, name: newName.trim() } : ad
         ))
-        
+
         // Reset renaming state
         setRenamingAd(null)
         setNewAdName('')
-        
-        console.log(`Generated ad ${adId} renamed to: ${newName.trim()}`)
+
+        console.log(`Generated ad ${ adId } renamed to: ${ newName.trim() }`)
       } else {
         throw new Error(result.error || 'Failed to rename generated ad')
       }
     } catch (error) {
       console.error('Error renaming generated ad:', error)
-      alert(`Failed to rename generated ad: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      alert(`Failed to rename generated ad: ${ error instanceof Error ? error.message : 'Unknown error' }`)
     }
   }
 
   const handleDeleteAd = async (adId: string, adName: string) => {
     // Simple confirmation using browser confirm
-    const confirmed = window.confirm(`Are you sure you want to delete "${adName}"? This action cannot be undone.`)
-    
+    const confirmed = window.confirm(`Are you sure you want to delete "${adName}" ? This action cannot be undone.`)
+
     if (!confirmed) return
 
     const loadingToastId = addToast({
@@ -729,29 +745,29 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
     })
 
     try {
-      const response = await fetch(`/api/generated-ads/${adId}?folder_id=${folder.id}`, {
+      const response = await fetch(`/ api / generated - ads / ${ adId } ? folder_id = ${ folder.id }`, {
         method: 'DELETE',
       })
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
+        throw new Error(`HTTP error! status: ${ response.status }`)
       }
 
       const result = await response.json()
-      
+
       if (result.success) {
         removeToast(loadingToastId)
         addToast({
           message: `"${adName}" deleted successfully`,
           type: 'success'
         })
-        
-        console.log(`Generated ad ${adId} deleted successfully`)
-        
+
+        console.log(`Generated ad ${ adId } deleted successfully`)
+
         // Force refresh the generated ads from server instead of just removing from local state
         setTimeout(async () => {
           try {
-            const refreshResponse = await fetch(`/api/generated-ads?folder_id=${folder.id}`)
+            const refreshResponse = await fetch(`/ api / generated - ads ? folder_id = ${ folder.id }`)
             if (refreshResponse.ok) {
               const { generatedAds: refreshedAds } = await refreshResponse.json()
               setGeneratedAds(refreshedAds || [])
@@ -768,7 +784,7 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
       console.error('Error deleting generated ad:', error)
       removeToast(loadingToastId)
       addToast({
-        message: `Failed to delete "${adName}": ${error instanceof Error ? error.message : 'Unknown error'}`,
+        message: `Failed to delete "${adName}": ${ error instanceof Error ? error.message : 'Unknown error' }`,
         type: 'error'
       })
     }
@@ -776,8 +792,8 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
 
   const handleDeleteJob = async (jobId: string, jobName: string) => {
     // Simple confirmation using browser confirm
-    const confirmed = window.confirm(`Are you sure you want to delete the failed job "${jobName}"? This action cannot be undone.`)
-    
+    const confirmed = window.confirm(`Are you sure you want to delete the failed job "${jobName}" ? This action cannot be undone.`)
+
     if (!confirmed) return
 
     const loadingToastId = addToast({
@@ -786,25 +802,25 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
     })
 
     try {
-      const response = await fetch(`/api/jobs/${jobId}`, {
+      const response = await fetch(`/ api / jobs / ${ jobId }`, {
         method: 'DELETE',
       })
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
+        throw new Error(`HTTP error! status: ${ response.status }`)
       }
 
       const result = await response.json()
-      
+
       if (result.success) {
         removeToast(loadingToastId)
         addToast({
           message: `Failed job "${jobName}" deleted successfully`,
           type: 'success'
         })
-        
-        console.log(`Failed job ${jobId} deleted successfully`)
-        
+
+        console.log(`Failed job ${ jobId } deleted successfully`)
+
         // Refresh the jobs list to remove the deleted job from UI
         fetchJobs()
       } else {
@@ -814,7 +830,7 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
       console.error('Error deleting failed job:', error)
       removeToast(loadingToastId)
       addToast({
-        message: `Failed to delete job "${jobName}": ${error instanceof Error ? error.message : 'Unknown error'}`,
+        message: `Failed to delete job "${jobName}": ${ error instanceof Error ? error.message : 'Unknown error' }`,
         type: 'error'
       })
     }
@@ -823,36 +839,36 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
   const confirmDeleteAd = async (adId: string, adName: string, confirmToastId: string) => {
     // Remove confirmation toast
     removeToast(confirmToastId)
-    
+
     const loadingToastId = addToast({
       message: `Deleting "${adName}"...`,
       type: 'loading'
     })
 
     try {
-      const response = await fetch(`/api/generated-ads/${adId}?folder_id=${folder.id}`, {
+      const response = await fetch(`/ api / generated - ads / ${ adId } ? folder_id = ${ folder.id }`, {
         method: 'DELETE',
       })
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
+        throw new Error(`HTTP error! status: ${ response.status }`)
       }
 
       const result = await response.json()
-      
+
       if (result.success) {
         removeToast(loadingToastId)
         addToast({
           message: `"${adName}" deleted successfully`,
           type: 'success'
         })
-        
-        console.log(`Generated ad ${adId} deleted successfully`)
-        
+
+        console.log(`Generated ad ${ adId } deleted successfully`)
+
         // Force refresh the generated ads from server instead of just removing from local state
         setTimeout(async () => {
           try {
-            const refreshResponse = await fetch(`/api/generated-ads?folder_id=${folder.id}`)
+            const refreshResponse = await fetch(`/ api / generated - ads ? folder_id = ${ folder.id }`)
             if (refreshResponse.ok) {
               const { generatedAds: refreshedAds } = await refreshResponse.json()
               setGeneratedAds(refreshedAds || [])
@@ -869,7 +885,7 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
       console.error('Error deleting generated ad:', error)
       removeToast(loadingToastId)
       addToast({
-        message: `Failed to delete "${adName}": ${error instanceof Error ? error.message : 'Unknown error'}`,
+        message: `Failed to delete "${adName}": ${ error instanceof Error ? error.message : 'Unknown error' }`,
         type: 'error'
       })
     }
@@ -877,7 +893,7 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
 
   const handleEnhance = async (jobId: string, imageUrl: string) => {
     setEnhancementStatus(prev => ({ ...prev, [jobId]: 'enhancing' }))
-    
+
     try {
       const response = await fetch('/api/enhance', {
         method: 'POST',
@@ -891,15 +907,15 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
       })
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
+        throw new Error(`HTTP error! status: ${ response.status }`)
       }
 
       const result = await response.json()
-      
+
       if (result.success && result.enhancedImageUrl) {
         setEnhancementStatus(prev => ({ ...prev, [jobId]: 'completed' }))
         setEnhancedImages(prev => ({ ...prev, [jobId]: result.enhancedImageUrl }))
-        
+
         alert('🎉 Image enhanced successfully! Click the green checkmark to view the enhanced version.')
       } else {
         throw new Error(result.error || 'Failed to enhance image')
@@ -907,7 +923,7 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
     } catch (error) {
       console.error('Enhancement error:', error)
       setEnhancementStatus(prev => ({ ...prev, [jobId]: 'failed' }))
-      alert(`❌ Enhancement failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      alert(`❌ Enhancement failed: ${ error instanceof Error ? error.message : 'Unknown error' }`)
     }
   }
 
@@ -948,7 +964,7 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
               <h2 className="text-lg font-semibold text-gray-900">Upload More Images</h2>
               <p className="text-sm text-gray-600 mt-1">Add additional images to your folder</p>
             </div>
-            
+
             <div className="p-6">
               <label htmlFor="file-upload" className="cursor-pointer block" data-tutorial="upload-area">
                 <div className="border-2 border-dashed border-gray-300 rounded-xl p-8 hover:border-blue-400 transition-colors duration-200">
@@ -984,13 +1000,13 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
                       data-tutorial="file-upload"
                     />
                     <p className="text-xs text-gray-500 mt-3">PNG, JPG, WEBP up to 20MB each</p>
-                    
+
                     {isUploading && (
                       <div className="mt-4">
                         <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
-                          <div 
-                            className="bg-gradient-to-r from-blue-500 to-purple-600 h-3 rounded-full transition-all duration-500 ease-out relative" 
-                            style={{ width: `${uploadProgress}%` }}
+                          <div
+                            className="bg-gradient-to-r from-blue-500 to-purple-600 h-3 rounded-full transition-all duration-500 ease-out relative"
+                            style={{ width: `${ uploadProgress } % ` }}
                           >
                             <div className="absolute inset-0 bg-white/20 animate-pulse"></div>
                           </div>
@@ -1017,9 +1033,9 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
                 <div>
                   <h2 className="text-lg font-semibold text-gray-900">Your Images</h2>
                   <p className="text-sm text-gray-600 mt-1">
-                    {multipleImagesMode 
-                      ? `Select multiple images to generate ads ${selectedImages.length > 0 ? `• ${selectedImages.length} image${selectedImages.length !== 1 ? 's' : ''} selected` : ''}`
-                      : `Select one image to generate an ad ${selectedImage && '• 1 image selected'}`
+                    {multipleImagesMode
+                      ? `Select multiple images to generate ads ${ selectedImages.length > 0 ? `• ${selectedImages.length} image${selectedImages.length !== 1 ? 's' : ''} selected` : '' }`
+                      : `Select one image to generate an ad ${ selectedImage && '• 1 image selected'}`
                     }
                   </p>
                   {profile.credits < 2 && (
@@ -1054,7 +1070,7 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
                       Multiple Images <span className="text-xs bg-orange-100 text-orange-800 px-2 py-0.5 rounded-full font-medium">BETA</span>
                     </span>
                   </div>
-                  
+
                   <button
                     onClick={() => {
                       if (multipleImagesMode) {
@@ -1074,21 +1090,21 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
                     }}
                     disabled={multipleImagesMode ? selectedImages.length === 0 : !selectedImage}
                     data-tutorial="generate-button"
-                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 shadow-lg ${
-                      (multipleImagesMode ? selectedImages.length > 0 : selectedImage)
-                        ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white hover:from-blue-700 hover:to-purple-700 shadow-blue-500/20'
-                        : 'bg-gray-200 text-gray-500 cursor-not-allowed shadow-gray-300/20'
-                    }`}
+                    className={`px - 4 py - 2 rounded - lg text - sm font - medium transition - all duration - 200 shadow - lg ${
+      (multipleImagesMode ? selectedImages.length > 0 : selectedImage)
+        ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white hover:from-blue-700 hover:to-purple-700 shadow-blue-500/20'
+        : 'bg-gray-200 text-gray-500 cursor-not-allowed shadow-gray-300/20'
+    } `}
                   >
-                    {multipleImagesMode 
-                      ? (selectedImages.length > 0 ? `Generate ${selectedImages.length} Ad${selectedImages.length !== 1 ? 's' : ''}` : 'Select images to generate')
+                    {multipleImagesMode
+                      ? (selectedImages.length > 0 ? `Generate ${ selectedImages.length } Ad${ selectedImages.length !== 1 ? 's' : '' } ` : 'Select images to generate')
                       : (selectedImage ? 'Generate Ad' : 'Select image to generate')
                     }
                   </button>
                 </div>
               </div>
             </div>
-            
+
             <div className="p-6">
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4" data-tutorial="image-grid">
                 {images.filter(image => image?.id).map((image) => (
@@ -1167,11 +1183,11 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
                 </div>
               </div>
             </div>
-            
+
             <div className="p-6 space-y-4">
               {(() => {
                 const filteredAds = generatedAds
-                  .filter(ad => 
+                  .filter(ad =>
                     (ad.name || '').toLowerCase().includes(searchTerm.toLowerCase())
                   )
                   .sort((a, b) => {
@@ -1204,124 +1220,124 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {/* Loading placeholders for generating ads */}
                     {loadingJobs.map((loading) => (
-                      <LoadingAdCard key={`loading-${loading.id}`} customName={loading.customName} />
+                      <LoadingAdCard key={`loading - ${ loading.id } `} customName={loading.customName} />
                     ))}
-                    
+
                     {/* Failed job cards */}
                     {jobs
                       .filter(job => job.status === 'failed')
                       .map((failedJob) => (
-                        <FailedAdCard 
-                          key={`failed-${failedJob.id}`} 
+                        <FailedAdCard
+                          key={`failed - ${ failedJob.id } `}
                           customName={failedJob.custom_name || 'Failed Job'}
                           errorMessage={failedJob.error_message}
                           onDeleteAction={() => handleDeleteJob(failedJob.id, failedJob.custom_name || 'Failed Job')}
                         />
                       ))
                     }
-                    
+
                     {filteredAds.map((ad) => (
-                    <div key={ad.id} className="bg-gray-50 rounded-xl p-4 border border-gray-200">
-                      <div className="aspect-square bg-white rounded-lg overflow-hidden mb-3 relative">
-                        <Image
-                          src={ad.url}
-                          alt={ad.name || 'Generated ad'}
-                          fill
-                          className="object-cover"
-                          sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        {renamingAd === ad.id ? (
-                          <div className="space-y-2">
-                            <input
-                              type="text"
-                              value={newAdName}
-                              onChange={(e) => setNewAdName(e.target.value)}
-                              className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') {
-                                  handleRenameAd(ad.id, newAdName)
-                                } else if (e.key === 'Escape') {
-                                  setRenamingAd(null)
-                                  setNewAdName('')
+                      <div key={ad.id} className="bg-gray-50 rounded-xl p-4 border border-gray-200">
+                        <div className="aspect-square bg-white rounded-lg overflow-hidden mb-3 relative">
+                          <Image
+                            src={ad.url}
+                            alt={ad.name || 'Generated ad'}
+                            fill
+                            className="object-cover"
+                            sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          {renamingAd === ad.id ? (
+                            <div className="space-y-2">
+                              <input
+                                type="text"
+                                value={newAdName}
+                                onChange={(e) => setNewAdName(e.target.value)}
+                                className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    handleRenameAd(ad.id, newAdName)
+                                  } else if (e.key === 'Escape') {
+                                    setRenamingAd(null)
+                                    setNewAdName('')
+                                  }
+                                }}
+                                autoFocus
+                              />
+                              <div className="flex space-x-1">
+                                <button
+                                  onClick={() => handleRenameAd(ad.id, newAdName)}
+                                  className="px-2 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700"
+                                >
+                                  Save
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    setRenamingAd(null)
+                                    setNewAdName('')
+                                  }}
+                                  className="px-2 py-1 bg-gray-400 text-white text-xs rounded hover:bg-gray-500"
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <>
+                              <h4 className="font-medium text-gray-900 text-sm truncate">{ad.name}</h4>
+                              <p className="text-xs text-gray-500">
+                                {new Date(ad.created_at).toLocaleDateString()}
+                              </p>
+                            </>
+                          )}
+                          <div className="flex items-center space-x-2">
+                            <button
+                              onClick={() => {
+                                setRenamingAd(ad.id)
+                                setNewAdName(ad.name || '')
+                              }}
+                              className="flex-1 bg-gray-600 text-white text-xs px-3 py-2 rounded-lg hover:bg-gray-700 transition-colors text-center"
+                            >
+                              Rename
+                            </button>
+                            <button
+                              onClick={async () => {
+                                try {
+                                  const response = await fetch(ad.url)
+                                  const blob = await response.blob()
+                                  const url = window.URL.createObjectURL(blob)
+                                  const a = document.createElement('a')
+                                  a.href = url
+                                  a.download = `${ ad.name || `generated-ad-${ad.id.slice(0, 8)}` }.png`
+                                  document.body.appendChild(a)
+                                  a.click()
+                                  window.URL.revokeObjectURL(url)
+                                  document.body.removeChild(a)
+                                } catch (error) {
+                                  console.error('Download failed:', error)
+                                  addToast({
+                                    message: 'Download failed. Please try again.',
+                                    type: 'error'
+                                  })
                                 }
                               }}
-                              autoFocus
-                            />
-                            <div className="flex space-x-1">
-                              <button
-                                onClick={() => handleRenameAd(ad.id, newAdName)}
-                                className="px-2 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700"
-                              >
-                                Save
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setRenamingAd(null)
-                                  setNewAdName('')
-                                }}
-                                className="px-2 py-1 bg-gray-400 text-white text-xs rounded hover:bg-gray-500"
-                              >
-                                Cancel
-                              </button>
-                            </div>
+                              className="flex-1 bg-blue-600 text-white text-xs px-3 py-2 rounded-lg hover:bg-blue-700 transition-colors text-center"
+                            >
+                              Download
+                            </button>
+                            <button
+                              onClick={() => handleDeleteAd(ad.id, ad.name || `Ad ${ ad.id.slice(0, 8) } `)}
+                              className="bg-red-600 text-white text-xs px-3 py-2 rounded-lg hover:bg-red-700 transition-colors"
+                              title="Delete ad"
+                            >
+                              🗑️
+                            </button>
                           </div>
-                        ) : (
-                          <>
-                            <h4 className="font-medium text-gray-900 text-sm truncate">{ad.name}</h4>
-                            <p className="text-xs text-gray-500">
-                              {new Date(ad.created_at).toLocaleDateString()}
-                            </p>
-                          </>
-                        )}
-                        <div className="flex items-center space-x-2">
-                          <button
-                            onClick={() => {
-                              setRenamingAd(ad.id)
-                              setNewAdName(ad.name || '')
-                            }}
-                            className="flex-1 bg-gray-600 text-white text-xs px-3 py-2 rounded-lg hover:bg-gray-700 transition-colors text-center"
-                          >
-                            Rename
-                          </button>
-                          <button
-                            onClick={async () => {
-                              try {
-                                const response = await fetch(ad.url)
-                                const blob = await response.blob()
-                                const url = window.URL.createObjectURL(blob)
-                                const a = document.createElement('a')
-                                a.href = url
-                                a.download = `${ad.name || `generated-ad-${ad.id.slice(0, 8)}`}.png`
-                                document.body.appendChild(a)
-                                a.click()
-                                window.URL.revokeObjectURL(url)
-                                document.body.removeChild(a)
-                              } catch (error) {
-                                console.error('Download failed:', error)
-                                addToast({
-                                  message: 'Download failed. Please try again.',
-                                  type: 'error'
-                                })
-                              }
-                            }}
-                            className="flex-1 bg-blue-600 text-white text-xs px-3 py-2 rounded-lg hover:bg-blue-700 transition-colors text-center"
-                          >
-                            Download
-                          </button>
-                          <button
-                            onClick={() => handleDeleteAd(ad.id, ad.name || `Ad ${ad.id.slice(0, 8)}`)}
-                            className="bg-red-600 text-white text-xs px-3 py-2 rounded-lg hover:bg-red-700 transition-colors"
-                            title="Delete ad"
-                          >
-                            🗑️
-                          </button>
                         </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
                 );
               })()}
             </div>
@@ -1337,19 +1353,19 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
                 <p className="text-sm text-gray-600 mt-1">Your AI-generated advertisements will appear here</p>
               </div>
             </div>
-            
+
             <div className="p-6">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {loadingJobs.map((loading) => (
-                  <LoadingAdCard key={`loading-${loading.id}`} customName={loading.customName} />
+                  <LoadingAdCard key={`loading - ${ loading.id } `} customName={loading.customName} />
                 ))}
-                
+
                 {/* Failed job cards */}
                 {jobs
                   .filter(job => job.status === 'failed')
                   .map((failedJob) => (
-                    <FailedAdCard 
-                      key={`failed-${failedJob.id}`} 
+                    <FailedAdCard
+                      key={`failed - ${ failedJob.id } `}
                       customName={failedJob.custom_name || 'Failed Job'}
                       errorMessage={failedJob.error_message}
                       onDeleteAction={() => handleDeleteJob(failedJob.id, failedJob.custom_name || 'Failed Job')}
@@ -1376,7 +1392,7 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
               </p>
               <label
                 htmlFor="file-upload-empty"
-                className={`inline-flex items-center space-x-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white px-6 py-3 rounded-lg font-medium hover:from-blue-700 hover:to-purple-700 transition-all duration-200 cursor-pointer ${isUploading ? 'opacity-75 cursor-not-allowed' : ''}`}
+                className={`inline - flex items - center space - x - 2 bg - gradient - to - r from - blue - 600 to - purple - 600 text - white px - 6 py - 3 rounded - lg font - medium hover: from - blue - 700 hover: to - purple - 700 transition - all duration - 200 cursor - pointer ${ isUploading ? 'opacity-75 cursor-not-allowed' : '' } `}
               >
                 {isUploading ? (
                   <>
@@ -1402,7 +1418,7 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
                   disabled={isUploading}
                 />
               </label>
-              
+
               {isUploading && (
                 <div className="mt-6 max-w-sm mx-auto">
                   <div className="flex items-center justify-between text-sm text-gray-600 mb-2">
@@ -1410,9 +1426,9 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
                     <span>{uploadProgress.toFixed(0)}%</span>
                   </div>
                   <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
-                    <div 
-                      className="bg-gradient-to-r from-blue-500 to-purple-600 h-3 rounded-full transition-all duration-500 ease-out relative" 
-                      style={{ width: `${uploadProgress}%` }}
+                    <div
+                      className="bg-gradient-to-r from-blue-500 to-purple-600 h-3 rounded-full transition-all duration-500 ease-out relative"
+                      style={{ width: `${ uploadProgress }% ` }}
                     >
                       <div className="absolute inset-0 bg-white/20 animate-pulse rounded-full"></div>
                     </div>
@@ -1434,8 +1450,8 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
                 <div>
                   <h3 className="text-xl font-semibold text-gray-900">Generate Ad</h3>
                   <p className="text-sm text-gray-600 mt-1">
-                    {multipleImagesMode 
-                      ? `Create professional ads from your ${selectedImages.length} selected image${selectedImages.length !== 1 ? 's' : ''}`
+                    {multipleImagesMode
+                      ? `Create professional ads from your ${ selectedImages.length } selected image${ selectedImages.length !== 1 ? 's' : '' } `
                       : 'Create a professional ad from your selected image'
                     }
                   </p>
@@ -1466,37 +1482,37 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
                   </label>
                   {(multipleImagesMode ? selectedImages.length > 0 : selectedImage) ? (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                      {multipleImagesMode 
+                      {multipleImagesMode
                         ? selectedImages.map((imageId) => {
-                            const image = images.find(img => img?.id === imageId);
-                            if (!image) return null;
-                            
-                            return (
-                              <GenerateModalImageCard
-                                key={imageId}
-                                image={image}
-                                onRemove={() => {
-                                  setSelectedImages(selectedImages.filter(id => id !== imageId));
-                                }}
-                                getImageUrl={getImageUrl}
-                              />
-                            );
-                          })
+                          const image = images.find(img => img?.id === imageId);
+                          if (!image) return null;
+
+                          return (
+                            <GenerateModalImageCard
+                              key={imageId}
+                              image={image}
+                              onRemove={() => {
+                                setSelectedImages(selectedImages.filter(id => id !== imageId));
+                              }}
+                              getImageUrl={getImageUrl}
+                            />
+                          );
+                        })
                         : (() => {
-                            const image = images.find(img => img?.id === selectedImage);
-                            if (!image) return null;
-                            
-                            return (
-                              <GenerateModalImageCard
-                                key={selectedImage}
-                                image={image}
-                                onRemove={() => {
-                                  setSelectedImage('');
-                                }}
-                                getImageUrl={getImageUrl}
-                              />
-                            );
-                          })()
+                          const image = images.find(img => img?.id === selectedImage);
+                          if (!image) return null;
+
+                          return (
+                            <GenerateModalImageCard
+                              key={selectedImage}
+                              image={image}
+                              onRemove={() => {
+                                setSelectedImage('');
+                              }}
+                              getImageUrl={getImageUrl}
+                            />
+                          );
+                        })()
                       }
                     </div>
                   ) : (
@@ -1562,45 +1578,45 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
                     <button
                       type="button"
                       onClick={() => setAspectRatio('square')}
-                      className={`flex flex-col items-center p-4 rounded-lg border-2 transition-all duration-200 ${
-                        aspectRatio === 'square'
-                          ? 'border-blue-500 bg-blue-50 text-blue-700'
-                          : 'border-gray-300 hover:border-gray-400 text-gray-700'
-                      }`}
+                      className={`flex flex - col items - center p - 4 rounded - lg border - 2 transition - all duration - 200 ${
+      aspectRatio === 'square'
+        ? 'border-blue-500 bg-blue-50 text-blue-700'
+        : 'border-gray-300 hover:border-gray-400 text-gray-700'
+    } `}
                     >
-                      <div className={`w-8 h-8 rounded border-2 mb-2 ${
-                        aspectRatio === 'square' ? 'border-blue-500 bg-blue-100' : 'border-gray-400 bg-gray-100'
-                      }`}></div>
+                      <div className={`w - 8 h - 8 rounded border - 2 mb - 2 ${
+      aspectRatio === 'square' ? 'border-blue-500 bg-blue-100' : 'border-gray-400 bg-gray-100'
+    } `}></div>
                       <span className="text-sm font-medium">Square</span>
                       <span className="text-xs text-gray-500">1:1</span>
                     </button>
                     <button
                       type="button"
                       onClick={() => setAspectRatio('portrait')}
-                      className={`flex flex-col items-center p-4 rounded-lg border-2 transition-all duration-200 ${
-                        aspectRatio === 'portrait'
-                          ? 'border-blue-500 bg-blue-50 text-blue-700'
-                          : 'border-gray-300 hover:border-gray-400 text-gray-700'
-                      }`}
+                      className={`flex flex - col items - center p - 4 rounded - lg border - 2 transition - all duration - 200 ${
+      aspectRatio === 'portrait'
+        ? 'border-blue-500 bg-blue-50 text-blue-700'
+        : 'border-gray-300 hover:border-gray-400 text-gray-700'
+    } `}
                     >
-                      <div className={`w-6 h-8 rounded border-2 mb-2 ${
-                        aspectRatio === 'portrait' ? 'border-blue-500 bg-blue-100' : 'border-gray-400 bg-gray-100'
-                      }`}></div>
+                      <div className={`w - 6 h - 8 rounded border - 2 mb - 2 ${
+      aspectRatio === 'portrait' ? 'border-blue-500 bg-blue-100' : 'border-gray-400 bg-gray-100'
+    } `}></div>
                       <span className="text-sm font-medium">Portrait</span>
                       <span className="text-xs text-gray-500">3:4</span>
                     </button>
                     <button
                       type="button"
                       onClick={() => setAspectRatio('landscape')}
-                      className={`flex flex-col items-center p-4 rounded-lg border-2 transition-all duration-200 ${
-                        aspectRatio === 'landscape'
-                          ? 'border-blue-500 bg-blue-50 text-blue-700'
-                          : 'border-gray-300 hover:border-gray-400 text-gray-700'
-                      }`}
+                      className={`flex flex - col items - center p - 4 rounded - lg border - 2 transition - all duration - 200 ${
+      aspectRatio === 'landscape'
+        ? 'border-blue-500 bg-blue-50 text-blue-700'
+        : 'border-gray-300 hover:border-gray-400 text-gray-700'
+    } `}
                     >
-                      <div className={`w-8 h-6 rounded border-2 mb-2 ${
-                        aspectRatio === 'landscape' ? 'border-blue-500 bg-blue-100' : 'border-gray-400 bg-gray-100'
-                      }`}></div>
+                      <div className={`w - 8 h - 6 rounded border - 2 mb - 2 ${
+      aspectRatio === 'landscape' ? 'border-blue-500 bg-blue-100' : 'border-gray-400 bg-gray-100'
+    } `}></div>
                       <span className="text-sm font-medium">Landscape</span>
                       <span className="text-xs text-gray-500">4:3</span>
                     </button>
@@ -1668,7 +1684,7 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
                 Are you sure you want to delete this image? This action cannot be undone.
               </p>
             </div>
-            
+
             <div className="flex space-x-3">
               <button
                 onClick={() => {
@@ -1714,7 +1730,7 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
                 Are you sure you want to delete &quot;{folder.name}&quot;? This will permanently remove the folder and all its images. This action cannot be undone.
               </p>
             </div>
-            
+
             <div className="flex space-x-3">
               <button
                 onClick={() => setShowDeleteFolderModal(false)}
@@ -1744,18 +1760,25 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
 
       {/* Tutorial Overlay */}
       {tutorialActive && <TutorialOverlay />}
+      {/* Pro Upsell Modal */}
+      {showUpsellModal && (
+        <ProUpsellModal
+          onCloseAction={() => setShowUpsellModal(false)}
+          onUpgradeAction={() => setShowUpsellModal(false)}
+        />
+      )}
     </DashboardLayout>
   )
 }
 
 // Image Card Component
-function ImageCard({ 
-  image, 
-  isSelected, 
-  onToggleSelect, 
-  onDelete, 
+function ImageCard({
+  image,
+  isSelected,
+  onToggleSelect,
+  onDelete,
   getImageUrl
-}: { 
+}: {
   image: ImageType
   isSelected: boolean
   onToggleSelect: () => void
@@ -1774,10 +1797,10 @@ function ImageCard({
 
   useEffect(() => {
     let isMounted = true
-    
+
     setIsLoading(true)
     setHasError(false)
-    
+
     getImageUrl(image)
       .then((url) => {
         if (isMounted) {
@@ -1800,11 +1823,11 @@ function ImageCard({
 
   return (
     <div
-      className={`relative rounded-xl border-2 transition-all duration-200 cursor-pointer group ${
-        isSelected 
-          ? 'border-blue-500 ring-2 ring-blue-500/20 shadow-lg shadow-blue-100' 
-          : 'border-gray-200 hover:border-gray-300'
-      }`}
+      className={`relative rounded - xl border - 2 transition - all duration - 200 cursor - pointer group ${
+      isSelected
+        ? 'border-blue-500 ring-2 ring-blue-500/20 shadow-lg shadow-blue-100'
+        : 'border-gray-200 hover:border-gray-300'
+    } `}
       onClick={onToggleSelect}
       data-tutorial="image-card"
     >
@@ -1814,7 +1837,7 @@ function ImageCard({
             <div className="w-8 h-8 border-2 border-gray-300 border-t-blue-600 rounded-full animate-spin"></div>
           </div>
         )}
-        
+
         {!isLoading && hasError && (
           <div className="w-full h-full flex items-center justify-center bg-gray-50">
             <div className="text-center">
@@ -1825,7 +1848,7 @@ function ImageCard({
             </div>
           </div>
         )}
-        
+
         {!isLoading && !hasError && imageUrl && (
           <Image
             src={imageUrl}
@@ -1836,7 +1859,7 @@ function ImageCard({
             sizes="(max-width: 768px) 50vw, (max-width: 1200px) 33vw, 25vw"
           />
         )}
-        
+
         <div className="absolute top-2 right-2 flex space-x-1">
           <button
             onClick={(e) => {
@@ -1849,11 +1872,11 @@ function ImageCard({
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
             </svg>
           </button>
-          <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${
-            isSelected 
-              ? 'bg-blue-600 border-blue-600' 
-              : 'bg-white border-gray-300'
-          }`}>
+          <div className={`w - 6 h - 6 rounded - full border - 2 flex items - center justify - center ${
+      isSelected
+        ? 'bg-blue-600 border-blue-600'
+        : 'bg-white border-gray-300'
+    } `}>
             {isSelected && (
               <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20">
                 <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
@@ -1875,10 +1898,10 @@ function ImageCard({
 }
 
 // Job Card Component
-function JobCard({ 
-  job, 
-  onEnhance, 
-  enhancementStatus, 
+function JobCard({
+  job,
+  onEnhance,
+  enhancementStatus,
   enhancedImages,
   onRename,
   renamingJob,
@@ -1886,8 +1909,8 @@ function JobCard({
   newJobName,
   setNewJobName,
   jobNames
-}: { 
-  job: Job & { result_signed_url?: string }, 
+}: {
+  job: Job & { result_signed_url?: string },
   onEnhance?: (jobId: string, imageUrl: string) => void,
   enhancementStatus?: Record<string, string>,
   enhancedImages?: Record<string, string>,
@@ -1900,11 +1923,11 @@ function JobCard({
 }) {
   const [isEnhancing, setIsEnhancing] = useState(false)
   const currentEnhancementStatus = enhancementStatus?.[job.id]
-  
+
   // Get the display name for this job
-  const displayName = jobNames?.[job.id] || `Ad #${job.id.slice(0, 8)}`
+  const displayName = jobNames?.[job.id] || `Ad #${ job.id.slice(0, 8) } `
   const isCurrentlyRenaming = renamingJob === job.id
-  
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'completed':
@@ -1920,7 +1943,7 @@ function JobCard({
 
   const handleEnhance = async () => {
     if (!job.result_signed_url || !onEnhance) return
-    
+
     setIsEnhancing(true)
     try {
       await onEnhance(job.id, job.result_signed_url)
@@ -1931,14 +1954,14 @@ function JobCard({
 
   const handleDownload = async () => {
     if (!job.result_signed_url) return
-    
+
     try {
       const response = await fetch(job.result_signed_url)
       const blob = await response.blob()
       const url = window.URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = `generated-ad-${job.id.slice(0, 8)}.jpg`
+      a.download = `generated - ad - ${ job.id.slice(0, 8) }.jpg`
       document.body.appendChild(a)
       a.click()
       window.URL.revokeObjectURL(url)
@@ -1960,7 +1983,7 @@ function JobCard({
           <>
             <Image
               src={job.result_signed_url}
-              alt={`Generated ad ${job.id.slice(0, 8)}`}
+              alt={`Generated ad ${ job.id.slice(0, 8) } `}
               fill
               className="object-cover cursor-pointer"
               sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
@@ -2002,17 +2025,17 @@ function JobCard({
                     handleEnhance()
                   }}
                   disabled={isEnhanceDisabled()}
-                  className={`p-2 text-white rounded-lg shadow-lg transition-colors duration-200 ${
-                    currentEnhancementStatus === 'failed'
-                      ? 'bg-red-600 hover:bg-red-700'
-                      : 'bg-purple-600 hover:bg-purple-700'
-                  } disabled:opacity-50 disabled:cursor-not-allowed`}
+                  className={`p - 2 text - white rounded - lg shadow - lg transition - colors duration - 200 ${
+      currentEnhancementStatus === 'failed'
+        ? 'bg-red-600 hover:bg-red-700'
+        : 'bg-purple-600 hover:bg-purple-700'
+    } disabled: opacity - 50 disabled: cursor - not - allowed`}
                   title={
                     currentEnhancementStatus === 'failed'
                       ? 'Enhancement failed - Try again'
                       : currentEnhancementStatus === 'enhancing'
-                      ? 'Enhancing...'
-                      : 'Enhance quality'
+                        ? 'Enhancing...'
+                        : 'Enhance quality'
                   }
                 >
                   {currentEnhancementStatus === 'enhancing' ? (
@@ -2031,7 +2054,7 @@ function JobCard({
             </div>
             {/* Status badge */}
             <div className="absolute top-2 left-2">
-              <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(job.status)}`}>
+              <span className={`px - 2 py - 1 text - xs font - medium rounded - full ${ getStatusColor(job.status) } `}>
                 {job.status}
               </span>
             </div>
@@ -2063,7 +2086,7 @@ function JobCard({
           </div>
         )}
       </div>
-      
+
       <div className="p-3">
         {isCurrentlyRenaming ? (
           <div className="space-y-2">
@@ -2134,11 +2157,11 @@ function JobCard({
 }
 
 // Generate Modal Image Card Component
-function GenerateModalImageCard({ 
-  image, 
-  onRemove, 
-  getImageUrl 
-}: { 
+function GenerateModalImageCard({
+  image,
+  onRemove,
+  getImageUrl
+}: {
   image: ImageType
   onRemove: () => void
   getImageUrl: (image: ImageType) => Promise<string>
@@ -2149,10 +2172,10 @@ function GenerateModalImageCard({
 
   useEffect(() => {
     let isMounted = true
-    
+
     setIsLoading(true)
     setHasError(false)
-    
+
     getImageUrl(image)
       .then((url) => {
         if (isMounted) {
@@ -2181,7 +2204,7 @@ function GenerateModalImageCard({
             <div className="w-4 h-4 border-2 border-gray-300 border-t-blue-600 rounded-full animate-spin"></div>
           </div>
         )}
-        
+
         {!isLoading && hasError && (
           <div className="w-full h-full flex items-center justify-center bg-gray-50">
             <svg className="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -2189,7 +2212,7 @@ function GenerateModalImageCard({
             </svg>
           </div>
         )}
-        
+
         {!isLoading && !hasError && imageUrl && (
           <Image
             src={imageUrl}
@@ -2200,7 +2223,7 @@ function GenerateModalImageCard({
             onError={() => setHasError(true)}
           />
         )}
-        
+
         {/* Remove button */}
         <button
           onClick={onRemove}
@@ -2211,7 +2234,7 @@ function GenerateModalImageCard({
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
           </svg>
         </button>
-        
+
         {/* Selected indicator */}
         <div className="absolute top-1 left-1">
           <div className="w-5 h-5 bg-blue-600 rounded-full flex items-center justify-center">
@@ -2221,7 +2244,7 @@ function GenerateModalImageCard({
           </div>
         </div>
       </div>
-      
+
       <div className="p-2">
         <p className="text-xs text-gray-600 truncate" title={image.original_name}>
           {image.original_name}
