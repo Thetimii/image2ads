@@ -565,7 +565,7 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-```
+
         },
         body: JSON.stringify(requestBody),
       })
@@ -602,7 +602,7 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
         // Update toast to success
         removeToast(loadingToastId)
         addToast({
-          message: `Ad generation started${ jobName.trim() ? ` for "${jobName.trim()}"` : '' }! Your ad${ imagesToGenerate.length !== 1 ? 's' : '' } will appear here when ready.`,
+          message: `Ad generation started${jobName.trim() ? ` for "${jobName.trim()}"` : ''}! Your ad${imagesToGenerate.length !== 1 ? 's' : ''} will appear here when ready.`,
           type: 'success'
         })
 
@@ -635,7 +635,7 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
           setShowUpsellModal(true)
         } else {
           addToast({
-            message: `Failed to start generation: ${ errorData.error }`,
+            message: `Failed to start generation: ${errorData.error}`,
             type: 'error'
           })
         }
@@ -656,7 +656,7 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
     if (!newName.trim()) return
 
     try {
-      const response = await fetch(`/ api / jobs / ${ jobId } / rename`, {
+      const response = await fetch(`/ api / jobs / ${jobId} / rename`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
@@ -667,7 +667,7 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
       })
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${ response.status }`)
+        throw new Error(`HTTP error! status: ${response.status}`)
       }
 
       const result = await response.json()
@@ -683,13 +683,13 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
         setRenamingJob(null)
         setNewJobName('')
 
-        console.log(`Job ${ jobId } renamed to: ${ newName.trim() }`)
+        console.log(`Job ${jobId} renamed to: ${newName.trim()}`)
       } else {
         throw new Error(result.error || 'Failed to rename job')
       }
     } catch (error) {
       console.error('Error renaming job:', error)
-      alert(`Failed to rename ad: ${ error instanceof Error ? error.message : 'Unknown error' }`)
+      alert(`Failed to rename ad: ${error instanceof Error ? error.message : 'Unknown error'}`)
     }
   }
 
@@ -697,7 +697,7 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
     if (!newName.trim()) return
 
     try {
-      const response = await fetch(`/ api / generated - ads / ${ adId } / rename - metadata`, {
+      const response = await fetch(`/ api / generated - ads / ${adId} / rename - metadata`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
@@ -708,7 +708,7 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
       })
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${ response.status }`)
+        throw new Error(`HTTP error! status: ${response.status}`)
       }
 
       const result = await response.json()
@@ -723,13 +723,13 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
         setRenamingAd(null)
         setNewAdName('')
 
-        console.log(`Generated ad ${ adId } renamed to: ${ newName.trim() }`)
+        console.log(`Generated ad ${adId} renamed to: ${newName.trim()}`)
       } else {
         throw new Error(result.error || 'Failed to rename generated ad')
       }
     } catch (error) {
       console.error('Error renaming generated ad:', error)
-      alert(`Failed to rename generated ad: ${ error instanceof Error ? error.message : 'Unknown error' }`)
+      alert(`Failed to rename generated ad: ${error instanceof Error ? error.message : 'Unknown error'}`)
     }
   }
 
@@ -745,12 +745,12 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
     })
 
     try {
-      const response = await fetch(`/ api / generated - ads / ${ adId } ? folder_id = ${ folder.id }`, {
+      const response = await fetch(`/ api / generated - ads / ${adId} ? folder_id = ${folder.id}`, {
         method: 'DELETE',
       })
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${ response.status }`)
+        throw new Error(`HTTP error! status: ${response.status}`)
       }
 
       const result = await response.json()
@@ -762,12 +762,12 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
           type: 'success'
         })
 
-        console.log(`Generated ad ${ adId } deleted successfully`)
+        console.log(`Generated ad ${adId} deleted successfully`)
 
         // Force refresh the generated ads from server instead of just removing from local state
         setTimeout(async () => {
           try {
-            const refreshResponse = await fetch(`/ api / generated - ads ? folder_id = ${ folder.id }`)
+            const refreshResponse = await fetch(`/ api / generated - ads ? folder_id = ${folder.id}`)
             if (refreshResponse.ok) {
               const { generatedAds: refreshedAds } = await refreshResponse.json()
               setGeneratedAds(refreshedAds || [])
@@ -784,7 +784,7 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
       console.error('Error deleting generated ad:', error)
       removeToast(loadingToastId)
       addToast({
-        message: `Failed to delete "${adName}": ${ error instanceof Error ? error.message : 'Unknown error' }`,
+        message: `Failed to delete "${adName}": ${error instanceof Error ? error.message : 'Unknown error'}`,
         type: 'error'
       })
     }
@@ -802,12 +802,12 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
     })
 
     try {
-      const response = await fetch(`/ api / jobs / ${ jobId }`, {
+      const response = await fetch(`/ api / jobs / ${jobId}`, {
         method: 'DELETE',
       })
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${ response.status }`)
+        throw new Error(`HTTP error! status: ${response.status}`)
       }
 
       const result = await response.json()
@@ -819,7 +819,7 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
           type: 'success'
         })
 
-        console.log(`Failed job ${ jobId } deleted successfully`)
+        console.log(`Failed job ${jobId} deleted successfully`)
 
         // Refresh the jobs list to remove the deleted job from UI
         fetchJobs()
@@ -830,7 +830,7 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
       console.error('Error deleting failed job:', error)
       removeToast(loadingToastId)
       addToast({
-        message: `Failed to delete job "${jobName}": ${ error instanceof Error ? error.message : 'Unknown error' }`,
+        message: `Failed to delete job "${jobName}": ${error instanceof Error ? error.message : 'Unknown error'}`,
         type: 'error'
       })
     }
@@ -846,12 +846,12 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
     })
 
     try {
-      const response = await fetch(`/ api / generated - ads / ${ adId } ? folder_id = ${ folder.id }`, {
+      const response = await fetch(`/ api / generated - ads / ${adId} ? folder_id = ${folder.id}`, {
         method: 'DELETE',
       })
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${ response.status }`)
+        throw new Error(`HTTP error! status: ${response.status}`)
       }
 
       const result = await response.json()
@@ -863,12 +863,12 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
           type: 'success'
         })
 
-        console.log(`Generated ad ${ adId } deleted successfully`)
+        console.log(`Generated ad ${adId} deleted successfully`)
 
         // Force refresh the generated ads from server instead of just removing from local state
         setTimeout(async () => {
           try {
-            const refreshResponse = await fetch(`/ api / generated - ads ? folder_id = ${ folder.id }`)
+            const refreshResponse = await fetch(`/ api / generated - ads ? folder_id = ${folder.id}`)
             if (refreshResponse.ok) {
               const { generatedAds: refreshedAds } = await refreshResponse.json()
               setGeneratedAds(refreshedAds || [])
@@ -885,7 +885,7 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
       console.error('Error deleting generated ad:', error)
       removeToast(loadingToastId)
       addToast({
-        message: `Failed to delete "${adName}": ${ error instanceof Error ? error.message : 'Unknown error' }`,
+        message: `Failed to delete "${adName}": ${error instanceof Error ? error.message : 'Unknown error'}`,
         type: 'error'
       })
     }
@@ -907,7 +907,7 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
       })
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${ response.status }`)
+        throw new Error(`HTTP error! status: ${response.status}`)
       }
 
       const result = await response.json()
@@ -923,7 +923,7 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
     } catch (error) {
       console.error('Enhancement error:', error)
       setEnhancementStatus(prev => ({ ...prev, [jobId]: 'failed' }))
-      alert(`❌ Enhancement failed: ${ error instanceof Error ? error.message : 'Unknown error' }`)
+      alert(`❌ Enhancement failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
     }
   }
 
@@ -1006,7 +1006,7 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
                         <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
                           <div
                             className="bg-gradient-to-r from-blue-500 to-purple-600 h-3 rounded-full transition-all duration-500 ease-out relative"
-                            style={{ width: `${ uploadProgress } % ` }}
+                            style={{ width: `${uploadProgress} % ` }}
                           >
                             <div className="absolute inset-0 bg-white/20 animate-pulse"></div>
                           </div>
@@ -1034,8 +1034,8 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
                   <h2 className="text-lg font-semibold text-gray-900">Your Images</h2>
                   <p className="text-sm text-gray-600 mt-1">
                     {multipleImagesMode
-                      ? `Select multiple images to generate ads ${ selectedImages.length > 0 ? `• ${selectedImages.length} image${selectedImages.length !== 1 ? 's' : ''} selected` : '' }`
-                      : `Select one image to generate an ad ${ selectedImage && '• 1 image selected'}`
+                      ? `Select multiple images to generate ads ${selectedImages.length > 0 ? `• ${selectedImages.length} image${selectedImages.length !== 1 ? 's' : ''} selected` : ''}`
+                      : `Select one image to generate an ad ${selectedImage && '• 1 image selected'}`
                     }
                   </p>
                   {profile.credits < 2 && (
@@ -1090,14 +1090,13 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
                     }}
                     disabled={multipleImagesMode ? selectedImages.length === 0 : !selectedImage}
                     data-tutorial="generate-button"
-                    className={`px - 4 py - 2 rounded - lg text - sm font - medium transition - all duration - 200 shadow - lg ${
-      (multipleImagesMode ? selectedImages.length > 0 : selectedImage)
-        ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white hover:from-blue-700 hover:to-purple-700 shadow-blue-500/20'
-        : 'bg-gray-200 text-gray-500 cursor-not-allowed shadow-gray-300/20'
-    } `}
+                    className={`px - 4 py - 2 rounded - lg text - sm font - medium transition - all duration - 200 shadow - lg ${(multipleImagesMode ? selectedImages.length > 0 : selectedImage)
+                        ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white hover:from-blue-700 hover:to-purple-700 shadow-blue-500/20'
+                        : 'bg-gray-200 text-gray-500 cursor-not-allowed shadow-gray-300/20'
+                      } `}
                   >
                     {multipleImagesMode
-                      ? (selectedImages.length > 0 ? `Generate ${ selectedImages.length } Ad${ selectedImages.length !== 1 ? 's' : '' } ` : 'Select images to generate')
+                      ? (selectedImages.length > 0 ? `Generate ${selectedImages.length} Ad${selectedImages.length !== 1 ? 's' : ''} ` : 'Select images to generate')
                       : (selectedImage ? 'Generate Ad' : 'Select image to generate')
                     }
                   </button>
@@ -1220,7 +1219,7 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {/* Loading placeholders for generating ads */}
                     {loadingJobs.map((loading) => (
-                      <LoadingAdCard key={`loading - ${ loading.id } `} customName={loading.customName} />
+                      <LoadingAdCard key={`loading - ${loading.id} `} customName={loading.customName} />
                     ))}
 
                     {/* Failed job cards */}
@@ -1228,7 +1227,7 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
                       .filter(job => job.status === 'failed')
                       .map((failedJob) => (
                         <FailedAdCard
-                          key={`failed - ${ failedJob.id } `}
+                          key={`failed - ${failedJob.id} `}
                           customName={failedJob.custom_name || 'Failed Job'}
                           errorMessage={failedJob.error_message}
                           onDeleteAction={() => handleDeleteJob(failedJob.id, failedJob.custom_name || 'Failed Job')}
@@ -1309,7 +1308,7 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
                                   const url = window.URL.createObjectURL(blob)
                                   const a = document.createElement('a')
                                   a.href = url
-                                  a.download = `${ ad.name || `generated-ad-${ad.id.slice(0, 8)}` }.png`
+                                  a.download = `${ad.name || `generated-ad-${ad.id.slice(0, 8)}`}.png`
                                   document.body.appendChild(a)
                                   a.click()
                                   window.URL.revokeObjectURL(url)
@@ -1327,7 +1326,7 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
                               Download
                             </button>
                             <button
-                              onClick={() => handleDeleteAd(ad.id, ad.name || `Ad ${ ad.id.slice(0, 8) } `)}
+                              onClick={() => handleDeleteAd(ad.id, ad.name || `Ad ${ad.id.slice(0, 8)} `)}
                               className="bg-red-600 text-white text-xs px-3 py-2 rounded-lg hover:bg-red-700 transition-colors"
                               title="Delete ad"
                             >
@@ -1357,7 +1356,7 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
             <div className="p-6">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {loadingJobs.map((loading) => (
-                  <LoadingAdCard key={`loading - ${ loading.id } `} customName={loading.customName} />
+                  <LoadingAdCard key={`loading - ${loading.id} `} customName={loading.customName} />
                 ))}
 
                 {/* Failed job cards */}
@@ -1365,7 +1364,7 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
                   .filter(job => job.status === 'failed')
                   .map((failedJob) => (
                     <FailedAdCard
-                      key={`failed - ${ failedJob.id } `}
+                      key={`failed - ${failedJob.id} `}
                       customName={failedJob.custom_name || 'Failed Job'}
                       errorMessage={failedJob.error_message}
                       onDeleteAction={() => handleDeleteJob(failedJob.id, failedJob.custom_name || 'Failed Job')}
@@ -1392,7 +1391,7 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
               </p>
               <label
                 htmlFor="file-upload-empty"
-                className={`inline - flex items - center space - x - 2 bg - gradient - to - r from - blue - 600 to - purple - 600 text - white px - 6 py - 3 rounded - lg font - medium hover: from - blue - 700 hover: to - purple - 700 transition - all duration - 200 cursor - pointer ${ isUploading ? 'opacity-75 cursor-not-allowed' : '' } `}
+                className={`inline - flex items - center space - x - 2 bg - gradient - to - r from - blue - 600 to - purple - 600 text - white px - 6 py - 3 rounded - lg font - medium hover: from - blue - 700 hover: to - purple - 700 transition - all duration - 200 cursor - pointer ${isUploading ? 'opacity-75 cursor-not-allowed' : ''} `}
               >
                 {isUploading ? (
                   <>
@@ -1428,7 +1427,7 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
                   <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
                     <div
                       className="bg-gradient-to-r from-blue-500 to-purple-600 h-3 rounded-full transition-all duration-500 ease-out relative"
-                      style={{ width: `${ uploadProgress }% ` }}
+                      style={{ width: `${uploadProgress}% ` }}
                     >
                       <div className="absolute inset-0 bg-white/20 animate-pulse rounded-full"></div>
                     </div>
@@ -1451,7 +1450,7 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
                   <h3 className="text-xl font-semibold text-gray-900">Generate Ad</h3>
                   <p className="text-sm text-gray-600 mt-1">
                     {multipleImagesMode
-                      ? `Create professional ads from your ${ selectedImages.length } selected image${ selectedImages.length !== 1 ? 's' : '' } `
+                      ? `Create professional ads from your ${selectedImages.length} selected image${selectedImages.length !== 1 ? 's' : ''} `
                       : 'Create a professional ad from your selected image'
                     }
                   </p>
@@ -1578,45 +1577,39 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
                     <button
                       type="button"
                       onClick={() => setAspectRatio('square')}
-                      className={`flex flex - col items - center p - 4 rounded - lg border - 2 transition - all duration - 200 ${
-      aspectRatio === 'square'
-        ? 'border-blue-500 bg-blue-50 text-blue-700'
-        : 'border-gray-300 hover:border-gray-400 text-gray-700'
-    } `}
+                      className={`flex flex - col items - center p - 4 rounded - lg border - 2 transition - all duration - 200 ${aspectRatio === 'square'
+                          ? 'border-blue-500 bg-blue-50 text-blue-700'
+                          : 'border-gray-300 hover:border-gray-400 text-gray-700'
+                        } `}
                     >
-                      <div className={`w - 8 h - 8 rounded border - 2 mb - 2 ${
-      aspectRatio === 'square' ? 'border-blue-500 bg-blue-100' : 'border-gray-400 bg-gray-100'
-    } `}></div>
+                      <div className={`w - 8 h - 8 rounded border - 2 mb - 2 ${aspectRatio === 'square' ? 'border-blue-500 bg-blue-100' : 'border-gray-400 bg-gray-100'
+                        } `}></div>
                       <span className="text-sm font-medium">Square</span>
                       <span className="text-xs text-gray-500">1:1</span>
                     </button>
                     <button
                       type="button"
                       onClick={() => setAspectRatio('portrait')}
-                      className={`flex flex - col items - center p - 4 rounded - lg border - 2 transition - all duration - 200 ${
-      aspectRatio === 'portrait'
-        ? 'border-blue-500 bg-blue-50 text-blue-700'
-        : 'border-gray-300 hover:border-gray-400 text-gray-700'
-    } `}
+                      className={`flex flex - col items - center p - 4 rounded - lg border - 2 transition - all duration - 200 ${aspectRatio === 'portrait'
+                          ? 'border-blue-500 bg-blue-50 text-blue-700'
+                          : 'border-gray-300 hover:border-gray-400 text-gray-700'
+                        } `}
                     >
-                      <div className={`w - 6 h - 8 rounded border - 2 mb - 2 ${
-      aspectRatio === 'portrait' ? 'border-blue-500 bg-blue-100' : 'border-gray-400 bg-gray-100'
-    } `}></div>
+                      <div className={`w - 6 h - 8 rounded border - 2 mb - 2 ${aspectRatio === 'portrait' ? 'border-blue-500 bg-blue-100' : 'border-gray-400 bg-gray-100'
+                        } `}></div>
                       <span className="text-sm font-medium">Portrait</span>
                       <span className="text-xs text-gray-500">3:4</span>
                     </button>
                     <button
                       type="button"
                       onClick={() => setAspectRatio('landscape')}
-                      className={`flex flex - col items - center p - 4 rounded - lg border - 2 transition - all duration - 200 ${
-      aspectRatio === 'landscape'
-        ? 'border-blue-500 bg-blue-50 text-blue-700'
-        : 'border-gray-300 hover:border-gray-400 text-gray-700'
-    } `}
+                      className={`flex flex - col items - center p - 4 rounded - lg border - 2 transition - all duration - 200 ${aspectRatio === 'landscape'
+                          ? 'border-blue-500 bg-blue-50 text-blue-700'
+                          : 'border-gray-300 hover:border-gray-400 text-gray-700'
+                        } `}
                     >
-                      <div className={`w - 8 h - 6 rounded border - 2 mb - 2 ${
-      aspectRatio === 'landscape' ? 'border-blue-500 bg-blue-100' : 'border-gray-400 bg-gray-100'
-    } `}></div>
+                      <div className={`w - 8 h - 6 rounded border - 2 mb - 2 ${aspectRatio === 'landscape' ? 'border-blue-500 bg-blue-100' : 'border-gray-400 bg-gray-100'
+                        } `}></div>
                       <span className="text-sm font-medium">Landscape</span>
                       <span className="text-xs text-gray-500">4:3</span>
                     </button>
@@ -1823,11 +1816,10 @@ function ImageCard({
 
   return (
     <div
-      className={`relative rounded - xl border - 2 transition - all duration - 200 cursor - pointer group ${
-      isSelected
-        ? 'border-blue-500 ring-2 ring-blue-500/20 shadow-lg shadow-blue-100'
-        : 'border-gray-200 hover:border-gray-300'
-    } `}
+      className={`relative rounded - xl border - 2 transition - all duration - 200 cursor - pointer group ${isSelected
+          ? 'border-blue-500 ring-2 ring-blue-500/20 shadow-lg shadow-blue-100'
+          : 'border-gray-200 hover:border-gray-300'
+        } `}
       onClick={onToggleSelect}
       data-tutorial="image-card"
     >
@@ -1872,11 +1864,10 @@ function ImageCard({
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
             </svg>
           </button>
-          <div className={`w - 6 h - 6 rounded - full border - 2 flex items - center justify - center ${
-      isSelected
-        ? 'bg-blue-600 border-blue-600'
-        : 'bg-white border-gray-300'
-    } `}>
+          <div className={`w - 6 h - 6 rounded - full border - 2 flex items - center justify - center ${isSelected
+              ? 'bg-blue-600 border-blue-600'
+              : 'bg-white border-gray-300'
+            } `}>
             {isSelected && (
               <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20">
                 <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
@@ -1925,7 +1916,7 @@ function JobCard({
   const currentEnhancementStatus = enhancementStatus?.[job.id]
 
   // Get the display name for this job
-  const displayName = jobNames?.[job.id] || `Ad #${ job.id.slice(0, 8) } `
+  const displayName = jobNames?.[job.id] || `Ad #${job.id.slice(0, 8)} `
   const isCurrentlyRenaming = renamingJob === job.id
 
   const getStatusColor = (status: string) => {
@@ -1961,7 +1952,7 @@ function JobCard({
       const url = window.URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = `generated - ad - ${ job.id.slice(0, 8) }.jpg`
+      a.download = `generated - ad - ${job.id.slice(0, 8)}.jpg`
       document.body.appendChild(a)
       a.click()
       window.URL.revokeObjectURL(url)
@@ -1983,7 +1974,7 @@ function JobCard({
           <>
             <Image
               src={job.result_signed_url}
-              alt={`Generated ad ${ job.id.slice(0, 8) } `}
+              alt={`Generated ad ${job.id.slice(0, 8)} `}
               fill
               className="object-cover cursor-pointer"
               sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
@@ -2025,11 +2016,10 @@ function JobCard({
                     handleEnhance()
                   }}
                   disabled={isEnhanceDisabled()}
-                  className={`p - 2 text - white rounded - lg shadow - lg transition - colors duration - 200 ${
-      currentEnhancementStatus === 'failed'
-        ? 'bg-red-600 hover:bg-red-700'
-        : 'bg-purple-600 hover:bg-purple-700'
-    } disabled: opacity - 50 disabled: cursor - not - allowed`}
+                  className={`p - 2 text - white rounded - lg shadow - lg transition - colors duration - 200 ${currentEnhancementStatus === 'failed'
+                      ? 'bg-red-600 hover:bg-red-700'
+                      : 'bg-purple-600 hover:bg-purple-700'
+                    } disabled: opacity - 50 disabled: cursor - not - allowed`}
                   title={
                     currentEnhancementStatus === 'failed'
                       ? 'Enhancement failed - Try again'
@@ -2054,7 +2044,7 @@ function JobCard({
             </div>
             {/* Status badge */}
             <div className="absolute top-2 left-2">
-              <span className={`px - 2 py - 1 text - xs font - medium rounded - full ${ getStatusColor(job.status) } `}>
+              <span className={`px - 2 py - 1 text - xs font - medium rounded - full ${getStatusColor(job.status)} `}>
                 {job.status}
               </span>
             </div>

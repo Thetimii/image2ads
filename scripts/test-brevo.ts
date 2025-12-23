@@ -32,8 +32,8 @@ const run = async () => {
         console.log('✅ Email sent successfully:', data)
     } catch (error) {
         console.error('❌ Error sending email:', error)
-        if (error.response) {
-            console.error('Response body:', error.response.body)
+        if ((error as any).response) {
+            console.error('Response body:', (error as any).response.body)
         }
     }
 }
