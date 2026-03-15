@@ -133,3 +133,22 @@ export const trackMetaCompleteRegistration = (options: RegistrationEventOptions)
     }),
   })
 }
+
+export const trackMetaAddToCart = (options: SubscriptionEventOptions) => {
+  return trackMetaEvent({
+    eventName: 'AddToCart',
+    eventId: options.eventId,
+    customData: buildSubscriptionCustomData(options),
+  })
+}
+
+export const trackMetaStartTrial = (options: SubscriptionEventOptions) => {
+  return trackMetaEvent({
+    eventName: 'StartTrial',
+    eventId: options.eventId,
+    customData: {
+      ...buildSubscriptionCustomData(options),
+      status: 'trialing',
+    },
+  })
+}

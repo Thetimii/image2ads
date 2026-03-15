@@ -14,6 +14,8 @@ export type MetaEventName =
   | 'Purchase'
   | 'CompleteRegistration'
   | 'SubscribedButtonClick'
+  | 'AddToCart'
+  | 'StartTrial'
   | string
 
 type MetaUserData = {
@@ -27,6 +29,7 @@ type MetaUserData = {
   zip?: string
   county?: string
   gender?: string
+  dateOfBirth?: string
   externalId?: string
   clientUserAgent?: string
   ipAddress?: string
@@ -87,6 +90,9 @@ const buildUserData = (data?: MetaUserData) => {
 
   const genderHash = hashValue(data.gender)
   if (genderHash) userData.ge = genderHash
+
+  const dobHash = hashValue(data.dateOfBirth)
+  if (dobHash) userData.db = dobHash
 
   const externalIdHash = hashValue(data.externalId)
   if (externalIdHash) userData.external_id = [externalIdHash]

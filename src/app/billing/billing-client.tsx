@@ -11,6 +11,8 @@ import {
   trackMetaInitiateCheckout,
   trackMetaPurchase,
   trackMetaSubscribedButtonClick,
+  trackMetaAddToCart,
+  trackMetaStartTrial,
 } from '@/lib/meta-events'
 
 interface BillingClientProps {
@@ -150,25 +152,43 @@ export default function BillingClient({ user, profile }: BillingClientProps) {
       if (typeof window !== 'undefined' && (window as any).fbq) {
         const cookieConsent = localStorage.getItem('cookieConsent')
         if (cookieConsent === 'accepted' && planValue > 0) {
-          (window as any).fbq('track', 'Purchase', {
-            value: planValue,
-            currency: 'USD',
-            content_name: planDisplayName,
-            content_type: 'product',
-            content_ids: [planName || 'subscription'],
-          }, { eventID: eventId })
-          console.log(`🔥 Meta Pixel: Purchase event fired for ${planDisplayName} ($${planValue}) [eventID: ${eventId}]`)
+          if (profile.subscription_status === 'trialing') {
+            (window as any).fbq('track', 'StartTrial', {
+              value: planValue,
+              currency: 'USD',
+            }, { eventID: eventId })
+            console.log(`🔥 Meta Pixel: StartTrial event fired for ${planDisplayName} ($${planValue}) [eventID: ${eventId}]`)
+          } else {
+            (window as any).fbq('track', 'Purchase', {
+              value: planValue,
+              currency: 'USD',
+              content_name: planDisplayName,
+              content_type: 'product',
+              content_ids: [planName || 'subscription'],
+            }, { eventID: eventId })
+            console.log(`🔥 Meta Pixel: Purchase event fired for ${planDisplayName} ($${planValue}) [eventID: ${eventId}]`)
+          }
         }
       }
 
       if (planValue > 0) {
-        trackMetaPurchase({
-          ...(planKey ? { plan: planKey } : {}),
-          value: planValue,
-          contentName: planDisplayName,
-          source: 'billing_success',
-          eventId,
-        })
+        if (profile.subscription_status === 'trialing') {
+          trackMetaStartTrial({
+            ...(planKey ? { plan: planKey } : {}),
+            value: planValue,
+            contentName: planDisplayName,
+            source: 'billing_success',
+            eventId,
+          })
+        } else {
+          trackMetaPurchase({
+            ...(planKey ? { plan: planKey } : {}),
+            value: planValue,
+            contentName: planDisplayName,
+            source: 'billing_success',
+            eventId,
+          })
+        }
       }
 
       // Clean up URL (remove success parameter)
@@ -230,6 +250,7 @@ export default function BillingClient({ user, profile }: BillingClientProps) {
       source: 'billing_page',
     }
     trackMetaSubscribedButtonClick(metaOptions)
+    trackMetaAddToCart(metaOptions)
     try {
       // 🚀 Track TikTok InitiateCheckout event
       try {
