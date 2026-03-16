@@ -59,6 +59,9 @@ export default function SignUpPage() {
       
       if (error) throw error
       
+      // 🚀 Generate Deduplication ID
+      const eventId = `registration_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+
       // 🔥 Fire Meta Pixel CompleteRegistration event
       if (typeof window !== 'undefined' && (window as any).fbq) {
         const cookieConsent = localStorage.getItem('cookieConsent');
@@ -68,12 +71,12 @@ export default function SignUpPage() {
             content_name: 'Email Signup',
             value: 0,
             currency: 'USD'
-          });
-          console.log('Meta Pixel: CompleteRegistration event fired for email signup');
+          }, { eventID: eventId });
+          console.log(`Meta Pixel: CompleteRegistration event fired for email signup [eventId: ${eventId}]`);
         }
       }
 
-      trackMetaCompleteRegistration({ method: 'email_password' })
+      trackMetaCompleteRegistration({ method: 'email_password' }, eventId)
 
       // 🚀 Track TikTok CompleteRegistration event (server-side)
       try {
@@ -129,21 +132,8 @@ export default function SignUpPage() {
       })
       if (error) throw error
       
-      // 🔥 Fire Meta Pixel CompleteRegistration event for Google signup
-      if (typeof window !== 'undefined' && (window as any).fbq) {
-        const cookieConsent = localStorage.getItem('cookieConsent');
-        if (cookieConsent === 'accepted') {
-          (window as any).fbq('track', 'CompleteRegistration', {
-            status: true,
-            content_name: 'Google OAuth Signup',
-            value: 0,
-            currency: 'USD'
-          });
-          console.log('Meta Pixel: CompleteRegistration event fired for Google signup');
-        }
-      }
-
-      trackMetaCompleteRegistration({ method: 'google_oauth' })
+      // Tracking for Google OAuth signups is deferred to the /auth/signup-success callback route
+      // so we don't prematurely track users who open the Google popup but abandon the flow.
     } catch (error: unknown) {
       setMessage((error as Error).message || 'An error occurred')
       setIsLoading(false)

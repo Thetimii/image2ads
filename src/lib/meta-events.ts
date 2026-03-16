@@ -124,9 +124,10 @@ export const trackMetaViewContent = (options: ViewContentEventOptions) => {
   })
 }
 
-export const trackMetaCompleteRegistration = (options: RegistrationEventOptions) => {
+export const trackMetaCompleteRegistration = (options: RegistrationEventOptions, eventId?: string) => {
   return trackMetaEvent({
     eventName: 'CompleteRegistration',
+    eventId,
     customData: cleanObject({
       status: options.status || 'success',
       method: options.method,
