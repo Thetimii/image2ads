@@ -18,6 +18,10 @@ export default function ProDiscountModal({ onCloseAction, onUpgradeAction }: Pro
   const [isStarting, setIsStarting] = useState(true)
   const [isUpgrading, setIsUpgrading] = useState(false)
 
+  useEffect(() => {
+    import('@/lib/analytics').then(({ track }) => track('paywall_viewed', { paywall: 'pro_discount' })).catch(() => {})
+  }, [])
+
   // Initialize timer by calling API to start it OR get remaining time
   useEffect(() => {
     const startTimer = async () => {

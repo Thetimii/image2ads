@@ -211,6 +211,7 @@ function JobCard({ job, getSignedUrl }: { job: Job; getSignedUrl: (job: Job) => 
 
   const handleDownloadMusic = async () => {
     if (!mediaUrl || job.result_type !== 'music') return
+    import('@/lib/analytics').then(({ track }) => track('result_downloaded', { media_type: 'music', source: 'chat_history' })).catch(() => {})
     
     try {
       setDownloading(true)

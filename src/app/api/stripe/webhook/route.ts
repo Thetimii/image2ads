@@ -178,6 +178,21 @@ export async function POST(req: NextRequest) {
             } catch (error) {
               console.error('❌ Failed to track TikTok trial purchase:', error);
             }
+
+            // First-party analytics: source of truth for trial starts
+            try {
+              await supabaseAdmin.rpc('track_server_event', {
+                p_user_id: userId,
+                p_event_name: 'trial_started',
+                p_properties: {
+                  amount: (session.amount_total || 0) / 100,
+                  currency: (session.currency || 'chf').toUpperCase(),
+                  plan: 'pro_trial',
+                },
+              });
+            } catch (error) {
+              console.error('❌ Failed to track analytics trial_started:', error);
+            }
           }
           break;
         }
@@ -319,6 +334,18 @@ export async function POST(req: NextRequest) {
                 });
                 
                 console.log(`✅ TikTok Purchase event tracked for ${customer.email}, plan: ${planName}, amount: ${amount} ${currency}`);
+
+                // First-party analytics: source of truth for revenue
+                await supabaseAdmin.rpc('track_server_event', {
+                  p_user_id: profile.id,
+                  p_event_name: 'payment_completed',
+                  p_properties: {
+                    amount,
+                    currency: currency.toUpperCase(),
+                    plan: planName,
+                    mode: session.mode,
+                  },
+                });
               }
             } catch (error) {
               console.error('❌ Failed to track TikTok Purchase event:', error);

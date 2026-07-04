@@ -78,6 +78,9 @@ export default function SignUpPage() {
 
       trackMetaCompleteRegistration({ method: 'email_password' }, eventId)
 
+      // First-party analytics (Supabase analytics_events)
+      import('@/lib/analytics').then(({ track }) => track('signup_completed', { method: 'email_password' })).catch(() => {})
+
       // 🚀 Track TikTok CompleteRegistration event (server-side)
       try {
         const { data: { user } } = await supabase.auth.getUser();

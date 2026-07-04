@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import {
   trackMetaAddPaymentInfo,
   trackMetaInitiateCheckout,
@@ -15,6 +15,10 @@ interface ProTrialModalProps {
 
 export default function ProTrialModal({ onCloseAction, onStartTrialAction, source = 'auto' }: ProTrialModalProps) {
   const [isStarting, setIsStarting] = useState(false)
+
+  useEffect(() => {
+    import('@/lib/analytics').then(({ track }) => track('paywall_viewed', { paywall: 'pro_trial', source })).catch(() => {})
+  }, [source])
 
   const handleStartTrial = async () => {
     setIsStarting(true)

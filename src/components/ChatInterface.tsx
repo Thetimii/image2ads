@@ -250,6 +250,7 @@ export default function ChatInterface({ user, profile }: ChatInterfaceProps) {
             }
 
             console.log(`[ChatInterface] Storage upload successful: ${uploadData.path}`)
+            import('@/lib/analytics').then(({ track }) => track('image_uploaded', { source: 'chat_interface' })).catch(() => {})
 
             // Save to database
             const { data: imageData, error: imageError } = await supabase

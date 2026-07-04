@@ -96,6 +96,7 @@ export default function GenerationForm({
           .upload(fileName, selectedFile)
 
         if (uploadError) throw new Error(uploadError.message)
+        import('@/lib/analytics').then(({ track }) => track('image_uploaded', { source: 'generation_form' })).catch(() => {})
 
         // Create image record
         const { data: imageData, error: imageError } = await supabase

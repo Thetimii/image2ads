@@ -873,6 +873,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
             throw new Error(`Upload failed: ${uploadErr.message}`)
           }
           console.log(`[ChatGenerator] Upload successful:`, uploadData)
+          import('@/lib/analytics').then(({ track }) => track('image_uploaded', { source: 'chat_generator' })).catch(() => {})
 
           console.log(`[ChatGenerator] Creating image record in database...`)
           const { data: imageData, error: imageDbErr } = await supabase.from('images').insert({
@@ -1650,6 +1651,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
                           const a = document.createElement('a')
                           a.href = url
                           a.download = `generated-image-${Date.now()}.png`
+                          import('@/lib/analytics').then(({ track }) => track('result_downloaded', { media_type: 'image', source: 'chat' })).catch(() => {})
                           document.body.appendChild(a)
                           a.click()
                           window.URL.revokeObjectURL(url)
@@ -1683,6 +1685,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
                           const a = document.createElement('a')
                           a.href = url
                           a.download = `generated-video-${Date.now()}.mp4`
+                          import('@/lib/analytics').then(({ track }) => track('result_downloaded', { media_type: 'video', source: 'chat' })).catch(() => {})
                           document.body.appendChild(a)
                           a.click()
                           window.URL.revokeObjectURL(url)
@@ -1743,6 +1746,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
                           const a = document.createElement('a')
                           a.href = url
                           a.download = `generated-music-${Date.now()}.mp3`
+                          import('@/lib/analytics').then(({ track }) => track('result_downloaded', { media_type: 'music', source: 'chat' })).catch(() => {})
                           document.body.appendChild(a)
                           a.click()
                           window.URL.revokeObjectURL(url)

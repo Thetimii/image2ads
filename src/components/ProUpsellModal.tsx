@@ -20,6 +20,10 @@ export default function ProUpsellModal({ onCloseAction, onUpgradeAction, isUpgra
   const [isStarting, setIsStarting] = useState(true)
   const [isUpgradingLocal, setIsUpgradingLocal] = useState<string | null>(null)
 
+  useEffect(() => {
+    import('@/lib/analytics').then(({ track }) => track('paywall_viewed', { paywall: 'pro_upsell' })).catch(() => {})
+  }, [])
+
   // Initialize timer by calling API to start it OR get remaining time
   useEffect(() => {
     const startTimer = async () => {

@@ -4,6 +4,7 @@ import Script from "next/script";
 import CookieBanner from "@/components/CookieBanner";
 import AuthDebug from "@/components/AuthDebug";
 import MetaPixel from "@/components/MetaPixel";
+import AnalyticsTracker from "@/components/AnalyticsTracker";
 import { TutorialProvider } from "@/contexts/TutorialContext";
 import { Toaster } from 'sonner';
 import { Analytics } from "@vercel/analytics/react";
@@ -59,6 +60,7 @@ export default function RootLayout({
           <AuthDebug />
           <Toaster position="top-right" richColors closeButton />
           <Analytics />
+          <AnalyticsTracker />
         </TutorialProvider>
       </body>
     </html>

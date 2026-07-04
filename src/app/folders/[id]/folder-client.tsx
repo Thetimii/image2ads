@@ -1945,6 +1945,7 @@ function JobCard({
 
   const handleDownload = async () => {
     if (!job.result_signed_url) return
+    import('@/lib/analytics').then(({ track }) => track('result_downloaded', { media_type: 'image', source: 'folder' })).catch(() => {})
 
     try {
       const response = await fetch(job.result_signed_url)

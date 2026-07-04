@@ -95,6 +95,7 @@ export default function LibraryClient({ user, profile }: LibraryClientProps) {
   }, [selectedVideo, selectedImage, selectedMusic])
 
   const downloadMedia = async (ad: GeneratedAd) => {
+    import('@/lib/analytics').then(({ track }) => track('result_downloaded', { media_type: ad.mediaType, source: 'library' })).catch(() => {})
     try {
       if (ad.mediaType === 'music') {
         // For music, download as ZIP with cover if available

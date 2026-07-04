@@ -64,6 +64,7 @@ export default function GeneratorHub({ user, profile }: GeneratorHubProps) {
           .upload(fileName, generator.selectedFile)
 
         if (uploadError) throw new Error(uploadError.message)
+        import('@/lib/analytics').then(({ track }) => track('image_uploaded', { source: 'generator_hub' })).catch(() => {})
 
         const { data: imageData, error: imageError } = await supabase
           .from('images')
