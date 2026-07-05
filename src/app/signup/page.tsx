@@ -58,7 +58,14 @@ export default function SignUpPage() {
       })
       
       if (error) throw error
-      
+
+      // Anti-abuse: cap free credits per signup IP (never blocks signup itself)
+      try {
+        await fetch('/api/signup-guard', { method: 'POST' })
+      } catch (guardError) {
+        console.error('Signup guard check failed:', guardError)
+      }
+
       // 🚀 Generate Deduplication ID
       const eventId = `registration_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
 
