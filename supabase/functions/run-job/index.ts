@@ -273,6 +273,11 @@ async function handler(req: Request) {
 
     await supabase.from("jobs").update({ status: "processing" }).eq("id", jobId);
 
+    // Flat 1 credit - matches billableCredits() in src/lib/credits.ts (the
+    // pre-flight check /api/generate-ad runs before creating this job) and
+    // the "nano-banana" tier in the other generate-* functions. Keep these
+    // in sync if pricing ever changes; do not reintroduce per-quality costs
+    // here without updating billableCredits() too.
     const { data: creditResult, error: creditError } = await supabase.rpc("consume_credit", {
       user_uuid: job.user_id,
       credit_amount: 1

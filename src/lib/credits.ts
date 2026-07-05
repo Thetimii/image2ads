@@ -1,28 +1,23 @@
 export type Quality = "low" | "medium" | "high";
 export type Size = "1024x1024" | "1024x1536" | "1536x1024";
 
+// The one place that decides how many credits an operation costs. Mirrors
+// what run-job (supabase/functions/run-job) actually deducts via
+// consume_credit - quality/size never affected the real charge (every live
+// caller only ever sends "openai-medium-*"), so this returns the same flat
+// cost run-job enforces instead of computing a number that isn't real.
 export function billableCredits(
   model: string,
-  quality: Quality = "medium",
-  size: Size = "1024x1024",
+  _quality: Quality = "medium",
+  _size: Size = "1024x1024",
   n: number = 1
 ): number {
-  // For OpenAI models, use the quality and size
-  if (model.startsWith("openai-")) {
-    const tallOrWide = size === "1024x1536" || size === "1536x1024";
-    let per = 0;
-    if (quality === "low") per = 0.5;
-    else if (quality === "medium") per = 1;
-    else per = 7; // high - simplified to 7 for all sizes
-    return per * n;
-  }
-
   // For nano-banana, it's free!
   if (model === "nano-banana") {
     return 0;
   }
 
-  // For other models (gemini, seedream), use default 1 credit
+  // Every other model (openai-*, gemini, seedream) costs 1 credit per image.
   return 1 * n;
 }
 
