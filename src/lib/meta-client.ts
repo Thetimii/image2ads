@@ -55,6 +55,11 @@ export async function trackMetaEvent(payload: MetaClientEventPayload) {
     await fetch('/api/meta-event', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      // Conversion events are frequently followed by an immediate
+      // window.location redirect (checkout, etc). Without keepalive the
+      // browser aborts this request mid-flight the instant the page
+      // navigates away, so the event never reaches our server at all.
+      keepalive: true,
       body: JSON.stringify({
         ...payload,
         eventSourceUrl: payload.eventSourceUrl || (typeof window !== 'undefined' ? window.location.href : undefined),
