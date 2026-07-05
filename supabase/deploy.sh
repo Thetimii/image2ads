@@ -19,16 +19,9 @@ if ! supabase status &> /dev/null; then
     exit 1
 fi
 
-# Deploy stripe-webhook function
-echo "📦 Deploying stripe-webhook function..."
-supabase functions deploy stripe-webhook
-
-if [ $? -eq 0 ]; then
-    echo "✅ stripe-webhook deployed successfully"
-else
-    echo "❌ Failed to deploy stripe-webhook"
-    exit 1
-fi
+# Note: Stripe webhooks are handled by the Next.js app (src/app/api/stripe/webhook),
+# not a Supabase edge function. Don't reintroduce a second webhook handler here -
+# Stripe will call both if two endpoints are registered, causing double credits.
 
 # Deploy run-job function
 echo "📦 Deploying run-job function..."

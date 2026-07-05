@@ -552,7 +552,7 @@ export async function POST(req: NextRequest) {
         const invoice = event.data.object;
 
         // Type assertion for subscription property
-        const invoiceWithSub = invoice as { subscription?: string };
+        const invoiceWithSub = invoice as { subscription?: string; billing_reason?: string };
 
         if (invoiceWithSub.subscription) {
           const subscription = await stripe.subscriptions.retrieve(
@@ -567,7 +567,14 @@ export async function POST(req: NextRequest) {
             creditsToAdd = getCreditsByPriceId(planItem.price.id);
           }
 
-          if (creditsToAdd > 0) {
+          // Stripe fires invoice.payment_succeeded AND checkout.session.completed
+          // for the same first invoice of a new subscription. Only the recurring
+          // cycle invoices should grant credits here, or every new subscriber gets
+          // double credits on their first payment (checkout.session.completed
+          // already grants them once for "subscription_create").
+          if (invoiceWithSub.billing_reason !== "subscription_cycle") {
+            console.log(`Skipping credit grant for invoice with billing_reason: ${invoiceWithSub.billing_reason}`);
+          } else if (creditsToAdd > 0) {
             const result = await addCreditsToCustomer(
               subscription.customer as string,
               creditsToAdd
