@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from 'react'
 import { usePathname } from 'next/navigation'
-import { trackPageView, trackScrollDepth, flushOnHide, ping, captureClickIds } from '@/lib/analytics'
+import { trackPageView, trackScrollDepth, flushOnHide, ping, captureClickIds, track } from '@/lib/analytics'
 
 const SCROLL_MILESTONES = [25, 50, 75, 100]
 const PING_INTERVAL_MS = 30000
@@ -24,6 +24,17 @@ export default function AnalyticsTracker() {
     pageEnteredAt.current = Date.now()
     reachedMilestones.current = new Set()
     trackPageView(pathname)
+
+    // Checkout modals append ?checkout=cancelled to their Stripe cancel_url
+    // so we can detect "started checkout, came back without paying" no
+    // matter which page they land back on (billing/dashboard/generator).
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('checkout') === 'cancelled') {
+      track('checkout_cancelled', {})
+      params.delete('checkout')
+      const query = params.toString()
+      window.history.replaceState({}, '', pathname + (query ? `?${query}` : ''))
+    }
   }, [pathname])
 
   useEffect(() => {

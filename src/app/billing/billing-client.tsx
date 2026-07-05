@@ -145,8 +145,14 @@ export default function BillingClient({ user, profile }: BillingClientProps) {
         planKey = 'business'
       }
 
-      // Generate unique event ID for deduplication between Pixel and CAPI
-      const eventId = `purchase_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+      // Deterministic event ID (Stripe checkout session id) so this client
+      // pixel fire and the webhook's server-side CAPI fire dedupe as one
+      // conversion in Meta, instead of double-counting or (if the browser
+      // never returns here) reaching Meta only via the webhook.
+      const stripeSessionId = searchParams.get('session_id')
+      const eventId = stripeSessionId
+        ? `purchase_${stripeSessionId}`
+        : `purchase_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
 
       // Fire Meta Pixel Purchase event
       if (typeof window !== 'undefined' && (window as any).fbq) {

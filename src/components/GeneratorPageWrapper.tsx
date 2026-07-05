@@ -162,7 +162,7 @@ export default function GeneratorPageWrapper({ user, profile, onShowUpgrade }: G
         body: JSON.stringify({
           plan,
           successUrl: `${window.location.origin}/billing?success=true`,
-          cancelUrl: `${window.location.origin}${window.location.pathname}`,
+          cancelUrl: `${window.location.origin}${window.location.pathname}?checkout=cancelled`,
           // Apply discount if active and Pro plan
           ...(hasActiveDiscount && plan === 'pro' && { applyProDiscount: true })
         }),

@@ -142,7 +142,7 @@ export default function ProDiscountModal({ onCloseAction, onUpgradeAction }: Pro
         body: JSON.stringify({
           plan: 'pro',
           successUrl: `${window.location.origin}/dashboard?upgrade=success`,
-          cancelUrl: `${window.location.origin}/dashboard`,
+          cancelUrl: `${window.location.origin}/dashboard?checkout=cancelled`,
           applyProDiscount: true
         }),
       })

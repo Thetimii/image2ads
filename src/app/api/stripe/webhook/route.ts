@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { STRIPE_PLANS } from "@/lib/stripe-plans";
 import { trackPurchase } from "@/lib/tiktok-events";
+import { sendMetaEvent } from "@/lib/meta-capi";
 
 export const runtime = "nodejs"; // raw body + crypto
 
@@ -174,6 +175,22 @@ export async function POST(req: NextRequest) {
                 });
                 
                 console.log(`✅ TikTok Purchase event tracked for trial: ${profile.email}`);
+
+                // Server-side Meta CAPI StartTrial — the reliable source of
+                // truth. The client also fires this from the billing success
+                // page with the same eventId (Stripe checkout session id),
+                // so Meta dedupes them into a single counted conversion
+                // instead of missing it entirely when the browser never
+                // returns from Stripe.
+                await sendMetaEvent({
+                  eventName: 'StartTrial',
+                  eventSourceUrl: `${process.env.NEXT_PUBLIC_SITE_URL || 'https://image2ad.com'}/dashboard`,
+                  actionSource: 'website',
+                  eventId: `purchase_${session.id}`,
+                  eventTime: Math.floor(Date.now() / 1000),
+                  customData: { value: amount, currency: currency.toUpperCase(), content_name: '3-Day Pro Trial' },
+                  userData: { email: profile.email, externalId: userId },
+                });
               }
             } catch (error) {
               console.error('❌ Failed to track TikTok trial purchase:', error);
@@ -334,6 +351,26 @@ export async function POST(req: NextRequest) {
                 });
                 
                 console.log(`✅ TikTok Purchase event tracked for ${customer.email}, plan: ${planName}, amount: ${amount} ${currency}`);
+
+                // Server-side Meta CAPI Purchase — the reliable source of
+                // truth (shares an eventId with the client-side billing
+                // success page fire so Meta dedupes to one conversion; see
+                // StartTrial above for why this matters).
+                await sendMetaEvent({
+                  eventName: 'Purchase',
+                  eventSourceUrl: `${process.env.NEXT_PUBLIC_SITE_URL || 'https://image2ad.com'}/billing`,
+                  actionSource: 'website',
+                  eventId: `purchase_${session.id}`,
+                  eventTime: Math.floor(Date.now() / 1000),
+                  customData: {
+                    value: amount,
+                    currency: currency.toUpperCase(),
+                    content_name: `${planName.charAt(0).toUpperCase() + planName.slice(1)} Plan`,
+                    content_type: 'product',
+                    content_ids: [planName],
+                  },
+                  userData: { email: customer.email, externalId: profile.id },
+                });
 
                 // First-party analytics: source of truth for revenue
                 await supabaseAdmin.rpc('track_server_event', {

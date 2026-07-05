@@ -147,7 +147,7 @@ export default function ProUpsellModal({ onCloseAction, onUpgradeAction, isUpgra
         body: JSON.stringify({
           plan,
           successUrl: `${window.location.origin}/billing?success=true`,
-          cancelUrl: `${window.location.origin}/billing`,
+          cancelUrl: `${window.location.origin}/billing?checkout=cancelled`,
           // Only apply discount to Pro plan
           ...(plan === 'pro' && { applyProDiscount: true })
         }),

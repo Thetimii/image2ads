@@ -177,7 +177,7 @@ export default function DashboardLayout({ user, profile, children, onDemoOpen, i
         body: JSON.stringify({
           plan,
           successUrl: `${window.location.origin}/billing?success=true`,
-          cancelUrl: `${window.location.origin}${pathname}`,
+          cancelUrl: `${window.location.origin}${pathname}?checkout=cancelled`,
         }),
       })
 

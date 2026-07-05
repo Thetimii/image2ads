@@ -68,7 +68,12 @@ export async function createCheckoutSession({
         quantity: 1,
       },
     ],
-    success_url: successUrl,
+    // Stripe replaces {CHECKOUT_SESSION_ID} on redirect, giving the client a
+    // stable id to build a Purchase eventId that matches the webhook's —
+    // required so Meta dedupes the client pixel + server CAPI Purchase events.
+    success_url: successUrl.includes('?')
+      ? `${successUrl}&session_id={CHECKOUT_SESSION_ID}`
+      : `${successUrl}?session_id={CHECKOUT_SESSION_ID}`,
     cancel_url: cancelUrl,
     metadata: {
       user_id: userId,

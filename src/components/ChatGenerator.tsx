@@ -367,7 +367,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
         body: JSON.stringify({
           plan,
           successUrl: `${window.location.origin}/billing?success=true`,
-          cancelUrl: `${window.location.origin}${window.location.pathname}`,
+          cancelUrl: `${window.location.origin}${window.location.pathname}?checkout=cancelled`,
           // Apply discount if active and Pro plan
           ...(hasActiveDiscount && plan === 'pro' && { applyProDiscount: true })
         }),

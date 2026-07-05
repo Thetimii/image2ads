@@ -36,7 +36,7 @@ export default function ProTrialModal({ onCloseAction, onStartTrialAction, sourc
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           successUrl: `${window.location.origin}/dashboard?trial=success`,
-          cancelUrl: `${window.location.origin}/dashboard`,
+          cancelUrl: `${window.location.origin}/dashboard?checkout=cancelled`,
         }),
       })
 
