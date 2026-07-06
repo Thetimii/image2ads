@@ -70,8 +70,13 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 REVOKE ALL ON FUNCTION public.ingest_analytics(JSONB, JSONB) FROM PUBLIC, anon, authenticated;
 
--- Surface the bucketed referrer in the reporting views too
-CREATE OR REPLACE VIEW public.session_overview AS
+-- Surface the bucketed referrer in the reporting views too.
+-- CREATE OR REPLACE VIEW can only append new columns at the end - it can't
+-- insert one in the middle (Postgres reads that as renaming every column
+-- after it, hence the 42P16 error). Drop and recreate instead, with
+-- referrer_category appended at the end rather than next to referrer.
+DROP VIEW IF EXISTS public.session_overview;
+CREATE VIEW public.session_overview AS
 SELECT
     s.id AS session_id,
     s.user_id,
@@ -81,7 +86,6 @@ SELECT
     s.duration_seconds,
     s.landing_page,
     s.referrer,
-    s.referrer_category,
     s.utm_source,
     s.utm_campaign,
     (s.fbclid IS NOT NULL) AS from_meta_ad,
@@ -96,7 +100,8 @@ SELECT
     EXISTS (SELECT 1 FROM public.analytics_events e WHERE e.session_id = s.id AND e.event_name = 'paywall_viewed') AS saw_paywall,
     EXISTS (SELECT 1 FROM public.analytics_events e WHERE e.session_id = s.id AND e.event_name = 'checkout_started') AS started_checkout,
     EXISTS (SELECT 1 FROM public.analytics_events e WHERE e.session_id = s.id AND e.event_name = 'checkout_cancelled') AS cancelled_checkout,
-    EXISTS (SELECT 1 FROM public.analytics_events e WHERE e.session_id = s.id AND e.event_name = 'payment_completed') AS purchased
+    EXISTS (SELECT 1 FROM public.analytics_events e WHERE e.session_id = s.id AND e.event_name = 'payment_completed') AS purchased,
+    s.referrer_category
 FROM public.analytics_sessions s
 LEFT JOIN public.profiles p ON p.id = s.user_id;
 
