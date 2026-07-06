@@ -1,6 +1,7 @@
 // Daily retarget email function
-// Sends 50% off Pro offer via Brevo to high-intent users
-// Runs once per day at 02:00 UTC via cron
+// Sends 50% off Pro offer via Brevo to every signed-up, non-subscribed user
+// once they're 1+ day old (regardless of credit balance or onboarding status).
+// Runs once per day via cron (see Supabase Dashboard > Cron Jobs).
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -14,6 +15,7 @@ interface User {
   id: string;
   email: string;
   full_name: string | null;
+  created_at: string;
 }
 
 interface BrevoEmailPayload {
@@ -49,12 +51,19 @@ Deno.serve(async (req) => {
 
     console.log("Starting daily retarget email campaign...");
 
-    // Query eligible users
+    // Eligible: signed up 1-30 days ago (old enough to have tried the
+    // product, capped so this doesn't suddenly resurface very old dormant
+    // accounts the first time this runs), never subscribed, never emailed
+    // before. No longer gated on credits or onboarding completion - every
+    // new user gets this follow-up regardless of how much they used it.
+    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+
     const { data: users, error: queryError } = await supabase
       .from("profiles")
-      .select("id, email, full_name")
-      .eq("tutorial_completed", true)
-      .eq("credits", 0)
+      .select("id, email, full_name, created_at")
+      .lte("created_at", oneDayAgo)
+      .gte("created_at", thirtyDaysAgo)
       .is("subscription_id", null)
       .or("email_retarget_sent.is.false,email_retarget_sent.is.null");
 
@@ -106,16 +115,16 @@ Deno.serve(async (req) => {
     <p style="font-size: 18px; margin-bottom: 20px;">Hey ${firstName},</p>
     
     <p style="font-size: 16px; margin-bottom: 20px;">
-      You were just creating some amazing ads with <strong>Image2Ad</strong> 👀
+      Thanks for trying out <strong>Image2Ad</strong> 👀
     </p>
-    
+
     <p style="font-size: 16px; margin-bottom: 20px;">
       Here's a surprise while your creativity's still hot – <strong style="color: #FF5B7E;">50% off your first month of Pro</strong>!
     </p>
-    
+
     <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin: 30px 0;">
       <p style="font-size: 16px; margin-bottom: 15px;">
-        🎁 Use code <strong style="font-size: 20px; color: #FF5B7E;">FIRST50</strong> at checkout to unlock:
+        🎁 Click the button below to unlock it automatically - no code needed:
       </p>
       <ul style="list-style: none; padding: 0; margin: 0;">
         <li style="padding: 8px 0; font-size: 15px;">✅ <strong>200 credits</strong> per month</li>
@@ -124,15 +133,15 @@ Deno.serve(async (req) => {
         <li style="padding: 8px 0; font-size: 15px;">✅ <strong>Priority support</strong></li>
       </ul>
     </div>
-    
+
     <div style="text-align: center; margin: 40px 0;">
-      <a href="https://www.image2ad.com/pricing?coupon=first50" style="background: #FF5B7E; color: white; padding: 16px 40px; border-radius: 8px; text-decoration: none; font-size: 18px; font-weight: 600; display: inline-block; box-shadow: 0 4px 6px rgba(255,91,126,0.3);">
+      <a href="https://www.image2ad.com/billing?promo=pro20limited" style="background: #FF5B7E; color: white; padding: 16px 40px; border-radius: 8px; text-decoration: none; font-size: 18px; font-weight: 600; display: inline-block; box-shadow: 0 4px 6px rgba(255,91,126,0.3);">
         Activate My 50% Off 🚀
       </a>
     </div>
-    
+
     <p style="font-size: 14px; color: #666; margin-top: 30px; padding-top: 30px; border-top: 1px solid #eee;">
-      <strong>Offer valid for 24 hours.</strong><br>
+      <strong>Offer valid for 1 hour after you click.</strong><br>
       This is a one-time exclusive offer for early creators like you.
     </p>
     

@@ -132,8 +132,14 @@ export default function LibraryClient({ user, profile }: LibraryClientProps) {
         window.URL.revokeObjectURL(url)
         document.body.removeChild(a)
       } else {
-        // Original logic for images and videos
-        const response = await fetch(ad.url)
+        // Images route through the server so free-tier nano-banana-pro
+        // downloads get watermarked (original stays untouched in storage).
+        // Video has no pro-model watermark concept, so it always uses the raw URL.
+        const downloadUrl =
+          ad.mediaType !== 'video' && ad.file_path
+            ? `/api/download-image?path=${encodeURIComponent(ad.file_path)}`
+            : ad.url
+        const response = await fetch(downloadUrl)
         const blob = await response.blob()
         const url = window.URL.createObjectURL(blob)
         const a = document.createElement('a')

@@ -1303,7 +1303,12 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
                             <button
                               onClick={async () => {
                                 try {
-                                  const response = await fetch(ad.url)
+                                  // Routed through the server so free-tier nano-banana-pro
+                                  // downloads get watermarked (original stays untouched)
+                                  const downloadUrl = ad.job_id
+                                    ? `/api/download-image?jobId=${ad.job_id}`
+                                    : ad.url
+                                  const response = await fetch(downloadUrl)
                                   const blob = await response.blob()
                                   const url = window.URL.createObjectURL(blob)
                                   const a = document.createElement('a')
@@ -1948,7 +1953,9 @@ function JobCard({
     import('@/lib/analytics').then(({ track }) => track('result_downloaded', { media_type: 'image', source: 'folder' })).catch(() => {})
 
     try {
-      const response = await fetch(job.result_signed_url)
+      // Routed through the server so free-tier nano-banana-pro downloads
+      // get watermarked (original stays untouched)
+      const response = await fetch(`/api/download-image?jobId=${job.id}`)
       const blob = await response.blob()
       const url = window.URL.createObjectURL(blob)
       const a = document.createElement('a')

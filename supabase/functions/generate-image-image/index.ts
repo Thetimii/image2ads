@@ -121,8 +121,22 @@ async function handler(req: Request) {
     console.log(`[generate-image-image] Processing ${imageUrls.length} image(s)`);
     console.log(`[generate-image-image] Image URLs:`, imageUrls);
 
-    // Determine credit cost based on model
-    const creditAmount = selectedModel === 'nano-banana-pro' ? 6 : 1;
+    // Determine credit cost based on model. Pro model costs 6 credits for
+    // paying subscribers, but only 1 for free-tier users spending their
+    // signup credits (they no longer get it for free/unlimited via the
+    // -free endpoint - see ChatGenerator's routing).
+    let creditAmount = 1;
+    if (selectedModel === 'nano-banana-pro') {
+      const { data: userProfile } = await supabase
+        .from("profiles")
+        .select("subscription_status")
+        .eq("id", job.user_id)
+        .single();
+      const isPayingSubscriber =
+        userProfile?.subscription_status === "active" ||
+        userProfile?.subscription_status === "trialing";
+      creditAmount = isPayingSubscriber ? 6 : 1;
+    }
     console.log(`[generate-image-image] Model: ${selectedModel}, Credits: ${creditAmount}`);
 
     // Check and consume credits
@@ -193,10 +207,11 @@ async function handler(req: Request) {
     console.log(`[generate-image-image] Task created: ${taskId}`);
 
     // Update job with task_id and keep status as processing
-    await supabase.from("jobs").update({ 
+    await supabase.from("jobs").update({
       task_id: taskId,
       result_type: "image",
-      status: "processing"
+      status: "processing",
+      used_pro_model: selectedModel === 'nano-banana-pro'
     }).eq("id", jobId);
 
     // Log usage event immediately (credits already consumed)

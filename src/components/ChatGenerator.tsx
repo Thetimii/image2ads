@@ -957,8 +957,15 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
         originalEndpoint: endpoint
       })
 
-      // Route free users to separate edge functions for image generation
-      if (isFreeUser && (gen.activeTab === 'text-to-image' || gen.activeTab === 'image-to-image')) {
+      // Route free users to separate edge functions for image generation -
+      // except nano-banana-pro, which must always go through the paid path
+      // so it actually consumes credits (1/image for free-tier, enforced
+      // server-side) instead of being unlimited at 0 cost.
+      if (
+        isFreeUser &&
+        (gen.activeTab === 'text-to-image' || gen.activeTab === 'image-to-image') &&
+        selectedModel !== 'nano-banana-pro'
+      ) {
         endpoint = endpoint + '-free'
         console.log(`[ChatGenerator] 🚦 Routing free user to: ${endpoint}`)
       } else {
@@ -1645,7 +1652,12 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
                     <button
                       onClick={async () => {
                         try {
-                          const response = await fetch(m.mediaUrl!)
+                          // Routed through the server so free-tier nano-banana-pro
+                          // downloads get watermarked (original stays untouched)
+                          const downloadUrl = m.jobId
+                            ? `/api/download-image?jobId=${m.jobId}`
+                            : m.mediaUrl!
+                          const response = await fetch(downloadUrl)
                           const blob = await response.blob()
                           const url = window.URL.createObjectURL(blob)
                           const a = document.createElement('a')
