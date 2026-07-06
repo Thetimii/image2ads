@@ -1,0 +1,32 @@
+# Image2Ad
+
+> Image2Ad turns plain product photos into ready-to-use ads. Upload a photo (or start from a text prompt), and AI generates professional ad creative - images, video, and music - in about 10-15 seconds. No designer, no editing software.
+
+## What it does
+
+- Text-to-image and image-to-image ad generation (standard and pro-quality models)
+- Text-to-video and image-to-video ad generation
+- Text-to-music generation for video ads
+- Outputs sized for Instagram Stories, Facebook Ads, Google Ads, TikTok, and custom formats
+- Fully automated - no human designers involved
+
+## Pricing
+
+- Free: signup credits included, no card required
+- Starter: $9.99/month, 70 credits
+- Pro: $19.99/month, 200 credits, HD generation, video/music, full commercial usage rights
+- Business: $49.99/month, 500 credits
+
+## Key pages
+
+- Homepage: https://www.image2ad.com/
+- About: https://www.image2ad.com/about
+- Sign up: https://www.image2ad.com/signup
+- Contact: https://www.image2ad.com/contact
+- Privacy policy: https://www.image2ad.com/privacy
+- Terms of service: https://www.image2ad.com/terms
+
+## Contact
+
+- Instagram: https://www.instagram.com/image2ad
+- Facebook: https://www.facebook.com/Image2ad
