@@ -102,6 +102,19 @@ JOIN profiles p ON p.id = e.user_id
 WHERE e.event_name = 'payment_completed';
 ```
 
+**Blog post performance — is Google/AI answer engines actually sending traffic:**
+```sql
+-- One row per post: total sessions, how many from Google organic,
+-- how many from an AI answer engine (ChatGPT/Perplexity/Claude/Gemini), signups
+SELECT * FROM blog_post_summary;
+
+-- Same data broken out by referrer_category per post
+SELECT * FROM blog_post_performance WHERE landing_page = '/blog/<slug>';
+```
+`referrer_category` buckets: `google`, `chatgpt`, `perplexity`, `claude`, `gemini`,
+`bing`, `facebook`, `instagram`, `tiktok`, `reddit`, `youtube`, `direct`, or the raw
+hostname for anything else.
+
 ## Notes
 
 - Tables are **RLS-locked with zero policies** — only the service role (the

@@ -83,6 +83,9 @@ function categorizeReferrer(referrer: string): string {
     const host = new URL(referrer).hostname.replace(/^www\./, '')
     if (/(^|\.)google\./.test(host)) return 'google'
     if (host === 'chat.openai.com' || host === 'chatgpt.com') return 'chatgpt'
+    if (/(^|\.)perplexity\.ai$/.test(host)) return 'perplexity'
+    if (/(^|\.)claude\.ai$/.test(host)) return 'claude'
+    if (host === 'gemini.google.com') return 'gemini'
     if (/(^|\.)bing\./.test(host)) return 'bing'
     if (host === 'l.facebook.com' || host === 'facebook.com' || host === 'lm.facebook.com') return 'facebook'
     if (host === 'instagram.com' || host === 'l.instagram.com') return 'instagram'
