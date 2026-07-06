@@ -49,15 +49,27 @@ export default function SignUpPage() {
 
     try {
       setLoadingMessage('Creating your account...')
-      const { error } = await supabase.auth.signUp({
+      const { data, error } = await supabase.auth.signUp({
         email,
         password,
         options: {
           emailRedirectTo: `${process.env.NEXT_PUBLIC_APP_URL || window.location.origin}/auth/callback`,
         },
       })
-      
+
       if (error) throw error
+
+      // Tie pre-signup anonymous browsing (landing page, referrer, ad click
+      // ids) to this account. Using the id straight from the signUp response
+      // rather than waiting on the auth cookie, which doesn't always land
+      // before the very next request goes out. Awaited so the subsequent
+      // signup_completed track() call below is guaranteed to include it.
+      if (data.user?.id) {
+        try {
+          const { identify } = await import('@/lib/analytics')
+          identify(data.user.id)
+        } catch {}
+      }
 
       // Anti-abuse: cap free credits per signup IP (never blocks signup itself)
       try {

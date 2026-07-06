@@ -21,8 +21,10 @@ const payloadSchema = z.object({
   session: z.object({
     id: z.string().uuid(),
     anonymous_id: z.string().uuid(),
+    user_id: z.string().uuid().optional(),
     landing_page: z.string().max(512).optional(),
     referrer: z.string().max(1024).optional(),
+    referrer_category: z.string().max(128).optional(),
     utm_source: z.string().max(256).optional(),
     utm_medium: z.string().max(256).optional(),
     utm_campaign: z.string().max(256).optional(),
@@ -69,7 +71,11 @@ export async function POST(request: NextRequest) {
     }
     const { session, events } = parsed.data
 
-    // Authoritative user id from the auth cookie (never trusted from the body)
+    // Prefer the auth cookie (authoritative), but the cookie set by a
+    // signUp()/signIn() call moments earlier doesn't always land before this
+    // request fires - that race was silently losing the anonymous->user link
+    // for some signups. Fall back to the client-supplied id in that case;
+    // this only affects marketing attribution, never anything privileged.
     let userId: string | null = null
     try {
       const supabase = await createServerClient()
@@ -77,6 +83,9 @@ export async function POST(request: NextRequest) {
       userId = data.user?.id ?? null
     } catch {
       // not signed in — anonymous traffic is fine
+    }
+    if (!userId && session.user_id) {
+      userId = session.user_id
     }
 
     const ua = request.headers.get('user-agent') || ''

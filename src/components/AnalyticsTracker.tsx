@@ -2,7 +2,8 @@
 
 import { useEffect, useRef } from 'react'
 import { usePathname } from 'next/navigation'
-import { trackPageView, trackScrollDepth, flushOnHide, ping, captureClickIds, track } from '@/lib/analytics'
+import { trackPageView, trackScrollDepth, flushOnHide, ping, captureClickIds, track, identify } from '@/lib/analytics'
+import { createClient } from '@/lib/supabase/client'
 
 const SCROLL_MILESTONES = [25, 50, 75, 100]
 const PING_INTERVAL_MS = 30000
@@ -39,6 +40,16 @@ export default function AnalyticsTracker() {
 
   useEffect(() => {
     captureClickIds()
+
+    // Safety net: if signup-time identification ever misses (network blip,
+    // an OAuth edge case, etc.), re-establish the anonymous_id->user_id link
+    // on the very next authenticated page load instead of losing it forever.
+    createClient()
+      .auth.getUser()
+      .then(({ data }) => {
+        if (data.user?.id) identify(data.user.id)
+      })
+      .catch(() => {})
 
     const onScroll = () => {
       const doc = document.documentElement

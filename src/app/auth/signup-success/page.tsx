@@ -44,13 +44,22 @@ export default function SignupSuccessTracking() {
       // Fire Server-Side CAPI first — it does not depend on the pixel script
       trackMetaCompleteRegistration({ method: 'google_oauth' }, eventId)
 
-      // First-party analytics (Supabase analytics_events)
-      import('@/lib/analytics').then(({ track }) => track('signup_completed', { method: 'google_oauth' })).catch(() => {})
-
       // 🚀 track TikTok CompleteRegistration event
       try {
         const supabase = createClient()
         const { data: { user } } = await supabase.auth.getUser()
+
+        // Tie pre-signup anonymous browsing (landing page, referrer, ad
+        // click ids) to this account before firing signup_completed, so the
+        // backfill actually has a user_id to link with.
+        if (user) {
+          try {
+            const { identify } = await import('@/lib/analytics')
+            identify(user.id)
+          } catch {}
+        }
+        import('@/lib/analytics').then(({ track }) => track('signup_completed', { method: 'google_oauth' })).catch(() => {})
+
         if (user) {
           await fetch('/api/tiktok-event', {
             method: 'POST',

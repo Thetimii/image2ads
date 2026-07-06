@@ -27,8 +27,10 @@ interface QueuedEvent {
 interface SessionMeta {
   id: string
   anonymous_id: string
+  user_id?: string
   landing_page?: string
   referrer?: string
+  referrer_category?: string
   utm_source?: string
   utm_medium?: string
   utm_campaign?: string
@@ -45,6 +47,53 @@ let flushTimer: ReturnType<typeof setInterval> | null = null
 let isNewSession = false
 let newPages = 0
 let maxScrollDepth = 0
+
+const IDENTIFIED_USER_KEY = 'i2a_identified_user_id'
+
+/**
+ * Tie the current anonymous_id to a real user_id as soon as it's known
+ * (right after signup/login, or on any authenticated page load). Every
+ * subsequent track() call includes it, and the server backfills every
+ * earlier session/event row sharing this anonymous_id - so the exact
+ * server-side auth-cookie timing at the moment of the signup_completed
+ * call no longer matters; the client just says who it is.
+ */
+export function identify(userId: string) {
+  if (typeof window === 'undefined' || !userId) return
+  try {
+    sessionStorage.setItem(IDENTIFIED_USER_KEY, userId)
+  } catch {
+    /* ignore */
+  }
+}
+
+function getIdentifiedUserId(): string | undefined {
+  if (typeof window === 'undefined') return undefined
+  try {
+    return sessionStorage.getItem(IDENTIFIED_USER_KEY) || undefined
+  } catch {
+    return undefined
+  }
+}
+
+/** Buckets a raw referrer URL into a readable source for reporting. */
+function categorizeReferrer(referrer: string): string {
+  if (!referrer) return 'direct'
+  try {
+    const host = new URL(referrer).hostname.replace(/^www\./, '')
+    if (/(^|\.)google\./.test(host)) return 'google'
+    if (host === 'chat.openai.com' || host === 'chatgpt.com') return 'chatgpt'
+    if (/(^|\.)bing\./.test(host)) return 'bing'
+    if (host === 'l.facebook.com' || host === 'facebook.com' || host === 'lm.facebook.com') return 'facebook'
+    if (host === 'instagram.com' || host === 'l.instagram.com') return 'instagram'
+    if (/(^|\.)tiktok\.com/.test(host)) return 'tiktok'
+    if (/(^|\.)reddit\.com/.test(host)) return 'reddit'
+    if (/(^|\.)youtube\.com/.test(host)) return 'youtube'
+    return host
+  } catch {
+    return 'other'
+  }
+}
 
 function uuid(): string {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID()
@@ -82,6 +131,7 @@ function sessionMeta(): SessionMeta {
   const meta: SessionMeta = {
     id: getSessionId(),
     anonymous_id: getAnonymousId(),
+    user_id: getIdentifiedUserId(),
     scroll_depth: maxScrollDepth,
     new_pages: newPages,
   }
@@ -90,6 +140,7 @@ function sessionMeta(): SessionMeta {
     const params = new URLSearchParams(window.location.search)
     meta.landing_page = window.location.pathname
     meta.referrer = document.referrer || undefined
+    meta.referrer_category = categorizeReferrer(document.referrer)
     meta.utm_source = params.get('utm_source') || undefined
     meta.utm_medium = params.get('utm_medium') || undefined
     meta.utm_campaign = params.get('utm_campaign') || undefined
