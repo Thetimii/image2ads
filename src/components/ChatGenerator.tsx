@@ -211,6 +211,41 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
     }
   }, [prefillPrompt, input])
 
+  // Bridges the onboarding wizard (upload or sample click) into the normal
+  // send pipeline: stage the file/prompt into state, then let this effect -
+  // which runs after the state commit - call sendPrompt() so it reads fresh
+  // values instead of a stale closure from the click handler.
+  const [pendingWizardSubmit, setPendingWizardSubmit] = useState(false)
+  useEffect(() => {
+    if (pendingWizardSubmit) {
+      setPendingWizardSubmit(false)
+      sendPrompt()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingWizardSubmit])
+
+  const handleWizardSubmit = (file: File | null, prompt: string) => {
+    handleOnboardingComplete(prompt, file ? 'product' : 'artist')
+    if (file) {
+      setLocalFiles([file])
+      setLocalPreviews([URL.createObjectURL(file)])
+    } else {
+      setLocalFiles([])
+      setLocalPreviews([])
+    }
+    setInput(prompt)
+    setPendingWizardSubmit(true)
+  }
+
+  // Fire-and-forget: tells the server a generation just completed for this
+  // user. Safe to call from all 3 independent completion-detection paths for
+  // every generation (not just the first) - the route's atomic DB guard
+  // means only the user's true first-ever completion actually logs the event
+  // and fires Meta CAPI; every other call is a harmless no-op.
+  const notifyFirstGenerationCompleted = () => {
+    fetch('/api/first-generation-completed', { method: 'POST', keepalive: true }).catch(() => {})
+  }
+
   // Music-specific options
   const [makeInstrumental, setMakeInstrumental] = useState(false)
   const [musicTags, setMusicTags] = useState('')
@@ -616,6 +651,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
 
         if (jobStatus.status === 'completed' && jobStatus.result_url) {
           console.log(`✅ Job ${jobId} completed! Getting signed URL...`)
+          notifyFirstGenerationCompleted()
 
           // Show success toast notification
           const contentType = tab.includes('video') ? 'Video' : tab.includes('music') ? 'Music' : 'Image'
@@ -1049,6 +1085,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
 
             if (updatedJob.status === 'completed' && updatedJob.result_url) {
               console.log(`[ChatGenerator] 🎉 Job completed via realtime! Result: ${updatedJob.result_url}`)
+              notifyFirstGenerationCompleted()
 
               // Unsubscribe from further updates
               channel.unsubscribe()
@@ -1148,6 +1185,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
 
             if (statusData.status === 'completed' && statusData.result_url) {
               console.log(`[ChatGenerator] 🎉 GENERATION COMPLETED! Result URL: ${statusData.result_url}`)
+              notifyFirstGenerationCompleted()
 
               // Show success toast notification with special message for first-time users
               const contentType = meta.resultType === 'image' ? 'Image' : meta.resultType === 'video' ? 'Video' : 'Music'
@@ -2061,10 +2099,9 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
       {/* First-Time Onboarding */}
       {shouldShowOnboarding && (
         <OnboardingQuestionnaire
-          user={user}
           profile={profile}
-          onCompleteAction={handleOnboardingComplete}
           onSkipAction={handleSkipOnboarding}
+          onWizardSubmitAction={handleWizardSubmit}
         />
       )}
 

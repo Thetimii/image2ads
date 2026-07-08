@@ -1,5 +1,7 @@
 // deno-lint-ignore-file no-explicit-any
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createKieTask, resolveJobImageUrls } from "../utils/kieClient.ts";
+import { classifyFailure, friendlyMessage, sanitizePromptForRetry } from "../utils/errorClassifier.ts";
 
 const supabase = createClient(
   Deno.env.get("SUPABASE_URL") ?? "",
@@ -42,9 +44,12 @@ async function handler(req: Request) {
   if (req.method !== "GET")
     return new Response("Method not allowed", { status: 405, headers: cors });
 
+  let jobId: string | null = null;
+  let jobRecord: any = null;
+
   try {
     const url = new URL(req.url);
-    const jobId = url.searchParams.get("jobId");
+    jobId = url.searchParams.get("jobId");
     console.log(`[check-job-status] Incoming request: ${req.method} jobId=${jobId}`);
     // Minimal header echo (no auth secrets)
     console.log(`[check-job-status] Origin: ${req.headers.get('origin')}`);
@@ -68,6 +73,7 @@ async function handler(req: Request) {
       console.log(`[check-job-status] Job not found for id=${jobId} error=${jobErr?.message}`);
       return new Response("Job not found", { status: 404, headers: cors });
     }
+    jobRecord = job;
 
     console.log(`[check-job-status] Loaded job: status=${job.status} task_id=${job.task_id} result_url=${job.result_url}`);
 
@@ -200,37 +206,105 @@ async function handler(req: Request) {
       
       if (jobAge > maxAge) {
         console.log(`[check-job-status] Job timeout! Age: ${jobAge}ms, max: ${maxAge}ms, state: "${taskState}"`)
+        const timeoutMessage = friendlyMessage('timeout')
+        // Mark failed first - refund_credit only refunds jobs already in
+        // status='failed', deriving the user/amount from the job row itself.
         await supabase.from('jobs').update({
           status: 'failed',
-          error_message: `Generation timeout - Kie.ai task stuck in "${taskState}" state after ${Math.round(jobAge/1000)}s`,
+          error_message: timeoutMessage,
+          failure_category: 'timeout',
           updated_at: new Date().toISOString()
         }).eq('id', jobId)
+        await supabase.rpc('refund_credit', { job_uuid: jobId })
         return new Response(
-          JSON.stringify({ 
+          JSON.stringify({
             success: false,
             status: 'failed',
-            error: `Generation timeout after ${Math.round(jobAge/1000)} seconds`,
+            error: timeoutMessage,
             jobId
           }),
           { headers: { ...cors, 'Content-Type': 'application/json' } }
         )
       }
-      
+
       // Detect failure variants early
       if (['fail','failed','error'].includes(currentStatus)) {
         const failMsg = result.data?.failMsg || 'Generation failed'
         console.log(`[check-job-status] Task reported failure - state: "${taskState}", status: "${taskStatus}", failMsg: "${failMsg}"`)
-        // Update job to failed
+        const category = classifyFailure(failMsg)
+
+        // Retry once with a sanitized prompt for image jobs rejected by a
+        // safety filter - the credit already consumed covers the retry, so
+        // no extra charge and no refund yet if this succeeds.
+        if (category === 'safety_filter' && (job.retry_count ?? 0) === 0 && job.result_type !== 'video') {
+          try {
+            const imageUrls = job.has_images ? await resolveJobImageUrls(supabase, job) : []
+            const sanitizedPrompt = sanitizePromptForRetry(job.prompt || '')
+            let aspectRatio = '1:1'
+            if (job.aspect_ratio === 'portrait') aspectRatio = '9:16'
+            else if (job.aspect_ratio === 'landscape') aspectRatio = '16:9'
+
+            let kieModel: string
+            let taskInput: Record<string, any>
+            if (job.has_images) {
+              kieModel = job.used_pro_model ? 'nano-banana-pro' : 'google/nano-banana-edit'
+              taskInput = job.used_pro_model
+                ? { prompt: sanitizedPrompt, image_input: imageUrls, aspect_ratio: aspectRatio, resolution: '2K', output_format: 'png' }
+                : { prompt: sanitizedPrompt, image_urls: imageUrls, output_format: 'png', image_size: aspectRatio }
+            } else {
+              kieModel = job.used_pro_model ? 'nano-banana-pro' : 'google/nano-banana'
+              taskInput = job.used_pro_model
+                ? { prompt: sanitizedPrompt, image_input: [], aspect_ratio: aspectRatio, resolution: '2K', output_format: 'png' }
+                : { prompt: sanitizedPrompt, output_format: 'png', image_size: aspectRatio }
+            }
+
+            console.log(`[check-job-status] Safety-filter rejection, retrying with sanitized prompt using ${kieModel}`)
+            const newTaskId = await createKieTask(kieModel, taskInput, KIE_API_KEY)
+            await supabase.from('jobs').update({
+              task_id: newTaskId,
+              retry_count: 1,
+              status: 'processing',
+              updated_at: new Date().toISOString()
+            }).eq('id', jobId)
+
+            return new Response(
+              JSON.stringify({ success: true, status: 'processing', message: 'Retrying with an adjusted prompt', jobId }),
+              { headers: { ...cors, 'Content-Type': 'application/json' } }
+            )
+          } catch (retryErr) {
+            console.error('[check-job-status] Retry attempt failed, falling through to refund:', retryErr)
+            // fall through to the refund/failed handling below
+          }
+        }
+
+        // Mark failed first - refund_credit only refunds jobs already in
+        // status='failed' (idempotent via the refunded_at guard, safe even
+        // if the frontend's poll loop calls this twice), deriving the
+        // user/amount from the job row itself so the raw provider error is
+        // never surfaced and no caller-supplied amount is trusted.
+        const userMessage = friendlyMessage(category)
         await supabase.from('jobs').update({
           status: 'failed',
-          error_message: failMsg,
+          error_message: userMessage,
+          failure_category: category,
           updated_at: new Date().toISOString()
         }).eq('id', jobId)
+        await supabase.rpc('refund_credit', { job_uuid: jobId })
+        if (category === 'safety_filter') {
+          await supabase.from('usage_events').insert({
+            user_id: job.user_id,
+            event_type: 'safety_filter_rejected',
+            credits_consumed: 0,
+            job_id: jobId,
+            metadata: { prompt: job.prompt, raw_error: failMsg }
+          })
+        }
+
         return new Response(
-          JSON.stringify({ 
+          JSON.stringify({
             success: false,
             status: 'failed',
-            error: failMsg,
+            error: userMessage,
             jobId
           }),
           { headers: { ...cors, 'Content-Type': 'application/json' } }
@@ -349,11 +423,28 @@ async function handler(req: Request) {
 
   } catch (err: any) {
     console.error(`[check-job-status] Error:`, err);
-    
+
+    const rawMessage = String(err?.message ?? err);
+    const category = classifyFailure(rawMessage);
+
+    // If we got far enough to load the job row, and it isn't already
+    // resolved, treat this as a failure so the credit gets refunded instead
+    // of leaving the job stuck in "processing" forever after consuming one
+    // (e.g. a storage upload/download error after KIE itself succeeded).
+    if (jobId && jobRecord && jobRecord.status !== "completed" && jobRecord.status !== "failed") {
+      await supabase.from("jobs").update({
+        status: "failed",
+        error_message: friendlyMessage(category),
+        failure_category: category,
+        updated_at: new Date().toISOString()
+      }).eq("id", jobId);
+      await supabase.rpc("refund_credit", { job_uuid: jobId });
+    }
+
     return new Response(
-      JSON.stringify({ 
-        success: false, 
-        error: String(err?.message ?? err) 
+      JSON.stringify({
+        success: false,
+        error: friendlyMessage(category)
       }),
       { status: 500, headers: { ...cors, "Content-Type": "application/json" } }
     );

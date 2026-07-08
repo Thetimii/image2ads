@@ -1,6 +1,7 @@
 // deno-lint-ignore-file no-explicit-any
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { createKieTask, pollKieResult, downloadFile } from "../utils/kieClient.ts";
+import { classifyFailure, friendlyMessage } from "../utils/errorClassifier.ts";
 
 const supabase = createClient(
   Deno.env.get("SUPABASE_URL") ?? "",
@@ -39,13 +40,16 @@ async function handler(req: Request) {
     return new Response("Method not allowed", { status: 405, headers: cors });
 
   let jobId: string | null = null;
+  let jobUserId: string | null = null;
+  let jobCreditsUsed = 1;
+  let creditConsumed = false;
 
   try {
     const body = await req.json();
     jobId = body?.jobId ?? null;
     const selectedModel = body?.model ?? 'nano-banana'; // Default to regular model
     const selectedResolution = body?.resolution ?? '2K'; // Default to 2K for Pro model
-    
+
     if (!jobId) return new Response("Job ID required", { status: 400, headers: cors });
 
     const KIE_API_KEY = Deno.env.get("KIE_API_KEY");
@@ -57,9 +61,11 @@ async function handler(req: Request) {
       .select("*")
       .eq("id", jobId)
       .single();
-    
+
     if (jobErr || !job)
       return new Response("Job not found", { status: 404, headers: cors });
+
+    jobUserId = job.user_id;
 
     // Determine credit cost based on model. Pro model costs 6 credits for
     // paying subscribers, but only 1 for free-tier users spending their
@@ -78,6 +84,7 @@ async function handler(req: Request) {
       creditAmount = isPayingSubscriber ? 6 : 1;
     }
     console.log(`[generate-text-image] Model: ${selectedModel}, Credits: ${creditAmount}`);
+    jobCreditsUsed = creditAmount;
 
     // Check and consume credits
     const { data: creditResult, error: creditError } = await supabase.rpc("consume_credit", {
@@ -91,9 +98,12 @@ async function handler(req: Request) {
         headers: cors
       });
     }
+    creditConsumed = true;
 
-    // Update job status to processing
-    await supabase.from("jobs").update({ status: "processing" }).eq("id", jobId);
+    // Update job status to processing, and record the actual credits_used
+    // immediately (not just at task-creation success) so a refund after any
+    // later failure always returns the amount actually consumed.
+    await supabase.from("jobs").update({ status: "processing", credits_used: creditAmount }).eq("id", jobId);
 
     // Determine aspect ratio
     let aspectRatio = "1:1"; // Default
@@ -144,7 +154,8 @@ async function handler(req: Request) {
       task_id: taskId,
       result_type: "image",
       status: "processing",
-      used_pro_model: selectedModel === 'nano-banana-pro'
+      used_pro_model: selectedModel === 'nano-banana-pro',
+      credits_used: creditAmount
     }).eq("id", jobId);
 
     // Log usage event immediately (credits already consumed)
@@ -170,20 +181,42 @@ async function handler(req: Request) {
 
   } catch (err: any) {
     console.error(`[generate-text-image] Error:`, err);
-    
+
+    const rawMessage = String(err?.message ?? err);
+    const category = classifyFailure(rawMessage);
+
     if (jobId) {
+      // Mark failed first (and persist credits_used, in case the failure
+      // happened before the earlier processing update ran) - refund_credit
+      // only refunds jobs already in status='failed', deriving the
+      // user/amount from the job row itself.
       await supabase
         .from("jobs")
-        .update({ 
-          status: "failed", 
-          error_message: String(err?.message ?? err),
+        .update({
+          status: "failed",
+          error_message: friendlyMessage(category),
+          failure_category: category,
+          credits_used: jobCreditsUsed,
           updated_at: new Date().toISOString()
         })
         .eq("id", jobId);
+
+      if (creditConsumed) {
+        await supabase.rpc("refund_credit", { job_uuid: jobId });
+        if (category === "safety_filter") {
+          await supabase.from("usage_events").insert({
+            user_id: jobUserId,
+            event_type: "safety_filter_rejected",
+            credits_consumed: 0,
+            job_id: jobId,
+            metadata: { raw_error: rawMessage }
+          });
+        }
+      }
     }
-    
+
     return new Response(
-      JSON.stringify({ error: String(err?.message ?? err) }),
+      JSON.stringify({ error: friendlyMessage(category) }),
       { status: 500, headers: { ...cors, "Content-Type": "application/json" } }
     );
   }

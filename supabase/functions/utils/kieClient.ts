@@ -236,6 +236,47 @@ export async function pollKieResult(
 }
 
 /**
+ * Resolve signed URLs for a job's reference images (uploads bucket, falling
+ * back to results bucket), same lookup generate-image-image/index.ts does
+ * inline - shared here so check-job-status's safety-filter retry can
+ * reconstruct the same input without a third copy of this logic.
+ * @param supabase - Supabase client (service role)
+ * @param job - job row with an image_ids array
+ */
+export async function resolveJobImageUrls(
+  supabase: any,
+  job: { image_ids?: string[] | null }
+): Promise<string[]> {
+  const imageIds = Array.isArray(job.image_ids) ? job.image_ids : [];
+  if (imageIds.length === 0) return [];
+
+  const { data: images, error: imagesError } = await supabase
+    .from("images")
+    .select("file_path")
+    .in("id", imageIds);
+
+  if (imagesError || !images || images.length === 0) return [];
+
+  const urls: string[] = [];
+  for (const img of images) {
+    const { data: uploadData, error: uploadError } = await supabase.storage
+      .from("uploads")
+      .createSignedUrl(img.file_path, 3600);
+    if (!uploadError && uploadData?.signedUrl) {
+      urls.push(uploadData.signedUrl);
+      continue;
+    }
+    const { data: resultData, error: resultError } = await supabase.storage
+      .from("results")
+      .createSignedUrl(img.file_path, 3600);
+    if (!resultError && resultData?.signedUrl) {
+      urls.push(resultData.signedUrl);
+    }
+  }
+  return urls;
+}
+
+/**
  * Download a file from a URL and return as Uint8Array
  * @param url - URL to download from
  * @returns File contents as Uint8Array

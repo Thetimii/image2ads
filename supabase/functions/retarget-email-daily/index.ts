@@ -1,9 +1,20 @@
-// Daily retarget email sequence.
-// Sends up to 3 emails to signed-up, non-subscribed users - day 1 (tips),
-// day 3 (feature highlight), day 7 (50% off close) - each exactly once,
-// tracked independently in retarget_email_log so nobody gets a step twice
-// and nobody gets the same message repeated.
-// Runs once per day via cron (see Supabase Dashboard > Cron Jobs).
+// Zero-activation win-back sequence: 2 emails to signed-up users who have
+// never completed a single generation - day 1 (nudge back to the upload
+// wizard) and day 3 (second nudge, different angle) - each sent exactly
+// once, tracked in retarget_email_log so nobody gets a step twice.
+//
+// Consolidates what used to be two separate, uncoordinated systems:
+// - the old /api/cron/send-reminders route (gated on time-since-first-job,
+//   so it only ever reached users who had ALREADY generated - the opposite
+//   of the activation problem - and its 15-minute-window step could never
+//   realistically fire against a once-daily cron) - retired.
+// - this function's old 3-step day1/day3/day7 sequence, which fired at
+//   every non-subscribed user regardless of whether they'd ever activated,
+//   and pitched Pro features at people who hadn't even tried a free
+//   generation yet - narrowed here to the zero-activation cohort only.
+//
+// Triggered daily by /api/cron/retarget-email (see vercel.json), not a
+// Supabase Dashboard cron - the trigger itself is now version-controlled.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -13,7 +24,7 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type",
 };
 
-interface User {
+interface Candidate {
   id: string;
   email: string;
   full_name: string | null;
@@ -51,25 +62,27 @@ interface Step {
   body: (firstName: string) => string;
 }
 
+// Both steps link straight to /dashboard rather than a special query param:
+// anyone in this zero-activation cohort still has tutorial_completed=false
+// (it's only set on skip or on an actual completed generation), so
+// /dashboard's normal redirect already lands them on the upload wizard.
 const STEPS: Step[] = [
   {
     key: "day1",
     minAgeDays: 1,
     maxAgeDays: 14,
-    subject: "3 quick tips to get better ads out of Image2Ad 🎨",
+    subject: "Your first ad is 1 tap away 📸",
     body: (firstName) => `
       <p style="font-size: 18px; margin-bottom: 20px;">Hey ${firstName},</p>
       <p style="font-size: 16px; margin-bottom: 20px;">
-        You signed up for <strong>Image2Ad</strong> yesterday - here are 3 quick things that make a big difference in the ads you get out of it:
+        You signed up for <strong>Image2Ad</strong> yesterday but haven't made your first ad yet - it takes about 15 seconds once you've got a photo.
       </p>
-      <ul style="font-size: 15px; padding-left: 20px; margin-bottom: 20px;">
-        <li style="margin-bottom: 12px;"><strong>Be specific in your prompt.</strong> "Product on a marble countertop with soft morning light" beats "nice background" every time.</li>
-        <li style="margin-bottom: 12px;"><strong>Upload a clean reference photo.</strong> Good lighting and a plain background on your source image = a much better generated result.</li>
-        <li style="margin-bottom: 12px;"><strong>Try nano-banana-pro for your best product.</strong> Higher resolution and sharper detail than the standard model - worth it for your hero shots.</li>
-      </ul>
+      <p style="font-size: 16px; margin-bottom: 20px;">
+        No photo handy? You can try it right now with one of our sample products - no upload needed.
+      </p>
       <div style="text-align: center; margin: 40px 0;">
         <a href="https://www.image2ad.com/dashboard" style="background: #FF5B7E; color: white; padding: 16px 40px; border-radius: 8px; text-decoration: none; font-size: 18px; font-weight: 600; display: inline-block;">
-          Create Another Ad →
+          Make My First Ad →
         </a>
       </div>
       <p style="font-size: 16px; margin-top: 30px;">Keep creating,<br><strong>— Tim from Image2Ad</strong></p>
@@ -79,59 +92,22 @@ const STEPS: Step[] = [
     key: "day3",
     minAgeDays: 3,
     maxAgeDays: 17,
-    subject: "What Pro creators do differently on Image2Ad",
+    subject: "Still haven't tried Image2Ad? Here's the fastest way in",
     body: (firstName) => `
       <p style="font-size: 18px; margin-bottom: 20px;">Hey ${firstName},</p>
       <p style="font-size: 16px; margin-bottom: 20px;">
-        A few things Pro users lean on that free accounts don't get to touch yet:
+        A few days in and you haven't generated your first ad yet - totally fine, here's the fastest path if you got stuck:
       </p>
-      <ul style="list-style: none; padding: 0; margin: 0 0 20px 0;">
-        <li style="padding: 8px 0; font-size: 15px;">✅ <strong>Video &amp; music generation</strong> - turn a still product shot into a moving ad</li>
-        <li style="padding: 8px 0; font-size: 15px;">✅ <strong>200 credits every month</strong> instead of spending down a one-time free batch</li>
-        <li style="padding: 8px 0; font-size: 15px;">✅ <strong>Full commercial usage rights</strong> on everything you generate</li>
-        <li style="padding: 8px 0; font-size: 15px;">✅ <strong>Priority generation</strong> - your jobs don't sit behind free-tier traffic</li>
+      <ul style="font-size: 15px; padding-left: 20px; margin-bottom: 20px;">
+        <li style="margin-bottom: 12px;">Tap <strong>Upload your product photo</strong> - your phone's camera roll opens automatically.</li>
+        <li style="margin-bottom: 12px;">No product photo ready? Tap one of the <strong>sample products</strong> instead - same result, zero upload.</li>
+        <li style="margin-bottom: 12px;">That's it. No prompt to write - we generate the first version for you automatically.</li>
       </ul>
       <div style="text-align: center; margin: 40px 0;">
-        <a href="https://www.image2ad.com/billing" style="background: #FF5B7E; color: white; padding: 16px 40px; border-radius: 8px; text-decoration: none; font-size: 18px; font-weight: 600; display: inline-block;">
-          See Pro Plans →
+        <a href="https://www.image2ad.com/dashboard" style="background: #FF5B7E; color: white; padding: 16px 40px; border-radius: 8px; text-decoration: none; font-size: 18px; font-weight: 600; display: inline-block;">
+          Try It Now →
         </a>
       </div>
-      <p style="font-size: 16px; margin-top: 30px;">Keep creating,<br><strong>— Tim from Image2Ad</strong></p>
-    `,
-  },
-  {
-    key: "day7",
-    minAgeDays: 7,
-    maxAgeDays: 21,
-    subject: "Your Image2Ad Pro Early Access – 50% Off 🎁",
-    body: (firstName) => `
-      <p style="font-size: 18px; margin-bottom: 20px;">Hey ${firstName},</p>
-      <p style="font-size: 16px; margin-bottom: 20px;">
-        Thanks for trying out <strong>Image2Ad</strong> this past week 👀
-      </p>
-      <p style="font-size: 16px; margin-bottom: 20px;">
-        Here's a surprise while your creativity's still hot – <strong style="color: #FF5B7E;">50% off your first month of Pro</strong>!
-      </p>
-      <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin: 30px 0;">
-        <p style="font-size: 16px; margin-bottom: 15px;">
-          🎁 Click the button below to unlock it automatically - no code needed:
-        </p>
-        <ul style="list-style: none; padding: 0; margin: 0;">
-          <li style="padding: 8px 0; font-size: 15px;">✅ <strong>200 credits</strong> per month</li>
-          <li style="padding: 8px 0; font-size: 15px;">✅ <strong>HD image &amp; video generation</strong></li>
-          <li style="padding: 8px 0; font-size: 15px;">✅ <strong>Full commercial use</strong></li>
-          <li style="padding: 8px 0; font-size: 15px;">✅ <strong>Priority support</strong></li>
-        </ul>
-      </div>
-      <div style="text-align: center; margin: 40px 0;">
-        <a href="https://www.image2ad.com/billing?promo=pro20limited" style="background: #FF5B7E; color: white; padding: 16px 40px; border-radius: 8px; text-decoration: none; font-size: 18px; font-weight: 600; display: inline-block; box-shadow: 0 4px 6px rgba(255,91,126,0.3);">
-          Activate My 50% Off 🚀
-        </a>
-      </div>
-      <p style="font-size: 14px; color: #666; margin-top: 30px; padding-top: 30px; border-top: 1px solid #eee;">
-        <strong>Offer valid for 1 hour after you click.</strong><br>
-        This is a one-time exclusive offer for early creators like you.
-      </p>
       <p style="font-size: 16px; margin-top: 30px;">Keep creating,<br><strong>— Tim from Image2Ad</strong></p>
     `,
   },
@@ -152,7 +128,7 @@ Deno.serve(async (req) => {
       throw new Error("BREVO_API_KEY environment variable not set");
     }
 
-    const results: Record<string, { sent: number; errors: number }> = {};
+    const results: Record<string, { sent: number; errors: number; skipped_activated: number }> = {};
 
     for (const step of STEPS) {
       console.log(`Processing retarget step: ${step.key}`);
@@ -170,14 +146,26 @@ Deno.serve(async (req) => {
 
       if (queryError) {
         console.error(`Error querying candidates for ${step.key}:`, queryError);
-        results[step.key] = { sent: 0, errors: 1 };
+        results[step.key] = { sent: 0, errors: 1, skipped_activated: 0 };
         continue;
       }
 
       if (!candidates || candidates.length === 0) {
-        results[step.key] = { sent: 0, errors: 0 };
+        results[step.key] = { sent: 0, errors: 0, skipped_activated: 0 };
         continue;
       }
+
+      // Zero-activation gate: exclude anyone with at least one completed
+      // job. Deliberately NOT using profiles.total_generations - that
+      // column increments on job INSERT (i.e. attempts), not on success,
+      // so it can't distinguish "never tried" from "tried and failed".
+      const { data: completedJobs } = await supabase
+        .from("jobs")
+        .select("user_id")
+        .eq("status", "completed")
+        .in("user_id", candidates.map((c) => c.id));
+
+      const activatedIds = new Set((completedJobs || []).map((j) => j.user_id));
 
       // Filter out anyone already sent this specific step
       const { data: alreadySent } = await supabase
@@ -187,14 +175,18 @@ Deno.serve(async (req) => {
         .in("user_id", candidates.map((c) => c.id));
 
       const alreadySentIds = new Set((alreadySent || []).map((r) => r.user_id));
-      const eligible = (candidates as User[]).filter((c) => !alreadySentIds.has(c.id));
+
+      const skippedActivated = candidates.filter((c) => activatedIds.has(c.id) && !alreadySentIds.has(c.id)).length;
+      const eligible = (candidates as Candidate[]).filter(
+        (c) => !alreadySentIds.has(c.id) && !activatedIds.has(c.id)
+      );
 
       let sent = 0;
       let errors = 0;
 
-      for (const user of eligible) {
+      for (const candidate of eligible) {
         try {
-          const firstName = user.full_name?.split(" ")[0] || "creator";
+          const firstName = candidate.full_name?.split(" ")[0] || "creator";
           const htmlContent = wrapEmail(step.body(firstName));
 
           const brevoResponse = await fetch("https://api.brevo.com/v3/smtp/email", {
@@ -206,7 +198,7 @@ Deno.serve(async (req) => {
             },
             body: JSON.stringify({
               sender: { name: "Tim from Image2Ad", email: "hello@image2ad.com" },
-              to: [{ email: user.email, name: user.full_name || "creator" }],
+              to: [{ email: candidate.email, name: candidate.full_name || "creator" }],
               subject: step.subject,
               htmlContent,
             }),
@@ -219,22 +211,22 @@ Deno.serve(async (req) => {
 
           const { error: logError } = await supabase
             .from("retarget_email_log")
-            .insert({ user_id: user.id, step: step.key });
+            .insert({ user_id: candidate.id, step: step.key });
 
           if (logError) {
-            console.error(`Error logging ${step.key} for user ${user.id}:`, logError);
+            console.error(`Error logging ${step.key} for user ${candidate.id}:`, logError);
           }
 
           sent++;
           await new Promise((resolve) => setTimeout(resolve, 100));
         } catch (error) {
-          console.error(`Error sending ${step.key} to user ${user.id}:`, error);
+          console.error(`Error sending ${step.key} to user ${candidate.id}:`, error);
           errors++;
         }
       }
 
-      console.log(`Step ${step.key}: ${sent} sent, ${errors} errors`);
-      results[step.key] = { sent, errors };
+      console.log(`Step ${step.key}: ${sent} sent, ${errors} errors, ${skippedActivated} skipped (already activated)`);
+      results[step.key] = { sent, errors, skipped_activated: skippedActivated };
     }
 
     return new Response(

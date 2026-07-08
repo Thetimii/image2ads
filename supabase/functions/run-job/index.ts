@@ -1,5 +1,6 @@
 // deno-lint-ignore-file no-explicit-any
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { classifyFailure, friendlyMessage, sanitizePromptForRetry } from "../utils/errorClassifier.ts";
 const supabase = createClient(
   Deno.env.get("SUPABASE_URL") ?? "",
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
@@ -190,6 +191,10 @@ async function handler(req: Request) {
     return new Response("Method not allowed", { status: 405, headers: cors });
 
   let jobId: string | null = null;
+  let jobUserId: string | null = null;
+  let jobCreditsUsed = 1;
+  let jobPrompt = "";
+  let creditConsumed = false;
 
   try {
     const body = await req.json();
@@ -206,6 +211,10 @@ async function handler(req: Request) {
       .single();
     if (jobErr || !job)
       return new Response("Job not found", { status: 404, headers: cors });
+
+    jobUserId = job.user_id;
+    jobCreditsUsed = job.credits_used ?? 1;
+    jobPrompt = job.prompt || "";
 
     const imageIds = Array.isArray(job.image_ids) ? job.image_ids : [];
     console.log(`[run-job] Job analysis:`, {
@@ -287,24 +296,39 @@ async function handler(req: Request) {
         status: creditError ? 500 : 402,
         headers: cors
       });
+    creditConsumed = true;
 
     console.log(`[run-job] Starting generation with ${files.length} files and prompt length ${prompt.length}`);
-    
-    const outBytes = await openaiGenerate({
-      prompt,
-      pngFiles: files, // Let openaiGenerate handle the logic
-      size,
-      quality: "medium",
-      apiKey: OPENAI_API_KEY,
-      timeoutMs: 90000 // 90 seconds timeout
-    });
-    
-    console.log(`[run-job] Generation completed, result size: ${outBytes.length} bytes`);
-    
-    // Validate the result
-    if (!outBytes || outBytes.length === 0) {
-      throw new Error("Generation failed: Empty result from AI");
+
+    async function attemptGenerate(promptToUse: string) {
+      const bytes = await openaiGenerate({
+        prompt: promptToUse,
+        pngFiles: files, // Let openaiGenerate handle the logic
+        size,
+        quality: "medium",
+        apiKey: OPENAI_API_KEY as string,
+        timeoutMs: 90000 // 90 seconds timeout
+      });
+      if (!bytes || bytes.length === 0) {
+        throw new Error("Generation failed: Empty result from AI");
+      }
+      return bytes;
     }
+
+    let outBytes: Uint8Array;
+    try {
+      outBytes = await attemptGenerate(prompt);
+    } catch (firstErr: any) {
+      const category = classifyFailure(String(firstErr?.message ?? firstErr));
+      if (category === "safety_filter") {
+        console.log(`[run-job] Safety-filter rejection, retrying once with sanitized prompt`);
+        outBytes = await attemptGenerate(sanitizePromptForRetry(prompt));
+      } else {
+        throw firstErr;
+      }
+    }
+
+    console.log(`[run-job] Generation completed, result size: ${outBytes.length} bytes`);
 
     const userId = job.user_id as string;
     // Determine the correct result folder based on job type
@@ -341,12 +365,33 @@ async function handler(req: Request) {
       headers: { ...cors, "Content-Type": "application/json" }
     });
   } catch (err: any) {
-    if (jobId)
+    const rawMessage = String(err?.message ?? err);
+    const category = classifyFailure(rawMessage);
+
+    if (jobId) {
+      // Mark failed first - refund_credit only refunds jobs already in
+      // status='failed', which also makes it safe to expose to nothing but
+      // this service-role client (no caller-supplied amount/user to trust).
       await supabase
         .from("jobs")
-        .update({ status: "failed", error_message: String(err?.message ?? err) })
+        .update({ status: "failed", error_message: friendlyMessage(category), failure_category: category })
         .eq("id", jobId);
-    return new Response(JSON.stringify({ error: String(err?.message ?? err) }), {
+
+      if (creditConsumed) {
+        await supabase.rpc("refund_credit", { job_uuid: jobId });
+        if (category === "safety_filter") {
+          await supabase.from("usage_events").insert({
+            user_id: jobUserId,
+            event_type: "safety_filter_rejected",
+            credits_consumed: 0,
+            job_id: jobId,
+            metadata: { prompt: jobPrompt, raw_error: rawMessage }
+          });
+        }
+      }
+    }
+
+    return new Response(JSON.stringify({ error: friendlyMessage(category) }), {
       status: 500,
       headers: { ...cors, "Content-Type": "application/json" }
     });
