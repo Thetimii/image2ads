@@ -113,6 +113,25 @@ export default async function BlogPostPage({
               ))}
             </div>
           </section>
+
+          {post.relatedSlugs && post.relatedSlugs.length > 0 && (
+            <section className="mt-16">
+              <h2 className="text-2xl font-semibold text-gray-900 mb-4">Keep reading</h2>
+              <ul className="space-y-2 list-disc pl-5">
+                {post.relatedSlugs.map((slug) => {
+                  const related = getBlogPost(slug)
+                  if (!related) return null
+                  return (
+                    <li key={slug}>
+                      <Link href={`/blog/${related.slug}`} className="text-blue-600 hover:text-blue-800">
+                        {related.title}
+                      </Link>
+                    </li>
+                  )
+                })}
+              </ul>
+            </section>
+          )}
         </div>
 
         <div className="mt-16 pt-8 border-t border-gray-200 text-center">
