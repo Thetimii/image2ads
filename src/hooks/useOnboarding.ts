@@ -8,8 +8,15 @@ import type { Profile } from '@/lib/validations'
 export function useOnboarding(user: User, profile: Profile) {
   const [shouldShowOnboarding, setShouldShowOnboarding] = useState(false)
   const [isSkipped, setIsSkipped] = useState(false)
+  // Set once the upload wizard hands off to a normal generation, so every
+  // piece of the old "spotlight the tutorial" system (the full-page dark
+  // overlay, the glowing chip, the special progress/toast copy) turns off
+  // together instead of needing to be tracked down one at a time - the
+  // wizard flow doesn't want any of that, it should just look like a
+  // normal generation once it's underway.
+  const [wizardHandled, setWizardHandled] = useState(false)
   // Simplified: Just highlight the send button if tutorial not completed AND not skipped locally
-  const shouldHighlightGenerate = !profile.tutorial_completed && !isSkipped
+  const shouldHighlightGenerate = !profile.tutorial_completed && !isSkipped && !wizardHandled
   const [shouldShowUpgrade, setShouldShowUpgrade] = useState(false)
   const [prefillPrompt, setPrefillPrompt] = useState<string>('')
   const supabase = createClient()
@@ -39,6 +46,7 @@ export function useOnboarding(user: User, profile: Profile) {
   // keep the "Upload" chip glowing as if nothing had been uploaded yet.
   const dismissOnboarding = useCallback(() => {
     setShouldShowOnboarding(false)
+    setWizardHandled(true)
   }, [])
 
   const handleSkipOnboarding = useCallback(async () => {
