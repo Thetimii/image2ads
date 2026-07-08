@@ -31,6 +31,16 @@ export function useOnboarding(user: User, profile: Profile) {
     setTutorialMode(mode)
   }, [])
 
+  // Used by the upload wizard, which uploads and sends immediately itself -
+  // unlike handleOnboardingComplete, this doesn't set prefillPrompt or
+  // tutorialMode, since both of those exist to guide a user through a
+  // manual upload+send step that the wizard has already done. Setting them
+  // here would re-fill the input box right after sendPrompt clears it, and
+  // keep the "Upload" chip glowing as if nothing had been uploaded yet.
+  const dismissOnboarding = useCallback(() => {
+    setShouldShowOnboarding(false)
+  }, [])
+
   const handleSkipOnboarding = useCallback(async () => {
     console.log('Skipping onboarding')
     setShouldShowOnboarding(false)
@@ -80,6 +90,7 @@ export function useOnboarding(user: User, profile: Profile) {
     shouldShowUpgrade,
     prefillPrompt,
     handleOnboardingComplete,
+    dismissOnboarding,
     handleSkipOnboarding,
     handleFirstGeneration,
     checkCreditsAndShowUpgrade,

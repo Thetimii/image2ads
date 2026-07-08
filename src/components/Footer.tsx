@@ -40,7 +40,7 @@ const Footer = () => {
             </div>
             
             <a
-              href="/signin"
+              href="/signup"
               className="px-6 py-3 text-white font-semibold rounded-full bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 transition-all duration-300 hover:scale-105"
             >
               Get Started

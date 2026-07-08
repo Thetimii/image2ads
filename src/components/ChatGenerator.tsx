@@ -189,7 +189,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
     shouldHighlightGenerate,
     shouldShowUpgrade,
     prefillPrompt,
-    handleOnboardingComplete,
+    dismissOnboarding,
     handleSkipOnboarding,
     handleFirstGeneration,
     checkCreditsAndShowUpgrade,
@@ -225,7 +225,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
   }, [pendingWizardSubmit])
 
   const handleWizardSubmit = (file: File | null, prompt: string) => {
-    handleOnboardingComplete(prompt, file ? 'product' : 'artist')
+    dismissOnboarding()
     if (file) {
       setLocalFiles([file])
       setLocalPreviews([URL.createObjectURL(file)])
