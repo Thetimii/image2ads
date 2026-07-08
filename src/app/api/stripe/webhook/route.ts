@@ -162,7 +162,7 @@ export async function POST(req: NextRequest) {
 
               if (profile?.email) {
                 const amount = (session.amount_total || 0) / 100;
-                const currency = session.currency || 'chf';
+                const currency = session.currency || 'usd';
                 
                 await trackPurchase({
                   email: profile.email,
@@ -203,7 +203,7 @@ export async function POST(req: NextRequest) {
                 p_event_name: 'trial_started',
                 p_properties: {
                   amount: (session.amount_total || 0) / 100,
-                  currency: (session.currency || 'chf').toUpperCase(),
+                  currency: (session.currency || 'usd').toUpperCase(),
                   plan: 'pro_trial',
                 },
               });

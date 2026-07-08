@@ -210,8 +210,8 @@ export default function ProDiscountModal({ onCloseAction, onUpgradeAction }: Pro
               <h3 className="text-lg sm:text-xl font-bold text-gray-900">Pro Plan</h3>
               <div className="mt-2 flex flex-col items-center">
                 <div className="flex items-baseline gap-2">
-                  <span className="text-xl sm:text-2xl font-bold text-gray-400 line-through">CHF {originalPrice}</span>
-                  <span className="text-3xl sm:text-4xl font-bold text-gray-900">CHF {discountedPrice}</span>
+                  <span className="text-xl sm:text-2xl font-bold text-gray-400 line-through">${originalPrice}</span>
+                  <span className="text-3xl sm:text-4xl font-bold text-gray-900">${discountedPrice}</span>
                 </div>
                 <div className="flex items-center gap-2 mt-1">
                   <span className="text-gray-500 text-sm sm:text-base">/month</span>
