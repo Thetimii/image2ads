@@ -150,8 +150,11 @@ async function handler(req: Request) {
 
     console.log(`[generate-image-image-free] Daily limit check passed: ${count}/100`);
 
-    // Update job status to processing
-    await supabase.from("jobs").update({ status: "processing" }).eq("id", jobId);
+    // Update job status to processing. credits_used is set to 0 explicitly
+    // (the jobs table otherwise defaults it to 1) so that any later
+    // timeout/refund logic never mistakenly credits a free-tier user who
+    // never actually had a credit taken.
+    await supabase.from("jobs").update({ status: "processing", credits_used: 0 }).eq("id", jobId);
 
     // Determine aspect ratio
     let aspectRatio = "1:1"; // Default

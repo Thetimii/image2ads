@@ -159,9 +159,16 @@ async function handler(req: Request) {
     };
     console.log(`[generate-image-video] Task payload:`, taskPayload);
 
+    // Video jobs previously had no callback wiring at all - completion
+    // depended 100% on the client staying on the page and polling
+    // check-job-status. Wire the same webhook every image job uses so Kie.ai
+    // can notify us the moment the render finishes, independent of the tab.
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const callbackUrl = `${supabaseUrl}/functions/v1/kie-callback`;
+
     const kieModel = 'veo3_fast'
     console.log('[generate-image-video] Veo 3.1 model:', kieModel, 'payload:', taskPayload)
-    const taskId = await createKieTask(kieModel, taskPayload, KIE_API_KEY)
+    const taskId = await createKieTask(kieModel, taskPayload, KIE_API_KEY, callbackUrl)
 
     console.log(`[generate-image-video] Task created: ${taskId}`);
 

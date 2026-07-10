@@ -111,8 +111,16 @@ async function handler(req: Request) {
       aspectRatio: aspectRatio,
       enableTranslation: true, // Auto-translate prompts to English for better results
     }
+
+    // Video jobs previously had no callback wiring at all - completion
+    // depended 100% on the client staying on the page and polling
+    // check-job-status. Wire the same webhook every image job uses so Kie.ai
+    // can notify us the moment the render finishes, independent of the tab.
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const callbackUrl = `${supabaseUrl}/functions/v1/kie-callback`;
+
     console.log('[generate-text-video] Veo 3.1 model:', kieModel, 'input:', taskInput)
-    const taskId = await createKieTask(kieModel, taskInput, KIE_API_KEY)
+    const taskId = await createKieTask(kieModel, taskInput, KIE_API_KEY, callbackUrl)
 
     console.log(`[generate-text-video] Task created: ${taskId}`);
 

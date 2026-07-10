@@ -32,19 +32,25 @@ interface TaskResult {
  * @param model - Model to use (e.g., "google/nano-banana", "veo3_fast", "suno-v3.5")
  * @param input - Model-specific input parameters
  * @param apiKey - Kie.ai API key
+ * @param callBackUrl - Optional webhook URL Kie.ai will POST to on completion.
+ *   Previous versions of every caller computed this and passed it as a 4th
+ *   argument, but this function's signature only accepted 3 params, so the
+ *   URL was silently dropped and never reached Kie.ai's payload - webhooks
+ *   never fired for any job. Fixed by actually accepting and forwarding it.
  * @returns taskId for polling
  */
 export async function createKieTask(
   model: string,
   input: Record<string, any>,
-  apiKey: string
+  apiKey: string,
+  callBackUrl?: string
 ): Promise<string> {
   // Veo 3.1 models use a different endpoint and payload structure
   const isVeoModel = model === "veo3" || model === "veo3_fast";
-  
+
   let endpoint: string;
   let payload: any;
-  
+
   if (isVeoModel) {
     // Veo 3.1 uses /api/v1/veo/generate endpoint with flat payload structure
     endpoint = "https://api.kie.ai/api/v1/veo/generate";
@@ -52,6 +58,7 @@ export async function createKieTask(
       model,
       ...input, // Spread input directly (prompt, imageUrls, aspectRatio, generationType, etc.)
     };
+    if (callBackUrl) payload.callBackUrl = callBackUrl;
   } else {
     // Legacy models use /api/v1/jobs/createTask endpoint with nested structure
     endpoint = `${KIE_BASE_URL}/createTask`;
@@ -59,8 +66,9 @@ export async function createKieTask(
       model,
       input,
     };
+    if (callBackUrl) payload.callBackUrl = callBackUrl;
   }
-  
+
   console.log('[kieClient] 🚀 EXACT PAYLOAD BEING SENT TO KIE.AI:', JSON.stringify(payload, null, 2));
   console.log('[kieClient] 📍 Endpoint:', endpoint);
   
