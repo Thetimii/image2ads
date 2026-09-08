@@ -1034,11 +1034,19 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
         }
       }
 
+      // The edge functions authorize the caller as the owner of the job, so
+      // they need the user's session token - the anon key is not accepted.
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session?.access_token) {
+        throw new Error('Your session expired. Please sign in again.')
+      }
+
       const resp = await fetch(endpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`
+          'Authorization': `Bearer ${session.access_token}`,
+          'apikey': process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? ''
         },
         body: JSON.stringify(requestBody),
         signal: controller.signal
@@ -1170,10 +1178,17 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
         console.log(`[ChatGenerator] ⏰ Fallback timeout reached, checking job status manually...`)
         const pollForResult = async (): Promise<void> => {
           try {
+            const { data: { session: pollSession } } = await supabase.auth.getSession()
+            if (!pollSession?.access_token) {
+              console.error('[ChatGenerator] No session for fallback status check')
+              return
+            }
+
             const statusResp = await fetch(`${CHECK_JOB_STATUS_ENDPOINT}?jobId=${job.id}`, {
               method: 'GET',
               headers: {
-                'Authorization': `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`
+                'Authorization': `Bearer ${pollSession.access_token}`,
+                'apikey': process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? ''
               }
             })
 

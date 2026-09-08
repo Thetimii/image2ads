@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { edgeFunctionUrl, internalFunctionHeaders } from '@/lib/edge-functions'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -13,19 +14,15 @@ export async function GET(req: NextRequest) {
     return new NextResponse('Unauthorized', { status: 401 })
   }
 
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-  if (!supabaseUrl || !serviceRoleKey) {
+  const internalHeaders = internalFunctionHeaders()
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !internalHeaders) {
     return NextResponse.json({ error: 'missing supabase config' }, { status: 500 })
   }
 
   try {
-    const resp = await fetch(`${supabaseUrl}/functions/v1/retarget-email-daily`, {
+    const resp = await fetch(edgeFunctionUrl('retarget-email-daily'), {
       method: 'POST',
-      headers: {
-        Authorization: `Bearer ${serviceRoleKey}`,
-        'Content-Type': 'application/json',
-      },
+      headers: internalHeaders,
     })
 
     const body = await resp.json().catch(() => ({}))

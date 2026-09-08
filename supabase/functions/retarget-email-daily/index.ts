@@ -17,6 +17,7 @@
 // Supabase Dashboard cron - the trigger itself is now version-controlled.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { authorizeInternal } from "../utils/auth.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -116,6 +117,11 @@ const STEPS: Step[] = [
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
+  }
+
+  const auth = authorizeInternal(req);
+  if (!auth.ok) {
+    return new Response(auth.message, { status: auth.status, headers: corsHeaders });
   }
 
   try {

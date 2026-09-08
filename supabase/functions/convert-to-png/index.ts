@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
+import { authorizeInternal } from "../utils/auth.ts"
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*", // you can restrict later
@@ -100,6 +101,15 @@ serve(async (req) => {
   if (req.method !== "POST") {
     return new Response(JSON.stringify({ error: "Method not allowed" }), {
       status: 405,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    })
+  }
+
+  // Only our own /api/upload-png route calls this.
+  const auth = authorizeInternal(req)
+  if (!auth.ok) {
+    return new Response(JSON.stringify({ error: auth.message }), {
+      status: auth.status,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     })
   }

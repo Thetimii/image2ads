@@ -4,6 +4,7 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { createJobSchema } from "@/lib/validations";
 import { createJob, getUserProfile } from "@/lib/database";
 import { billableCredits, parseOpenAIModel } from "@/lib/credits";
+import { edgeFunctionUrl, internalFunctionHeaders } from "@/lib/edge-functions";
 
 export async function POST(request: NextRequest) {
   console.log('[API] /api/generate-ad called')
@@ -181,20 +182,25 @@ export async function POST(request: NextRequest) {
     }
 
     // 7) Fire the edge function (best-effort)
-    const edgeFunctionUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/run-job`;
+    const runJobUrl = edgeFunctionUrl("run-job");
+    const internalHeaders = internalFunctionHeaders();
 
     console.log('Triggering edge function:', {
-      url: edgeFunctionUrl,
+      url: runJobUrl,
       jobId: job.id,
-      hasServiceRoleKey: !!process.env.SUPABASE_SERVICE_ROLE_KEY
+      hasInternalSecret: !!internalHeaders
     });
 
-    const edgeResponse = await fetch(edgeFunctionUrl, {
+    if (!internalHeaders) {
+      return NextResponse.json(
+        { error: "Server misconfigured: INTERNAL_FUNCTION_SECRET is not set" },
+        { status: 500 }
+      );
+    }
+
+    const edgeResponse = await fetch(runJobUrl, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
-      },
+      headers: internalHeaders,
       body: JSON.stringify({ jobId: job.id }),
     });
 

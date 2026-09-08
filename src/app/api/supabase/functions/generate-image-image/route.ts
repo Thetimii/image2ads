@@ -5,12 +5,22 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-    
-    if (!supabaseUrl || !supabaseAnonKey) {
+
+    if (!supabaseUrl) {
       return NextResponse.json(
         { error: 'Supabase configuration missing' },
         { status: 500 }
+      )
+    }
+
+    // The edge function authorizes the caller as the owner of the job, so the
+    // user's own session token has to be passed straight through - the anon key
+    // is rejected by the platform and would not prove ownership anyway.
+    const authorization = request.headers.get('authorization')
+    if (!authorization) {
+      return NextResponse.json(
+        { error: 'Missing authorization header' },
+        { status: 401 }
       )
     }
 
@@ -20,7 +30,7 @@ export async function POST(request: NextRequest) {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${supabaseAnonKey}`,
+          'Authorization': authorization,
         },
         body: JSON.stringify(body),
       }

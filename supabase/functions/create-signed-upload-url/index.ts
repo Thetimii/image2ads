@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
+import { getRequestUser } from "../utils/auth.ts"
 
 // Deno global declarations
 declare const Deno: {
@@ -31,16 +32,41 @@ serve(async (req: Request) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
     )
 
-    const { userId, folderId, fileName, contentType } = await req.json()
+    const { folderId, fileName, contentType } = await req.json()
 
-    if (!userId || !folderId || !fileName) {
+    if (!folderId || !fileName) {
       return new Response(JSON.stringify({ error: "Missing required fields" }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       })
     }
 
-    const filePath = `${userId}/${folderId}/${fileName}`
+    // The owner comes from the verified session token, never from the request
+    // body - otherwise any caller could mint an upload URL into someone else's
+    // storage prefix.
+    const user = await getRequestUser(req)
+    if (!user) {
+      return new Response(JSON.stringify({ error: "Missing or invalid session token" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      })
+    }
+
+    const { data: folder } = await supabase
+      .from("folders")
+      .select("id")
+      .eq("id", folderId)
+      .eq("user_id", user.id)
+      .maybeSingle()
+
+    if (!folder) {
+      return new Response(JSON.stringify({ error: "Folder not found" }), {
+        status: 404,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      })
+    }
+
+    const filePath = `${user.id}/${folderId}/${fileName}`
 
     // Create signed upload URL
     const { data, error } = await supabase.storage

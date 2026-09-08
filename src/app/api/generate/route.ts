@@ -4,6 +4,7 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { createJobSchema } from "@/lib/validations";
 import { createJob, getUserProfile } from "@/lib/database";
 import { billableCredits, parseOpenAIModel } from "@/lib/credits";
+import { edgeFunctionUrl, internalFunctionHeaders } from "@/lib/edge-functions";
 
 export async function POST(request: NextRequest) {
   try {
@@ -188,16 +189,14 @@ export async function POST(request: NextRequest) {
     }
 
     // 7) Fire the edge function (best-effort)
-    const edgeFunctionUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/run-job`;
-
-    fetch(edgeFunctionUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
-      },
-      body: JSON.stringify({ jobId: job.id }),
-    }).catch((e) => console.error("Failed to trigger edge function:", e));
+    const internalHeaders = internalFunctionHeaders();
+    if (internalHeaders) {
+      fetch(edgeFunctionUrl("run-job"), {
+        method: "POST",
+        headers: internalHeaders,
+        body: JSON.stringify({ jobId: job.id }),
+      }).catch((e) => console.error("Failed to trigger edge function:", e));
+    }
 
     return NextResponse.json({
       job,

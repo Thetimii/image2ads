@@ -1,0 +1,55 @@
+project_id = "cqnaooicfxqtnbuwsopu"
+
+# The platform's built-in verify_jwt check only understands this project's
+# legacy HS256 API keys, and it now rejects them with UNAUTHORIZED_LEGACY_JWT
+# before any function code runs - which took down every generation endpoint at
+# once. Per Supabase's 401 troubleshooting guide the fix is to turn that check
+# off and authorize inside the function instead.
+#
+# Every function below authorizes its own callers via
+# supabase/functions/utils/auth.ts:
+#   - browser callers send the user's session token and must own the job
+#   - our backends send x-internal-secret (INTERNAL_FUNCTION_SECRET)
+#
+# Do not flip any of these back to true without first confirming the platform
+# check accepts the tokens the app actually sends.
+
+[functions.generate-text-image]
+verify_jwt = false
+
+[functions.generate-text-image-free]
+verify_jwt = false
+
+[functions.generate-image-image]
+verify_jwt = false
+
+[functions.generate-image-image-free]
+verify_jwt = false
+
+[functions.generate-text-video]
+verify_jwt = false
+
+[functions.generate-image-video]
+verify_jwt = false
+
+[functions.check-job-status]
+verify_jwt = false
+
+[functions.run-job]
+verify_jwt = false
+
+[functions.retarget-email-daily]
+verify_jwt = false
+
+# Already deployed with the check off; listed so the setting is explicit.
+[functions.create-signed-upload-url]
+verify_jwt = false
+
+[functions.convert-to-png]
+verify_jwt = false
+
+[functions.kie-callback]
+verify_jwt = false
+
+[functions.sweep-stuck-jobs]
+verify_jwt = false

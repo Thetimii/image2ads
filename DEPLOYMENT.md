@@ -21,25 +21,45 @@ STRIPE_BUSINESS_PRICE_ID=price_your-business-price-id
 # FAL.ai
 FAL_API_KEY=your-fal-api-key
 
+# Shared secret for server-to-server Edge Function calls.
+# Must match the INTERNAL_FUNCTION_SECRET set in Supabase function secrets.
+INTERNAL_FUNCTION_SECRET=your-long-random-string
+
 # App
 NEXT_PUBLIC_APP_URL=https://your-domain.com
 ```
+
+## Edge Function authentication
+
+The Supabase platform's built-in `verify_jwt` check only understands this
+project's legacy HS256 API keys, and it now rejects them with
+`UNAUTHORIZED_LEGACY_JWT` before any function code runs. All functions are
+therefore deployed with `--no-verify-jwt` and authorize their own callers in
+`supabase/functions/utils/auth.ts`:
+
+| Caller | Sends | Checked against |
+| --- | --- | --- |
+| Browser | `Authorization: Bearer <user session token>` | the job's `user_id` must match the signed-in user |
+| Our backend (API routes, cron) | `x-internal-secret` | `INTERNAL_FUNCTION_SECRET` |
+
+Never pass the `anon` or `service_role` key as a bearer token to a function -
+the gateway rejects it, and it would not prove ownership anyway.
 
 ## Supabase Setup Checklist
 
 1. ✅ Create Supabase project
 2. ✅ Run schema.sql in SQL editor
 3. ✅ Set up storage buckets (uploads, results)
-4. ✅ Deploy edge functions:
+4. ✅ Deploy edge functions (all with `--no-verify-jwt`, see above):
    ```bash
-   supabase functions deploy stripe-webhook
-   supabase functions deploy run-job
+   ./supabase/deploy.sh
    ```
 5. ✅ Set edge function environment variables:
    ```bash
    supabase secrets set STRIPE_SECRET_KEY=your-key
    supabase secrets set STRIPE_WEBHOOK_SECRET=your-secret
    supabase secrets set FAL_API_KEY=your-key
+   supabase secrets set INTERNAL_FUNCTION_SECRET=your-long-random-string
    ```
 
 ## Stripe Setup Checklist

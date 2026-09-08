@@ -1,6 +1,7 @@
 // deno-lint-ignore-file no-explicit-any
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { createKieTask, pollKieResult, downloadFile } from "../utils/kieClient.ts";
+import { authorizeJob } from "../utils/auth.ts";
 
 const supabase = createClient(
   Deno.env.get("SUPABASE_URL") ?? "",
@@ -60,6 +61,10 @@ async function handler(req: Request) {
 
     if (jobErr || !job)
       return new Response("Job not found", { status: 404, headers: cors });
+
+    const auth = await authorizeJob(req, job.user_id);
+    if (!auth.ok)
+      return new Response(auth.message, { status: auth.status, headers: cors });
 
     // FREE TIER: No credit deduction
     // Instead, check daily limit (100 images/day)

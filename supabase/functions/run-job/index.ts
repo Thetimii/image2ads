@@ -1,6 +1,7 @@
 // deno-lint-ignore-file no-explicit-any
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { classifyFailure, friendlyMessage, sanitizePromptForRetry } from "../utils/errorClassifier.ts";
+import { authorizeJob } from "../utils/auth.ts";
 const supabase = createClient(
   Deno.env.get("SUPABASE_URL") ?? "",
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
@@ -211,6 +212,10 @@ async function handler(req: Request) {
       .single();
     if (jobErr || !job)
       return new Response("Job not found", { status: 404, headers: cors });
+
+    const auth = await authorizeJob(req, job.user_id);
+    if (!auth.ok)
+      return new Response(auth.message, { status: auth.status, headers: cors });
 
     jobUserId = job.user_id;
     jobCreditsUsed = job.credits_used ?? 1;

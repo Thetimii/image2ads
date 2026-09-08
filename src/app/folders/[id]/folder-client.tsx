@@ -359,14 +359,21 @@ export default function FolderClient({ user, profile, folder, initialImages }: F
           const fileName = `${timestamp}-${randomId}.${ext}`
 
           // Get signed upload URL
+          // The function derives the owner from this token, so the upload can
+          // only ever land in the signed-in user's own storage prefix.
+          const { data: { session } } = await supabase.auth.getSession()
+          if (!session?.access_token) {
+            throw new Error('Your session expired. Please sign in again.')
+          }
+
           const signedUrlResponse = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/create-signed-upload-url`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              'Authorization': `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY}`,
+              'Authorization': `Bearer ${session.access_token}`,
+              'apikey': process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? '',
             },
             body: JSON.stringify({
-              userId: user.id,
               folderId: folder.id,
               fileName: fileName,
               contentType: file.type || 'application/octet-stream'

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { edgeFunctionUrl, internalFunctionHeaders } from '@/lib/edge-functions'
 
 // Configure route for 20MB uploads and longer timeouts
 export const maxDuration = 60 // 60 seconds for large uploads
@@ -58,12 +59,14 @@ export async function POST(request: NextRequest) {
           throw new Error('Supabase URL not configured')
         }
         
-        const convertResponse = await fetch(`${supabaseUrl}/functions/v1/convert-to-png`, {
+        const internalHeaders = internalFunctionHeaders()
+        if (!internalHeaders) {
+          throw new Error('INTERNAL_FUNCTION_SECRET not configured')
+        }
+
+        const convertResponse = await fetch(edgeFunctionUrl('convert-to-png'), {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
-          },
+          headers: internalHeaders,
           body: JSON.stringify({
             imageData,
             originalName: file.name,

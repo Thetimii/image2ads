@@ -2,6 +2,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { createKieTask, resolveJobImageUrls } from "../utils/kieClient.ts";
 import { classifyFailure, friendlyMessage, sanitizePromptForRetry } from "../utils/errorClassifier.ts";
+import { authorizeJob } from "../utils/auth.ts";
 
 const supabase = createClient(
   Deno.env.get("SUPABASE_URL") ?? "",
@@ -74,6 +75,10 @@ async function handler(req: Request) {
       return new Response("Job not found", { status: 404, headers: cors });
     }
     jobRecord = job;
+
+    const auth = await authorizeJob(req, job.user_id);
+    if (!auth.ok)
+      return new Response(auth.message, { status: auth.status, headers: cors });
 
     console.log(`[check-job-status] Loaded job: status=${job.status} task_id=${job.task_id} result_url=${job.result_url}`);
 
