@@ -129,6 +129,14 @@ export default function RootLayout({
           <Analytics />
           <AnalyticsTracker />
         </TutorialProvider>
+
+        {/* Chat2Meeting chat widget */}
+        <Script
+          id="chat2meeting"
+          src="https://chat2meeting.com/widget.js"
+          strategy="afterInteractive"
+          data-chat2meeting-key="a347648f-227c-4dfe-820e-6bb2c0a49e14"
+        />
       </body>
     </html>
   );
