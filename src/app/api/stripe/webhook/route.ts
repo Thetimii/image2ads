@@ -52,44 +52,49 @@ function getPlanByProductId(productId: string): { credits: number; planName: str
   return productIdToPlan[productId] || null;
 }
 
-// Helper function to add credits to a customer by Stripe customer ID
-async function addCreditsToCustomer(stripeCustomerId: string, credits: number) {
-  // First find the profile by stripe_customer_id
+// Grants credits exactly once per Stripe object (checkout session, invoice,
+// event). Stripe retries webhooks and fires several events per payment; the
+// credit_grants ledger (unique source_ref) makes every grant idempotent and the
+// balance update atomic (no read-modify-write race).
+async function grantCreditsOnce(
+  stripeCustomerId: string,
+  credits: number,
+  reason: string,
+  sourceRef: string
+): Promise<{ granted: boolean; error?: string }> {
   const { data: profile, error: findError } = await supabaseAdmin
     .from("profiles")
-    .select("id, credits")
+    .select("id")
     .eq("stripe_customer_id", stripeCustomerId)
     .single();
-
   if (findError || !profile) {
-    console.error(
-      "Profile not found for customer:",
-      stripeCustomerId,
-      findError
-    );
-    return { error: "Profile not found" };
+    console.error("Profile not found for customer:", stripeCustomerId, findError);
+    return { granted: false, error: "Profile not found" };
   }
-
-  // Add credits to existing balance
-  const newCredits = (profile.credits || 0) + credits;
-
-  const { error: updateError } = await supabaseAdmin
-    .from("profiles")
-    .update({
-      credits: newCredits,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", profile.id);
-
-  if (updateError) {
-    console.error("Error adding credits:", updateError);
-    return { error: updateError };
+  const { data, error } = await supabaseAdmin.rpc("grant_credits_once", {
+    p_user: profile.id,
+    p_amount: credits,
+    p_reason: reason,
+    p_ref: sourceRef,
+  });
+  if (error) {
+    console.error("grant_credits_once failed:", error);
+    return { granted: false, error: error.message };
   }
+  console.log(`${data ? "Granted" : "Already granted"} ${credits} credits (${reason}, ${sourceRef}) to ${stripeCustomerId}`);
+  return { granted: !!data };
+}
 
-  console.log(
-    `Successfully added ${credits} credits to customer ${stripeCustomerId} (new total: ${newCredits})`
-  );
-  return { success: true };
+// API 2025-08-27.basil moved invoice.subscription to
+// invoice.parent.subscription_details.subscription - read both.
+function invoiceSubscriptionId(invoice: unknown): string | null {
+  const inv = invoice as {
+    subscription?: string | { id: string } | null;
+    parent?: { subscription_details?: { subscription?: string | { id: string } | null } | null } | null;
+  };
+  const sub = inv.parent?.subscription_details?.subscription ?? inv.subscription ?? null;
+  if (!sub) return null;
+  return typeof sub === "string" ? sub : sub.id;
 }
 
 export async function POST(req: NextRequest) {
@@ -141,7 +146,6 @@ export async function POST(req: NextRequest) {
                 subscription_status: "trialing",
                 plan: "pro_trial",
                 trial_end_at: trialEndDate.toISOString(),
-                credits: STRIPE_PLANS.pro.credits, // Give 200 Pro credits
                 updated_at: new Date().toISOString(),
               })
               .eq("id", userId);
@@ -151,6 +155,17 @@ export async function POST(req: NextRequest) {
             } else {
               console.log(`✅ Trial activated for user ${userId}, ends at ${trialEndDate.toISOString()}`);
             }
+
+            // Trial = "you have 200 Pro credits": raise the balance to at
+            // least 200, once per checkout session (never lowers it).
+            const { error: grantError } = await supabaseAdmin.rpc("grant_credits_once", {
+              p_user: userId,
+              p_amount: STRIPE_PLANS.pro.credits,
+              p_reason: "pro_trial",
+              p_ref: `trial:${session.id}`,
+              p_mode: "set_min",
+            });
+            if (grantError) console.error("Error granting trial credits:", grantError);
 
             // Track TikTok purchase event for trial
             try {
@@ -322,8 +337,7 @@ export async function POST(req: NextRequest) {
 
           // Add credits based on product ID
           if (creditsToAdd > 0) {
-            await addCreditsToCustomer(customerId, creditsToAdd);
-            console.log(`Added ${creditsToAdd} credits for plan: ${planName}`);
+            await grantCreditsOnce(customerId, creditsToAdd, `subscription_start:${planName ?? "unknown"}`, `checkout:${session.id}`);
           }
 
           // Track TikTok purchase event
@@ -497,21 +511,17 @@ export async function POST(req: NextRequest) {
           console.error("Error updating subscription:", error);
         }
 
-        // Only add credits for subscription updates (plan changes), not creation
-        // Creation credits are handled by checkout.session.completed
-        if (event.type === "customer.subscription.updated" && subscription.status === "active" && creditsToAdd > 0) {
-          const result = await addCreditsToCustomer(
-            subscription.customer as string,
-            creditsToAdd
-          );
-
-          if (result.error) {
-            console.error("Error adding subscription credits:", result.error);
-          } else {
-            console.log(`Added ${creditsToAdd} credits for plan change (plan: ${planName})`);
-          }
-        } else if (event.type === "customer.subscription.created") {
-          console.log(`Subscription created, credits handled by checkout.session.completed`);
+        // Credits here ONLY for an actual plan change (the price on the
+        // subscription item changed). subscription.updated also fires on every
+        // renewal, cancel/uncancel, payment-method change etc. - those used to
+        // grant a full month of credits each time. Renewals are granted once
+        // per invoice in invoice.payment_succeeded; first payments in
+        // checkout.session.completed.
+        const previous = (event.data as { previous_attributes?: { items?: { data?: Array<{ price?: { id?: string } }> } } }).previous_attributes;
+        const previousPriceId = previous?.items?.data?.[0]?.price?.id;
+        const planChanged = !!previousPriceId && previousPriceId !== planItem?.price?.id;
+        if (event.type === "customer.subscription.updated" && subscription.status === "active" && planChanged && creditsToAdd > 0) {
+          await grantCreditsOnce(subscription.customer as string, creditsToAdd, `plan_change:${planName ?? "unknown"}`, `event:${event.id}`);
         }
         break;
       }
@@ -549,71 +559,34 @@ export async function POST(req: NextRequest) {
       }
 
       case "invoice.payment_succeeded": {
-        const invoice = event.data.object;
+        const invoice = event.data.object as { id: string; billing_reason?: string | null };
+        const subscriptionId = invoiceSubscriptionId(invoice);
 
-        // Type assertion for subscription property
-        const invoiceWithSub = invoice as { subscription?: string; billing_reason?: string };
-
-        if (invoiceWithSub.subscription) {
-          const subscription = await stripe.subscriptions.retrieve(
-            invoiceWithSub.subscription
-          );
-
-          // Add credits for successful payments
+        if (subscriptionId) {
+          const subscription = await stripe.subscriptions.retrieve(subscriptionId);
           const planItem = subscription.items.data[0];
-          let creditsToAdd = 0;
+          const creditsToAdd = planItem?.price?.id ? getCreditsByPriceId(planItem.price.id) : 0;
 
-          if (planItem?.price?.id) {
-            creditsToAdd = getCreditsByPriceId(planItem.price.id);
+          // Only recurring cycles grant here; the first invoice of a new
+          // subscription is covered by checkout.session.completed.
+          if (invoice.billing_reason === "subscription_cycle" && creditsToAdd > 0) {
+            await grantCreditsOnce(subscription.customer as string, creditsToAdd, "subscription_renewal", `invoice:${invoice.id}`);
           }
 
-          // Stripe fires invoice.payment_succeeded AND checkout.session.completed
-          // for the same first invoice of a new subscription. Only the recurring
-          // cycle invoices should grant credits here, or every new subscriber gets
-          // double credits on their first payment (checkout.session.completed
-          // already grants them once for "subscription_create").
-          if (invoiceWithSub.billing_reason !== "subscription_cycle") {
-            console.log(`Skipping credit grant for invoice with billing_reason: ${invoiceWithSub.billing_reason}`);
-          } else if (creditsToAdd > 0) {
-            const result = await addCreditsToCustomer(
-              subscription.customer as string,
-              creditsToAdd
-            );
-
-            if (result.error) {
-              console.error("Error adding recurring credits:", result.error);
-            } else {
-              console.log(
-                `Added ${creditsToAdd} credits for successful payment`
-              );
-            }
-          }
-
-          // Update subscription status
           const { error } = await supabaseAdmin
             .from("profiles")
-            .update({
-              subscription_status: subscription.status,
-            })
+            .update({ subscription_status: subscription.status })
             .eq("stripe_customer_id", subscription.customer);
-
-          if (error) {
-            console.error("Error updating subscription status:", error);
-          }
+          if (error) console.error("Error updating subscription status:", error);
         }
         break;
       }
 
       case "invoice.payment_failed": {
-        const invoice = event.data.object;
+        const failedSubscriptionId = invoiceSubscriptionId(event.data.object);
 
-        // Type assertion for subscription property
-        const invoiceWithSub = invoice as { subscription?: string };
-
-        if (invoiceWithSub.subscription) {
-          const subscription = await stripe.subscriptions.retrieve(
-            invoiceWithSub.subscription
-          );
+        if (failedSubscriptionId) {
+          const subscription = await stripe.subscriptions.retrieve(failedSubscriptionId);
 
           const { error } = await supabaseAdmin
             .from("profiles")

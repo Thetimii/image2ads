@@ -17,7 +17,7 @@
 // Supabase Dashboard cron - the trigger itself is now version-controlled.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { authorizeInternal } from "../utils/auth.ts";
+import { authorizeInternal } from "../_shared/auth.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",

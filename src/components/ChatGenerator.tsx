@@ -46,13 +46,10 @@ interface ChatGeneratorProps {
 // Supabase Edge Function endpoints
 const SUPABASE_FUNCTIONS_BASE = 'https://cqnaooicfxqtnbuwsopu.supabase.co/functions/v1'
 
-const ENDPOINT_MAP: Record<string, string> = {
-  'text-to-image': `${SUPABASE_FUNCTIONS_BASE}/generate-text-image`,
-  'image-to-image': `${SUPABASE_FUNCTIONS_BASE}/generate-image-image`,
-  'text-to-video': `${SUPABASE_FUNCTIONS_BASE}/generate-text-video`,
-  'image-to-video': `${SUPABASE_FUNCTIONS_BASE}/generate-image-video`,
-  'text-to-music': `${SUPABASE_FUNCTIONS_BASE}/generate-text-music`,
-}
+// One endpoint for every mode: the job row (result_type, has_images,
+// aspect_ratio, music_options) tells the backend what to generate, and the
+// backend - not the browser - decides pricing and free-tier rules.
+const GENERATE_ENDPOINT = `${SUPABASE_FUNCTIONS_BASE}/generate`
 
 const CHECK_JOB_STATUS_ENDPOINT = `${SUPABASE_FUNCTIONS_BASE}/check-job-status`
 
@@ -976,37 +973,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
       // Update the assistant message with the job ID so we can resume polling after refresh
       gen.updateMessage(gen.activeTab, assistantPlaceholder.id, { jobId: job.id })
 
-      // Determine endpoint based on user status and tab
-      let endpoint = ENDPOINT_MAP[gen.activeTab]
-
-      // DYNAMIC ROUTING: If in text-to-image mode but images were uploaded, switch to image-to-image endpoint
-      if (gen.activeTab === 'text-to-image' && imageIds.length > 0) {
-        console.log(`[ChatGenerator] 🔀 Switching to image-to-image endpoint due to uploaded images`)
-        endpoint = ENDPOINT_MAP['image-to-image']
-      }
-
-      console.log(`[ChatGenerator] 🔍 ROUTING CHECK:`, {
-        isFreeUser,
-        isPro,
-        activeTab: gen.activeTab,
-        subscriptionStatus: profile?.subscription_status,
-        originalEndpoint: endpoint
-      })
-
-      // Route free users to separate edge functions for image generation -
-      // except nano-banana-pro, which must always go through the paid path
-      // so it actually consumes credits (1/image for free-tier, enforced
-      // server-side) instead of being unlimited at 0 cost.
-      if (
-        isFreeUser &&
-        (gen.activeTab === 'text-to-image' || gen.activeTab === 'image-to-image') &&
-        selectedModel !== 'nano-banana-pro'
-      ) {
-        endpoint = endpoint + '-free'
-        console.log(`[ChatGenerator] 🚦 Routing free user to: ${endpoint}`)
-      } else {
-        console.log(`[ChatGenerator] ✅ Routing paid user to: ${endpoint}`)
-      }
+      const endpoint = GENERATE_ENDPOINT
 
       console.log(`[ChatGenerator] *** STARTING REQUEST ***`)
       console.log(`[ChatGenerator] Active tab: ${gen.activeTab}`)

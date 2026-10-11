@@ -14,16 +14,13 @@ project_id = "cqnaooicfxqtnbuwsopu"
 # Do not flip any of these back to true without first confirming the platform
 # check accepts the tokens the app actually sends.
 
+[functions.generate]
+verify_jwt = false
+
 [functions.generate-text-image]
 verify_jwt = false
 
-[functions.generate-text-image-free]
-verify_jwt = false
-
 [functions.generate-image-image]
-verify_jwt = false
-
-[functions.generate-image-image-free]
 verify_jwt = false
 
 [functions.generate-text-video]
@@ -32,24 +29,23 @@ verify_jwt = false
 [functions.generate-image-video]
 verify_jwt = false
 
+[functions.generate-text-music]
+verify_jwt = false
+
 [functions.check-job-status]
-verify_jwt = false
-
-[functions.run-job]
-verify_jwt = false
-
-[functions.retarget-email-daily]
-verify_jwt = false
-
-# Already deployed with the check off; listed so the setting is explicit.
-[functions.create-signed-upload-url]
-verify_jwt = false
-
-[functions.convert-to-png]
 verify_jwt = false
 
 [functions.kie-callback]
 verify_jwt = false
 
 [functions.sweep-stuck-jobs]
+verify_jwt = false
+
+[functions.retarget-email-daily]
+verify_jwt = false
+
+[functions.create-signed-upload-url]
+verify_jwt = false
+
+[functions.convert-to-png]
 verify_jwt = false

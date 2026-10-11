@@ -1,101 +1,80 @@
-// deno-lint-ignore-file no-explicit-any
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
 /**
- * Kie.ai webhook receiver.
+ * kie.ai webhook receiver (deployed with verify_jwt = false).
  *
- * Deployed with verify_jwt=false - Kie.ai is a third-party server calling
- * this URL and has no way to obtain a Supabase-signed JWT, so the platform
- * gateway would reject every callback with 401 before this code ever ran if
- * JWT verification were on (this is exactly why the previous version of
- * this function never actually resolved a single job).
- *
- * Because this endpoint is unauthenticated, it deliberately does NOT trust
- * the callback body's result data. It only uses the callback as a "wake up
- * and check now" trigger: it looks up the job by taskId, then invokes
- * check-job-status (service-role authenticated) to re-derive the real state
- * directly from Kie.ai and finalize it. That keeps a single, already-tested
- * source of truth for parsing Kie's various response shapes (legacy/veo/
- * music), the safety-filter retry, the stale-job timeout+refund, storage
- * upload, etc. - this file never duplicates that logic.
+ * 1. Authenticate: kie.ai's HMAC headers (if KIE_WEBHOOK_HMAC_KEY is set) OR
+ *    our per-job ?job=&sig= token from the callBackUrl. Unauthenticated
+ *    requests get 401 and do nothing.
+ * 2. Ack with 200 immediately (kie.ai times out callbacks after 15s, and a
+ *    video download + upload can take longer).
+ * 3. In the background (EdgeRuntime.waitUntil) run syncJob(), which re-reads
+ *    the task from kie.ai and completes / fails / refunds. The callback body
+ *    is never trusted for results. If kie.ai's record still lags behind the
+ *    callback, re-check a few times with backoff.
  */
-const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
-const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+import { corsHeaders, json, log, logError } from "../_shared/http.ts";
+import { db, isTerminal, syncJob } from "../_shared/pipeline.ts";
+import { verifyJobCallbackToken, verifyKieSignature } from "../_shared/signing.ts";
 
-const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+declare const EdgeRuntime: { waitUntil(p: Promise<unknown>): void } | undefined;
 
-async function handler(req: Request) {
-  if (req.method === "OPTIONS") {
-    return new Response("ok", {
-      status: 200,
-      headers: {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "POST, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type",
-      },
-    });
-  }
+const RECHECK_DELAYS_MS = [0, 3_000, 8_000, 20_000];
 
-  if (req.method !== "POST") {
-    return new Response("Method not allowed", { status: 405 });
-  }
-
-  try {
-    const body = await req.json().catch(() => ({} as any));
-    // Kie.ai nests the real payload under `data` on every endpoint we use
-    // (legacy jobs, veo, music) - fall back to the top level just in case.
-    const data = body?.data ?? body;
-    const taskId: string | null =
-      data?.taskId ?? new URL(req.url).searchParams.get("taskId");
-
-    if (!taskId) {
-      console.error("[kie-callback] No taskId in callback payload:", JSON.stringify(body));
-      return new Response("ok", { status: 200 }); // ack anyway - don't make Kie retry forever
-    }
-
-    const { data: job, error: jobErr } = await supabase
-      .from("jobs")
-      .select("id, status")
-      .eq("task_id", taskId)
-      .maybeSingle();
-
-    if (jobErr || !job) {
-      console.log(`[kie-callback] No job found for taskId ${taskId}`);
-      return new Response("ok", { status: 200 });
-    }
-
-    if (job.status !== "processing") {
-      // Already resolved (completed/failed), or another trigger (client
-      // poll, sweep) got there first - nothing to do.
-      console.log(`[kie-callback] Job ${job.id} already status=${job.status}, skipping`);
-      return new Response("ok", { status: 200 });
-    }
-
-    console.log(`[kie-callback] Job ${job.id} (taskId ${taskId}) reported activity - triggering check-job-status`);
-
-    // check-job-status authorizes internal callers via x-internal-secret
-    // (see utils/auth.ts) - a service-role Bearer token is NOT a user session
-    // and was being rejected with 401, which silently broke every webhook.
-    const INTERNAL_SECRET = Deno.env.get("INTERNAL_FUNCTION_SECRET") ?? "";
-    if (!INTERNAL_SECRET) {
-      console.error("[kie-callback] INTERNAL_FUNCTION_SECRET not set - cannot trigger check-job-status");
-      return new Response("ok", { status: 200 });
-    }
-    const resp = await fetch(
-      `${SUPABASE_URL}/functions/v1/check-job-status?jobId=${job.id}`,
-      { headers: { "x-internal-secret": INTERNAL_SECRET } }
-    );
-
-    console.log(`[kie-callback] check-job-status responded ${resp.status} for job ${job.id}`);
-
-    return new Response("ok", { status: 200 });
-  } catch (err: any) {
-    console.error("[kie-callback] Error processing callback:", err);
-    // Always 200 so Kie.ai doesn't hammer retries - the SQL sweep
-    // (public.sweep_stuck_jobs, pg_cron) is the backstop if this invocation
-    // genuinely failed to resolve anything.
-    return new Response("ok", { status: 200 });
-  }
+function background(p: Promise<unknown>) {
+  if (typeof EdgeRuntime !== "undefined" && EdgeRuntime?.waitUntil) EdgeRuntime.waitUntil(p);
+  else p.catch(() => {});
 }
 
-Deno.serve(handler);
+async function resolve(jobId: string, taskId: string | null) {
+  for (const delay of RECHECK_DELAYS_MS) {
+    if (delay) await new Promise((r) => setTimeout(r, delay));
+    try {
+      const job = await syncJob(jobId, { source: "callback" });
+      if (!job || isTerminal(job.status)) {
+        log("kie-callback", "resolved", { jobId, taskId, status: job?.status });
+        return;
+      }
+      // A newer task (safety retry) replaced the one this callback is about.
+      if (taskId && job.task_id && job.task_id !== taskId) return;
+    } catch (err) {
+      logError("kie-callback", "sync_failed", err, { jobId, taskId });
+    }
+  }
+  log("kie-callback", "still_running", { jobId, taskId }); // e.g. Suno "first" stage - the "complete" callback follows
+}
+
+Deno.serve(async (req) => {
+  const cors = corsHeaders(req, "POST, OPTIONS");
+  if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
+  if (req.method !== "POST") return json({ error: "Method not allowed" }, 405, cors);
+
+  const url = new URL(req.url);
+  const body = await req.json().catch(() => ({})) as Record<string, unknown>;
+  const data = (body.data && typeof body.data === "object" ? body.data : body) as Record<string, unknown>;
+  const taskId = typeof data.taskId === "string" ? data.taskId : typeof data.task_id === "string" ? data.task_id : url.searchParams.get("taskId");
+  const urlJobId = url.searchParams.get("job");
+
+  const hmacKey = Deno.env.get("KIE_WEBHOOK_HMAC_KEY") ?? "";
+  const kieSigned = !!hmacKey && !!taskId &&
+    await verifyKieSignature(taskId, req.headers.get("x-webhook-timestamp"), req.headers.get("x-webhook-signature"), hmacKey);
+  const tokenOk = await verifyJobCallbackToken(urlJobId, url.searchParams.get("sig"), Deno.env.get("INTERNAL_FUNCTION_SECRET") ?? "");
+
+  if (!kieSigned && !tokenOk) {
+    log("kie-callback", "rejected", { taskId, urlJobId, hasKieHeaders: !!req.headers.get("x-webhook-signature") });
+    return json({ error: "invalid signature" }, 401, cors);
+  }
+
+  // Find the job: by the signed job id when present, else by task id.
+  let jobId: string | null = tokenOk ? urlJobId : null;
+  if (!jobId && taskId) {
+    const { data: row } = await db().from("jobs").select("id").eq("task_id", taskId).maybeSingle();
+    jobId = (row as { id: string } | null)?.id ?? null;
+  }
+  if (!jobId) {
+    log("kie-callback", "unknown_task", { taskId });
+    return json({ ok: true }, 200, cors);
+  }
+
+  log("kie-callback", "received", { jobId, taskId, code: body.code, callbackType: data.callbackType ?? null, state: data.state ?? null });
+  background(resolve(jobId, taskId));
+  return json({ ok: true }, 200, cors);
+});

@@ -3,7 +3,7 @@
 // These functions run with the platform's verify_jwt check disabled - it only
 // understands the project's legacy HS256 API keys and now rejects them with
 // UNAUTHORIZED_LEGACY_JWT before any function code runs. Auth happens inside
-// the functions instead (see supabase/functions/utils/auth.ts).
+// the functions instead (see supabase/functions/_shared/auth.ts).
 //
 // Browser callers prove who they are with the user's session token. Server
 // callers have no session, so they present INTERNAL_FUNCTION_SECRET, which must

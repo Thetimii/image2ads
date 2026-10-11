@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
-import { getRequestUser } from "../utils/auth.ts"
+import { getRequestUser } from "../_shared/auth.ts"
 
 // Deno global declarations
 declare const Deno: {
