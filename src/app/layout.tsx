@@ -1,19 +1,18 @@
 import type { Metadata } from "next";
-import { Poppins } from "next/font/google";
+import { Manrope } from "next/font/google";
 import Script from "next/script";
 import CookieBanner from "@/components/CookieBanner";
 import AuthDebug from "@/components/AuthDebug";
 import MetaPixel from "@/components/MetaPixel";
 import AnalyticsTracker from "@/components/AnalyticsTracker";
 import { TutorialProvider } from "@/contexts/TutorialContext";
-import { Toaster } from 'sonner';
+import { Toaster } from "sonner";
 import { Analytics } from "@vercel/analytics/react";
 import "./globals.css";
 
-const poppins = Poppins({
+const studioFont = Manrope({
   subsets: ["latin"],
-  weight: ["400", "600", "700"],
-  variable: "--font-poppins",
+  variable: "--font-studio",
 });
 
 const SITE_URL = "https://www.image2ad.com";
@@ -28,7 +27,7 @@ export const metadata: Metadata = {
   },
   description: SITE_DESCRIPTION,
   icons: {
-    icon: '/favicon.ico',
+    icon: "/favicon.ico",
   },
   alternates: {
     canonical: SITE_URL,
@@ -96,18 +95,21 @@ export default function RootLayout({
         {/* Organization/WebSite/SoftwareApplication schema for AI answer engines + search */}
         <script
           type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationJsonLd) }}
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify(organizationJsonLd),
+          }}
         />
 
         {/* Meta Pixel with Advanced Matching */}
-        <MetaPixel />
+        {process.env.NODE_ENV === "production" && <MetaPixel />}
 
         {/* Hotjar Tracking Code */}
-        <Script
-          id="hotjar"
-          strategy="afterInteractive"
-          dangerouslySetInnerHTML={{
-            __html: `
+        {process.env.NODE_ENV === "production" && (
+          <Script
+            id="hotjar"
+            strategy="afterInteractive"
+            dangerouslySetInnerHTML={{
+              __html: `
               (function(h,o,t,j,a,r){
                   h.hj=h.hj||function(){(h.hj.q=h.hj.q||[]).push(arguments)};
                   h._hjSettings={hjid:6539375,hjsv:6};
@@ -117,26 +119,29 @@ export default function RootLayout({
                   a.appendChild(r);
               })(window,document,'https://static.hotjar.com/c/hotjar-','.js?sv=');
             `,
-          }}
-        />
+            }}
+          />
+        )}
       </head>
-      <body className={`${poppins.variable} antialiased`}>
+      <body className={`${studioFont.variable} antialiased`}>
         <TutorialProvider>
           {children}
           <CookieBanner />
           <AuthDebug />
           <Toaster position="top-right" richColors closeButton />
           <Analytics />
-          <AnalyticsTracker />
+          {process.env.NODE_ENV === "production" && <AnalyticsTracker />}
         </TutorialProvider>
 
         {/* Chat2Meeting chat widget */}
-        <Script
-          id="chat2meeting"
-          src="https://chat2meeting.com/widget.js"
-          strategy="afterInteractive"
-          data-chat2meeting-key="a347648f-227c-4dfe-820e-6bb2c0a49e14"
-        />
+        {process.env.NODE_ENV === "production" && (
+          <Script
+            id="chat2meeting"
+            src="https://chat2meeting.com/widget.js"
+            strategy="afterInteractive"
+            data-chat2meeting-key="a347648f-227c-4dfe-820e-6bb2c0a49e14"
+          />
+        )}
       </body>
     </html>
   );

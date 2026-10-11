@@ -1,89 +1,90 @@
 "use client";
-import React, { useState, useEffect } from 'react';
-import Image from 'next/image';
 
-const Header = () => {
-  const [isVisible, setIsVisible] = useState(true);
-  const [lastScrollY, setLastScrollY] = useState(0);
-  const [isSafari, setIsSafari] = useState(false);
+import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { Brand, Icon } from "./studio/StudioIcons";
 
+const links = [
+  ["The process", "/#how-it-works"],
+  ["Selected work", "/#showcase"],
+  ["Pricing", "/#pricing"],
+];
+export default function Header() {
+  const [open, setOpen] = useState(false);
+  const toggle = useRef<HTMLButtonElement>(null);
+  const pathname = usePathname();
   useEffect(() => {
-    // Detect Safari
-    const userAgent = navigator.userAgent.toLowerCase();
-    setIsSafari(userAgent.includes('safari') && !userAgent.includes('chrome'));
-
-    const controlHeader = () => {
-      if (typeof window !== 'undefined') {
-        if (window.scrollY > lastScrollY && window.scrollY > 100) {
-          // Scrolling down and past 100px
-          setIsVisible(false);
-        } else {
-          // Scrolling up
-          setIsVisible(true);
-        }
-        setLastScrollY(window.scrollY);
+    if (!open) return;
+    const close = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setOpen(false);
+        toggle.current?.focus();
       }
     };
-
-    if (typeof window !== 'undefined') {
-      window.addEventListener('scroll', controlHeader);
-      return () => {
-        window.removeEventListener('scroll', controlHeader);
-      };
-    }
-  }, [lastScrollY]);
-
+    window.addEventListener("keydown", close);
+    return () => window.removeEventListener("keydown", close);
+  }, [open]);
   return (
-    <header className={`fixed top-0 left-0 right-0 z-50 flex justify-between items-center px-8 py-6 transition-transform duration-300 ${
-      isVisible ? 'transform translate-y-0' : 'transform -translate-y-full'
-    }`}>
-      <div className="flex items-center">
-        {isSafari ? (
-          // Safari-specific PNG fallback
-          <div className="relative h-14 w-auto">
-            <Image
-              src="/logo.png"
-              alt="Image 2 Ads Logo"
-              width={140}
-              height={56}
-              priority
-              className="h-20 w-auto hover:scale-105 transition-transform duration-200"
-              style={{
-                imageRendering: 'auto'
-              } as React.CSSProperties}
-            />
-          </div>
-        ) : (
-          // Standard SVG for other browsers
-          <div className="relative h-12 w-auto">
-            <Image
-              src="/logo.svg"
-              alt="Image 2 Ads Logo"
-              width={120}
-              height={48}
-              priority
-              className="h-12 w-auto hover:scale-105 transition-transform duration-200"
-              unoptimized
-            />
-          </div>
-        )}
-      </div>
-      <div className="flex items-center space-x-4">
-        <a 
-          href="/signin"
-          className="px-6 py-2 text-gray-700 font-medium rounded-full border border-gray-300 hover:border-blue-500 hover:text-blue-600 transition-all duration-300"
+    <header className="studio-header">
+      <div className="studio-container studio-nav">
+        <Link
+          className="studio-home-link"
+          href="/"
+          aria-label="Image2Ad home"
+          onClick={() => setOpen(false)}
         >
-          Sign In
-        </a>
-        <a
-          href="/signup"
-          className="px-8 py-3 text-white font-semibold rounded-full bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 transition-all duration-300 hover:scale-105 shadow-lg hover:shadow-purple-500/25"
-        >
-          Sign Up
-        </a>
+          <Brand />
+        </Link>
+        <nav className="studio-desktop-nav" aria-label="Main navigation">
+          {links.map(([label, href]) => (
+            <Link href={href} key={label}>
+              {label}
+            </Link>
+          ))}
+        </nav>
+        <div className="studio-nav-actions">
+          <Link href="/signin" className="studio-signin">
+            Log in
+          </Link>
+          <Link href="/signup" className="studio-button studio-button-small">
+            Let’s create <Icon name="diagonal" width="15" height="15" />
+          </Link>
+          <button
+            ref={toggle}
+            className="studio-menu-toggle"
+            type="button"
+            aria-label={open ? "Close navigation" : "Open navigation"}
+            aria-expanded={open}
+            aria-controls="studio-mobile-menu"
+            onClick={() => setOpen(!open)}
+          >
+            <Icon name={open ? "close" : "menu"} />
+          </button>
+        </div>
       </div>
+      {open && (
+        <nav
+          id="studio-mobile-menu"
+          className="studio-mobile-nav"
+          aria-label="Mobile navigation"
+        >
+          {links.map(([label, href]) => (
+            <Link href={href} key={label} onClick={() => setOpen(false)}>
+              {label}
+              <Icon name="diagonal" />
+            </Link>
+          ))}
+          <Link
+            href="/signin"
+            onClick={() => setOpen(false)}
+            aria-current={pathname === "/signin" ? "page" : undefined}
+          >
+            Log in
+            <Icon name="arrow" />
+          </Link>
+        </nav>
+      )}
     </header>
   );
-};
-
-export default Header;
+}

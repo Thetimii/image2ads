@@ -1,61 +1,213 @@
 "use client";
-import React from 'react';
-import { motion } from 'framer-motion';
 
-const HowItWorks = () => {
-  const steps = [
-    { title: 'Upload Your Photo', icon: '📤', desc: 'Simply upload your product photo - any quality works!', color: 'from-blue-500 to-cyan-500' },
-    { title: 'AI Magic Happens', icon: '🎨', desc: 'Our AI analyzes and designs a stunning ad around your product', color: 'from-purple-500 to-pink-500' },
-    { title: 'Get Conversions', icon: '🚀', desc: 'Download your professional ad and watch sales soar!', color: 'from-pink-500 to-orange-500' },
-  ];
+import { useState } from "react";
+import Image from "next/image";
+import Link from "next/link";
+import { AnimatePresence, motion } from "framer-motion";
+import { Icon } from "./studio/StudioIcons";
+import { Reveal } from "./studio/StudioMotion";
 
+const steps = [
+  {
+    title: "Start with your product.",
+    description:
+      "Upload a product photo. The everyday, on-your-phone kind is a perfectly good place to start.",
+    icon: "upload" as const,
+    label: "YOUR STARTING POINT",
+  },
+  {
+    title: "Give it a little direction.",
+    description:
+      "Describe the scene, the feeling, the big idea. Set the style and let AI bring your vision into focus.",
+    icon: "spark" as const,
+    label: "THE CREATIVE DIRECTION",
+  },
+  {
+    title: "Meet your next campaign.",
+    description:
+      "Download your new creative, try another direction, and keep exploring. Your next idea is always welcome.",
+    icon: "download" as const,
+    label: "READY FOR THE SPOTLIGHT",
+  },
+];
+export default function HowItWorks() {
+  const [step, setStep] = useState(0);
   return (
-    <section className="py-16 px-6 relative">
-      <motion.h2 
-        initial={{ opacity: 0, y: 20 }}
-        whileInView={{ opacity: 1, y: 0 }}
-        viewport={{ once: true }}
-        className="text-5xl md:text-6xl font-bold text-center mb-6 bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 bg-clip-text text-transparent"
-      >
-        How It Works
-      </motion.h2>
-      <motion.p
-        initial={{ opacity: 0, y: 20 }}
-        whileInView={{ opacity: 1, y: 0 }}
-        viewport={{ once: true }}
-        transition={{ delay: 0.1 }}
-        className="text-xl text-gray-700 text-center mb-16 max-w-2xl mx-auto"
-      >
-        Three simple steps to transform your product photos into high-converting ads
-      </motion.p>
-      
-      <div className="grid md:grid-cols-3 gap-8 max-w-6xl mx-auto">
-        {steps.map((step, index) => (
-          <motion.div
-            key={index}
-            initial={{ opacity: 0, y: 50 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.5, delay: index * 0.2 }}
-            whileHover={{ scale: 1.05, y: -10 }}
-            className="relative group"
-          >
-            <div className="gradient-card rounded-3xl p-8 text-center h-full border border-gray-300/30 group-hover:border-blue-400/50 transition-all duration-300 bg-white/20 backdrop-blur-sm shadow-xl">
-              <div className="text-7xl mb-6 group-hover:scale-110 transition-transform duration-300">{step.icon}</div>
-              <h3 className="text-2xl font-bold text-gray-800 mb-4">{step.title}</h3>
-              <p className="text-gray-700 leading-relaxed font-medium">{step.desc}</p>
-              
-              <div className={`absolute inset-0 bg-gradient-to-br ${step.color} opacity-0 group-hover:opacity-20 rounded-3xl transition-opacity duration-300`}></div>
+    <section
+      id="how-it-works"
+      className="studio-process studio-section"
+      aria-labelledby="process-title"
+    >
+      <div className="studio-container">
+        <Reveal>
+          <div className="studio-section-heading">
+            <div>
+              <span className="studio-eyebrow">
+                02 / FROM IDEA TO “THAT’S THE ONE”
+              </span>
+              <h2 id="process-title">
+                Big creative.
+                <br />
+                <span className="studio-muted">Small learning curve.</span>
+              </h2>
             </div>
-            
-            {index < steps.length - 1 && (
-              <div className="hidden md:block absolute top-1/2 -right-4 w-8 h-0.5 bg-gradient-to-r from-blue-400/60 to-transparent"></div>
-            )}
-          </motion.div>
-        ))}
+            <p>
+              You bring the product.
+              <br />
+              We’ll help you see it differently.
+            </p>
+          </div>
+        </Reveal>
+        <div className="studio-process-grid">
+          <Reveal className="studio-process-steps">
+            {steps.map((item, index) => (
+              <button
+                className={`studio-step ${step === index ? "is-active" : ""}`}
+                type="button"
+                key={item.title}
+                aria-pressed={step === index}
+                aria-controls="workflow-preview"
+                onClick={() => setStep(index)}
+              >
+                <span className="studio-step-number">0{index + 1}</span>
+                <span>
+                  <strong>{item.title}</strong>
+                  <span className="studio-step-description">
+                    {item.description}
+                  </span>
+                </span>
+                <Icon name="diagonal" width="19" height="19" />
+              </button>
+            ))}
+            <Link className="studio-text-link" href="/signup">
+              Okay, let’s make something{" "}
+              <Icon name="arrow" width="18" height="18" />
+            </Link>
+          </Reveal>
+          <Reveal className="studio-workflow-window" delay={0.15}>
+            <div className="studio-window-top">
+              <div className="studio-window-dots">
+                <i />
+                <i />
+                <i />
+              </div>
+              <span>your creative playground</span>
+              <Icon name="spark" width="14" height="14" />
+            </div>
+            <div
+              className="studio-workflow-content"
+              id="workflow-preview"
+              role="region"
+              aria-label={`Workflow preview: ${steps[step].title}`}
+            >
+              <div className="studio-workflow-eyebrow">
+                <span className="studio-status-dot" />
+                {steps[step].label}
+                <span>0{step + 1} / 03</span>
+              </div>
+              <AnimatePresence mode="wait">
+                <motion.div
+                  key={step}
+                  initial={{ opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -8 }}
+                  transition={{ duration: 0.25 }}
+                  className="studio-demo-stage"
+                >
+                  {step === 0 ? (
+                    <div className="studio-demo-upload">
+                      <div className="studio-demo-product">
+                        <Image
+                          src="/before2.jpg"
+                          alt="An uploaded blue tote bag product photo"
+                          fill
+                          sizes="220px"
+                        />
+                      </div>
+                      <span className="studio-demo-upload-icon">
+                        <Icon name="upload" width="19" height="19" />
+                      </span>
+                      <strong>Your next great ad starts here.</strong>
+                      <p>
+                        product-photo.jpg{" "}
+                        <Icon name="check" width="13" height="13" />
+                      </p>
+                    </div>
+                  ) : step === 1 ? (
+                    <div className="studio-demo-prompt">
+                      <span className="studio-demo-caption">THE IDEA</span>
+                      <p>
+                        “An effortlessly stylish woman carrying my tote on a
+                        London street. Warm light, editorial photography,
+                        everyday elegance.”
+                      </p>
+                      <div className="studio-prompt-chips">
+                        <span>Editorial</span>
+                        <span>Warm light</span>
+                        <span>4:5 portrait</span>
+                      </div>
+                      <div className="studio-demo-prompt-bottom">
+                        <Icon name="spark" />
+                        <span>A little direction goes a long way.</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="studio-demo-result">
+                      <div className="studio-demo-result-image">
+                        <Image
+                          src="/after2.jpg"
+                          alt="Finished London lifestyle campaign for the blue tote bag"
+                          fill
+                          sizes="230px"
+                        />
+                        <span>
+                          Everyday.
+                          <br />
+                          Extraordinary.
+                        </span>
+                      </div>
+                      <div className="studio-demo-result-label">
+                        <span className="studio-ready-check">
+                          <Icon name="check" width="14" height="14" />
+                        </span>
+                        <strong>A new perspective.</strong>
+                        <span>Your creative is ready</span>
+                      </div>
+                    </div>
+                  )}
+                </motion.div>
+              </AnimatePresence>
+              <div className="studio-demo-bottom">
+                <span>ILLUSTRATIVE WALKTHROUGH</span>
+                <button type="button" onClick={() => setStep((step + 1) % 3)}>
+                  {step === 2 ? "Start again" : "Next step"}
+                  <Icon name="arrow" width="15" height="15" />
+                </button>
+              </div>
+            </div>
+          </Reveal>
+        </div>
+        <Reveal>
+          <div className="studio-toolkit">
+            <div>
+              <Icon name="image" />
+              <span>Product photography</span>
+            </div>
+            <div>
+              <Icon name="video" />
+              <span>Video generation</span>
+            </div>
+            <div>
+              <Icon name="music" />
+              <span>AI music</span>
+            </div>
+            <div>
+              <Icon name="layers" />
+              <span>Endless creative directions</span>
+            </div>
+          </div>
+        </Reveal>
       </div>
     </section>
   );
-};
-
-export default HowItWorks;
+}

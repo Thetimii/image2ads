@@ -5,19 +5,23 @@ import BeforeAfterGallery from "@/components/BeforeAfterGallery";
 import PricingSection from "@/components/PricingSection";
 import FAQ from "@/components/FAQ";
 import Footer from "@/components/Footer";
+import { StudioExperience } from "@/components/studio/StudioMotion";
 
 export default function Home() {
   return (
-    <div className="min-h-screen text-gray-800">
+    <StudioExperience>
+      <a className="studio-skip-link" href="#main-content">
+        Skip to content
+      </a>
       <Header />
-      <main>
+      <main id="main-content">
         <Hero />
-        <HowItWorks />
         <BeforeAfterGallery />
+        <HowItWorks />
         <PricingSection />
         <FAQ />
       </main>
       <Footer />
-    </div>
+    </StudioExperience>
   );
 }

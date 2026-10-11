@@ -1,8 +1,8 @@
 "use client";
-import React, { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { useSupabaseUser } from '@/hooks/useSupabaseUser';
-import { createClient } from '@/lib/supabase/client';
+import React, { useState, useEffect } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { useSupabaseUser } from "@/hooks/useSupabaseUser";
+import { createClient } from "@/lib/supabase/client";
 
 // Extend Window interface for Facebook Pixel
 declare global {
@@ -35,44 +35,46 @@ const CookieBanner = () => {
 
   useEffect(() => {
     setMounted(true);
-    
+
     const checkPreferences = async () => {
       // Check for saved preferences in database if user is logged in
       if (user) {
         const { data: profile, error } = await supabase
-          .from('profiles')
-          .select('cookie_preferences')
-          .eq('id', user.id)
+          .from("profiles")
+          .select("cookie_preferences")
+          .eq("id", user.id)
           .single();
-          
+
         if (error) {
-          console.log('Error loading cookie preferences from database:', error);
+          console.log("Error loading cookie preferences from database:", error);
         }
-          
+
         if (profile?.cookie_preferences) {
           const savedPrefs = profile.cookie_preferences as CookiePreferences;
-          console.log('Loaded cookie preferences from database:', savedPrefs);
+          console.log("Loaded cookie preferences from database:", savedPrefs);
           setPreferences(savedPrefs);
           applyPreferences(savedPrefs, false); // Don't save to DB, just apply
           return; // Don't show banner if user has saved preferences
         } else {
           // User is logged in but no preferences in database
           // Check if they have localStorage preferences to sync
-          const savedPreferences = localStorage.getItem('cookiePreferences');
+          const savedPreferences = localStorage.getItem("cookiePreferences");
           if (savedPreferences) {
             const parsedPreferences = JSON.parse(savedPreferences);
-            console.log('Syncing localStorage preferences to database for logged in user');
+            console.log(
+              "Syncing localStorage preferences to database for logged in user",
+            );
             setPreferences(parsedPreferences);
             applyPreferences(parsedPreferences, true); // Save to DB this time
             return;
           }
         }
       }
-      
+
       // Check localStorage for non-logged-in users or as fallback
-      const cookieConsent = localStorage.getItem('cookieConsent');
-      const savedPreferences = localStorage.getItem('cookiePreferences');
-      
+      const cookieConsent = localStorage.getItem("cookieConsent");
+      const savedPreferences = localStorage.getItem("cookiePreferences");
+
       if (!cookieConsent) {
         // Show banner after a short delay for better UX
         const timer = setTimeout(() => {
@@ -86,72 +88,81 @@ const CookieBanner = () => {
         applyPreferences(parsedPreferences, false); // Don't save to DB during initial load
       }
     };
-    
+
     checkPreferences();
   }, [user?.id]); // Only re-run when user ID changes
 
-  const applyPreferences = async (prefs: CookiePreferences, saveToDb: boolean = true) => {
-    if (typeof window === 'undefined') return;
+  const applyPreferences = async (
+    prefs: CookiePreferences,
+    saveToDb: boolean = true,
+  ) => {
+    if (typeof window === "undefined") return;
 
-    console.log('Applying cookie preferences:', prefs);
+    console.log("Applying cookie preferences:", prefs);
 
     // Analytics cookies
     if (prefs.analytics && window.gtag) {
-      window.gtag('consent', 'update', {
-        analytics_storage: 'granted'
+      window.gtag("consent", "update", {
+        analytics_storage: "granted",
       });
     } else if (window.gtag) {
-      window.gtag('consent', 'update', {
-        analytics_storage: 'denied'
+      window.gtag("consent", "update", {
+        analytics_storage: "denied",
       });
     }
 
     // Marketing cookies (Facebook Pixel)
     if (prefs.marketing && window.fbq) {
-      window.fbq('consent', 'grant');
-      window.fbq('track', 'PageView');
+      window.fbq("consent", "grant");
+      window.fbq("track", "PageView");
     } else if (window.fbq) {
-      window.fbq('consent', 'revoke');
+      window.fbq("consent", "revoke");
     }
 
     // Store in localStorage for immediate access
-    localStorage.setItem('cookiePreferences', JSON.stringify(prefs));
-    console.log('Saved cookie preferences to localStorage:', prefs);
-    
+    localStorage.setItem("cookiePreferences", JSON.stringify(prefs));
+    console.log("Saved cookie preferences to localStorage:", prefs);
+
     // Only save to database if explicitly requested (not during initial load)
     if (!saveToDb) {
-      console.log('Skipping database save (initial load)');
+      console.log("Skipping database save (initial load)");
       return;
     }
-    
+
     // Store in database if user is logged in - get fresh user data
     try {
-      const { data: { user }, error: userError } = await supabase.auth.getUser();
-      
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
+
       if (userError) {
-        console.log('Error getting user for cookie preferences:', userError);
+        console.log("Error getting user for cookie preferences:", userError);
         return;
       }
-      
+
       if (user) {
-        console.log('Saving cookie preferences for user:', user.id);
+        console.log("Saving cookie preferences for user:", user.id);
         const { error } = await supabase
-          .from('profiles')
+          .from("profiles")
           .update({
-            cookie_preferences: prefs
+            cookie_preferences: prefs,
           })
-          .eq('id', user.id);
-          
+          .eq("id", user.id);
+
         if (error) {
-          console.error('Error saving cookie preferences to database:', error);
+          console.error("Error saving cookie preferences to database:", error);
         } else {
-          console.log('Successfully saved cookie preferences to database:', prefs);
+          console.log(
+            "Successfully saved cookie preferences to database:",
+            prefs,
+          );
         }
       } else {
-        console.log('No user logged in, skipping database save');
+        console.log("No user logged in, skipping database save");
       }
     } catch (error) {
-      console.error('Could not save cookie preferences to database:', error);
+      console.error("Could not save cookie preferences to database:", error);
     }
   };
 
@@ -163,7 +174,7 @@ const CookieBanner = () => {
       functional: true,
     };
     setPreferences(allAccepted);
-    localStorage.setItem('cookieConsent', 'accepted');
+    localStorage.setItem("cookieConsent", "accepted");
     applyPreferences(allAccepted);
     setShowBanner(false);
   };
@@ -176,34 +187,37 @@ const CookieBanner = () => {
       functional: false,
     };
     setPreferences(onlyNecessary);
-    localStorage.setItem('cookieConsent', 'declined');
+    localStorage.setItem("cookieConsent", "declined");
     applyPreferences(onlyNecessary);
     setShowBanner(false);
   };
 
   const handleSavePreferences = () => {
     // Save the user's actual selections, not defaults
-    console.log('Saving preferences - current state:', preferences);
-    const consentType = preferences.analytics && preferences.marketing && preferences.functional 
-      ? 'accepted' 
-      : (!preferences.analytics && !preferences.marketing && !preferences.functional)
-      ? 'declined'
-      : 'customized';
-    
-    console.log('Detected consent type:', consentType);
-    localStorage.setItem('cookieConsent', consentType);
+    console.log("Saving preferences - current state:", preferences);
+    const consentType =
+      preferences.analytics && preferences.marketing && preferences.functional
+        ? "accepted"
+        : !preferences.analytics &&
+            !preferences.marketing &&
+            !preferences.functional
+          ? "declined"
+          : "customized";
+
+    console.log("Detected consent type:", consentType);
+    localStorage.setItem("cookieConsent", consentType);
     applyPreferences(preferences);
     setShowBanner(false);
   };
 
   const togglePreference = (key: keyof CookiePreferences) => {
-    if (key === 'necessary') return; // Necessary cookies can't be disabled
+    if (key === "necessary") return; // Necessary cookies can't be disabled
     const newPreferences = {
       ...preferences,
-      [key]: !preferences[key]
+      [key]: !preferences[key],
     };
-    console.log(`Toggling ${key}:`, preferences[key], '->', !preferences[key]);
-    console.log('New preferences state:', newPreferences);
+    console.log(`Toggling ${key}:`, preferences[key], "->", !preferences[key]);
+    console.log("New preferences state:", newPreferences);
     setPreferences(newPreferences);
   };
 
@@ -216,22 +230,13 @@ const CookieBanner = () => {
     <AnimatePresence>
       {showBanner && (
         <>
-          {/* Backdrop */}
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/20 backdrop-blur-sm z-50"
-            onClick={(e) => e.stopPropagation()}
-          />
-          
           {/* Banner */}
           <motion.div
             initial={{ y: 100, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: 100, opacity: 0 }}
             transition={{ type: "spring", damping: 25, stiffness: 200 }}
-            className="fixed bottom-0 left-0 right-0 z-50 p-4 md:p-6"
+            className="studio-cookie-banner fixed bottom-0 left-0 right-0 z-50 p-4 md:p-6"
           >
             <div className="max-w-4xl mx-auto">
               <div className="bg-white/95 backdrop-blur-md rounded-2xl shadow-2xl border border-gray-200/50 p-6 md:p-8">
@@ -242,22 +247,36 @@ const CookieBanner = () => {
                     <div className="flex-1 space-y-3">
                       <div className="flex items-center gap-3">
                         <div className="w-8 h-8 rounded-full bg-gradient-to-r from-blue-500 to-purple-600 flex items-center justify-center">
-                          <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20">
-                            <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                          <svg
+                            className="w-4 h-4 text-white"
+                            fill="currentColor"
+                            viewBox="0 0 20 20"
+                          >
+                            <path
+                              fillRule="evenodd"
+                              d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"
+                              clipRule="evenodd"
+                            />
                           </svg>
                         </div>
-                        <h3 className="text-lg font-semibold text-gray-900">We value your privacy</h3>
+                        <h3 className="text-lg font-semibold text-gray-900">
+                          We value your privacy
+                        </h3>
                       </div>
-                      
+
                       <p className="text-gray-700 text-sm md:text-base leading-relaxed">
-                        We use cookies to enhance your experience, analyze site traffic, and for marketing purposes. 
-                        You can customize your preferences or accept all cookies.{' '}
-                        <a href="/privacy" className="text-blue-600 hover:text-blue-700 underline font-medium">
+                        We use cookies to enhance your experience, analyze site
+                        traffic, and for marketing purposes. You can customize
+                        your preferences or accept all cookies.{" "}
+                        <a
+                          href="/privacy"
+                          className="text-blue-600 hover:text-blue-700 underline font-medium"
+                        >
                           Privacy Policy
                         </a>
                       </p>
                     </div>
-                    
+
                     {/* Actions */}
                     <div className="flex flex-col sm:flex-row gap-3 w-full lg:w-auto">
                       <button
@@ -266,14 +285,14 @@ const CookieBanner = () => {
                       >
                         Customize
                       </button>
-                      
+
                       <button
                         onClick={handleDeclineAll}
                         className="px-6 py-3 bg-gray-100 hover:bg-gray-200 text-gray-800 font-semibold rounded-xl transition-all duration-200 hover:scale-105 text-sm lg:text-base"
                       >
                         Decline All
                       </button>
-                      
+
                       <button
                         onClick={handleAcceptAll}
                         className="px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white font-semibold rounded-xl transition-all duration-200 hover:scale-105 shadow-lg hover:shadow-blue-500/25 text-sm lg:text-base"
@@ -286,13 +305,26 @@ const CookieBanner = () => {
                   /* Detailed Preferences */
                   <div className="space-y-6">
                     <div className="flex items-center justify-between">
-                      <h3 className="text-xl font-semibold text-gray-900">Cookie Preferences</h3>
+                      <h3 className="text-xl font-semibold text-gray-900">
+                        Cookie Preferences
+                      </h3>
                       <button
                         onClick={() => setShowDetails(false)}
+                        aria-label="Close cookie preferences"
                         className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"
                       >
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        <svg
+                          className="w-5 h-5"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M6 18L18 6M6 6l12 12"
+                          />
                         </svg>
                       </button>
                     </div>
@@ -302,11 +334,16 @@ const CookieBanner = () => {
                       <div className="flex items-start justify-between p-4 bg-gray-50 rounded-lg">
                         <div className="flex-1">
                           <div className="flex items-center gap-2 mb-2">
-                            <h4 className="font-semibold text-gray-900">Necessary Cookies</h4>
-                            <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full">Required</span>
+                            <h4 className="font-semibold text-gray-900">
+                              Necessary Cookies
+                            </h4>
+                            <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full">
+                              Required
+                            </span>
                           </div>
                           <p className="text-sm text-gray-600">
-                            Essential for the website to function properly. These cannot be disabled.
+                            Essential for the website to function properly.
+                            These cannot be disabled.
                           </p>
                         </div>
                         <div className="ml-4">
@@ -319,21 +356,32 @@ const CookieBanner = () => {
                       {/* Analytics Cookies */}
                       <div className="flex items-start justify-between p-4 bg-gray-50 rounded-lg">
                         <div className="flex-1">
-                          <h4 className="font-semibold text-gray-900 mb-2">Analytics Cookies</h4>
+                          <h4 className="font-semibold text-gray-900 mb-2">
+                            Analytics Cookies
+                          </h4>
                           <p className="text-sm text-gray-600">
-                            Help us understand how visitors interact with our website by collecting anonymous information.
+                            Help us understand how visitors interact with our
+                            website by collecting anonymous information.
                           </p>
                         </div>
                         <div className="ml-4">
                           <button
-                            onClick={() => togglePreference('analytics')}
+                            onClick={() => togglePreference("analytics")}
+                            aria-label="Allow analytics cookies"
+                            aria-pressed={preferences.analytics}
                             className={`w-10 h-6 rounded-full flex items-center transition-colors ${
-                              preferences.analytics ? 'bg-blue-500' : 'bg-gray-300'
+                              preferences.analytics
+                                ? "bg-blue-500"
+                                : "bg-gray-300"
                             }`}
                           >
-                            <div className={`w-4 h-4 bg-white rounded-full transition-transform ${
-                              preferences.analytics ? 'translate-x-5' : 'translate-x-1'
-                            }`}></div>
+                            <div
+                              className={`w-4 h-4 bg-white rounded-full transition-transform ${
+                                preferences.analytics
+                                  ? "translate-x-5"
+                                  : "translate-x-1"
+                              }`}
+                            ></div>
                           </button>
                         </div>
                       </div>
@@ -341,21 +389,32 @@ const CookieBanner = () => {
                       {/* Marketing Cookies */}
                       <div className="flex items-start justify-between p-4 bg-gray-50 rounded-lg">
                         <div className="flex-1">
-                          <h4 className="font-semibold text-gray-900 mb-2">Marketing Cookies</h4>
+                          <h4 className="font-semibold text-gray-900 mb-2">
+                            Marketing Cookies
+                          </h4>
                           <p className="text-sm text-gray-600">
-                            Used to track visitors across websites to display relevant ads and measure campaign effectiveness.
+                            Used to track visitors across websites to display
+                            relevant ads and measure campaign effectiveness.
                           </p>
                         </div>
                         <div className="ml-4">
                           <button
-                            onClick={() => togglePreference('marketing')}
+                            onClick={() => togglePreference("marketing")}
+                            aria-label="Allow marketing cookies"
+                            aria-pressed={preferences.marketing}
                             className={`w-10 h-6 rounded-full flex items-center transition-colors ${
-                              preferences.marketing ? 'bg-blue-500' : 'bg-gray-300'
+                              preferences.marketing
+                                ? "bg-blue-500"
+                                : "bg-gray-300"
                             }`}
                           >
-                            <div className={`w-4 h-4 bg-white rounded-full transition-transform ${
-                              preferences.marketing ? 'translate-x-5' : 'translate-x-1'
-                            }`}></div>
+                            <div
+                              className={`w-4 h-4 bg-white rounded-full transition-transform ${
+                                preferences.marketing
+                                  ? "translate-x-5"
+                                  : "translate-x-1"
+                              }`}
+                            ></div>
                           </button>
                         </div>
                       </div>
@@ -363,21 +422,32 @@ const CookieBanner = () => {
                       {/* Functional Cookies */}
                       <div className="flex items-start justify-between p-4 bg-gray-50 rounded-lg">
                         <div className="flex-1">
-                          <h4 className="font-semibold text-gray-900 mb-2">Functional Cookies</h4>
+                          <h4 className="font-semibold text-gray-900 mb-2">
+                            Functional Cookies
+                          </h4>
                           <p className="text-sm text-gray-600">
-                            Enable enhanced functionality and personalization, such as chat support and user preferences.
+                            Enable enhanced functionality and personalization,
+                            such as chat support and user preferences.
                           </p>
                         </div>
                         <div className="ml-4">
                           <button
-                            onClick={() => togglePreference('functional')}
+                            onClick={() => togglePreference("functional")}
+                            aria-label="Allow functional cookies"
+                            aria-pressed={preferences.functional}
                             className={`w-10 h-6 rounded-full flex items-center transition-colors ${
-                              preferences.functional ? 'bg-blue-500' : 'bg-gray-300'
+                              preferences.functional
+                                ? "bg-blue-500"
+                                : "bg-gray-300"
                             }`}
                           >
-                            <div className={`w-4 h-4 bg-white rounded-full transition-transform ${
-                              preferences.functional ? 'translate-x-5' : 'translate-x-1'
-                            }`}></div>
+                            <div
+                              className={`w-4 h-4 bg-white rounded-full transition-transform ${
+                                preferences.functional
+                                  ? "translate-x-5"
+                                  : "translate-x-1"
+                              }`}
+                            ></div>
                           </button>
                         </div>
                       </div>
@@ -391,14 +461,14 @@ const CookieBanner = () => {
                       >
                         Decline All
                       </button>
-                      
+
                       <button
                         onClick={handleSavePreferences}
                         className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl transition-all duration-200 text-sm lg:text-base"
                       >
                         Save Preferences
                       </button>
-                      
+
                       <button
                         onClick={handleAcceptAll}
                         className="px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white font-semibold rounded-xl transition-all duration-200 shadow-lg hover:shadow-blue-500/25 text-sm lg:text-base"

@@ -1,0 +1,22 @@
+{
+  "name": "reels",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "render": "remotion render src/index.ts",
+    "still": "remotion still src/index.ts",
+    "studio": "remotion studio src/index.ts"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@fontsource/poppins": "^5.1.0",
+    "@remotion/cli": "^4.0.290",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "remotion": "^4.0.290"
+  }
+}

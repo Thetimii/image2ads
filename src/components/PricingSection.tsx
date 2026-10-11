@@ -1,71 +1,144 @@
-'use client'
+"use client";
 
-import { useRouter } from 'next/navigation'
-import PricingPlans from './PricingPlans'
-import type { StripePlan } from '@/lib/stripe-plans'
-import { trackMetaSubscribedButtonClick } from '@/lib/meta-events'
+import { useRouter } from "next/navigation";
+import { STRIPE_PLANS, type StripePlan } from "@/lib/stripe-plans";
+import { trackMetaSubscribedButtonClick } from "@/lib/meta-events";
+import { Reveal } from "./studio/StudioMotion";
+import { Icon } from "./studio/StudioIcons";
 
+const descriptions = {
+  starter: "For the first spark of an idea.",
+  pro: "For your next creative chapter.",
+  business: "For bigger ideas and more of them.",
+};
 export default function PricingSection() {
-  const router = useRouter()
-
-  // For landing page, redirect to signin when user tries to subscribe
-  const handleGetStarted = (plan: StripePlan, couponId?: string) => {
-    trackMetaSubscribedButtonClick({
-      plan,
-      couponId,
-      source: 'marketing_pricing',
-    })
-    router.push('/signin')
+  const router = useRouter();
+  function subscribe(plan: StripePlan) {
+    trackMetaSubscribedButtonClick({ plan, source: "marketing_pricing" });
+    router.push("/signin");
   }
-
   return (
-    <section className="py-20" id="pricing">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Header */}
-        <div className="text-center mb-16">
-          <h2 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-4">
-            💰 New Pricing & Credit Allocation
-          </h2>
-          <p className="text-lg text-gray-600 max-w-2xl mx-auto">
-            Choose the plan that fits your needs. Start creating professional ads today.
-          </p>
-        </div>
-
-        {/* Pricing Cards */}
-        <PricingPlans 
-          onSubscribeAction={handleGetStarted}
-          isLoading={null}
-          variant="page"
-          showAllPlans={true}
-        />
-
-        {/* Additional info */}
-        <div className="text-center mt-12">
-          <p className="text-gray-600 mb-4">
-            All plans include free Credits. No credit card required to start.
-          </p>
-          <div className="flex flex-wrap justify-center items-center gap-8 text-sm text-gray-500">
-            <div className="flex items-center">
-              <svg className="w-4 h-4 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-              </svg>
-              Auto-renews monthly
-            </div>
-            <div className="flex items-center">
-              <svg className="w-4 h-4 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-              </svg>
-              Cancel anytime
-            </div>
-            <div className="flex items-center">
-              <svg className="w-4 h-4 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-              </svg>
-              Secure payments
-            </div>
+    <section
+      id="pricing"
+      className="studio-pricing studio-section studio-container"
+      aria-labelledby="pricing-title"
+    >
+      <Reveal>
+        <div className="studio-section-heading">
+          <div>
+            <span className="studio-eyebrow">03 / ROOM FOR EVERY AMBITION</span>
+            <h2 id="pricing-title">
+              Great creative.
+              <br />
+              <span className="studio-muted">Grounded pricing.</span>
+            </h2>
+          </div>
+          <div className="studio-pricing-note">
+            <span className="studio-billing-pill">
+              <span className="studio-status-dot" /> BILLED MONTHLY
+            </span>
+            <p>
+              No long-term commitments.
+              <br />
+              Pick your pace. Cancel anytime.
+            </p>
           </div>
         </div>
+      </Reveal>
+      <div className="studio-pricing-grid">
+        {(["starter", "pro", "business"] as const).map((key, index) => {
+          const plan = STRIPE_PLANS[key];
+          const popular = key === "pro";
+          return (
+            <Reveal
+              key={key}
+              delay={index * 0.08}
+              className={`studio-price-card ${popular ? "is-featured" : ""}`}
+            >
+              <div className="studio-plan-top">
+                <Icon
+                  name={
+                    key === "starter"
+                      ? "spark"
+                      : key === "pro"
+                        ? "layers"
+                        : "grid"
+                  }
+                  width="26"
+                  height="26"
+                />
+                {popular ? (
+                  <span className="studio-popular">THE SWEET SPOT</span>
+                ) : (
+                  <span>0{index + 1}</span>
+                )}
+              </div>
+              <h3>{plan.name}</h3>
+              <p className="studio-plan-description">{descriptions[key]}</p>
+              <div className="studio-price">
+                ${plan.price}
+                <span>/ month</span>
+              </div>
+              <div className="studio-credit-allocation">
+                <strong>{plan.credits}</strong>
+                <span>creative credits / month</span>
+                <Icon name="spark" width="18" height="18" />
+              </div>
+              <ul>
+                {[
+                  "Text-to-image & image-to-image",
+                  ...(key === "starter"
+                    ? [
+                        "Build your product image library",
+                        "Explore new visual directions",
+                      ]
+                    : [
+                        "Text-to-video & image-to-video",
+                        "Text-to-music generation",
+                      ]),
+                  "Download your generated assets",
+                  "Manage your creative library",
+                ].map((feature) => (
+                  <li key={feature}>
+                    <Icon name="check" width="15" height="15" />
+                    {feature}
+                  </li>
+                ))}
+              </ul>
+              <button
+                type="button"
+                className={`studio-button ${popular ? "studio-button-lime" : "studio-button-outline"}`}
+                onClick={() => subscribe(key)}
+              >
+                Choose {plan.name}
+                <Icon name="diagonal" width="17" height="17" />
+              </button>
+            </Reveal>
+          );
+        })}
       </div>
+      <Reveal>
+        <div className="studio-pricing-footnote">
+          <p>
+            Start exploring with free credits. Image, video, and music
+            generations use different amounts of credits.
+          </p>
+          <div>
+            <span>
+              <Icon name="check" width="14" height="14" />
+              Monthly billing
+            </span>
+            <span>
+              <Icon name="check" width="14" height="14" />
+              Cancel anytime
+            </span>
+            <span>
+              <Icon name="check" width="14" height="14" />
+              Secure checkout
+            </span>
+          </div>
+        </div>
+      </Reveal>
     </section>
-  )
+  );
 }

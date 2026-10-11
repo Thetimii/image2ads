@@ -1,97 +1,110 @@
 "use client";
-import React, { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
 
-const FAQ = () => {
-  const faqs = [
-    { q: 'What kind of photos can I upload?', a: 'Any product photo works! Upload smartphone pics, professional shots, or anything in between. Our AI handles the rest.' },
-    { q: 'How fast do I get my ads?', a: 'Lightning fast! Your professional ads are generated in about 10-15 seconds using our advanced AI technology.' },
-    { q: 'Is this completely automated?', a: 'Yes! Our entire process is powered by AI - no human designers needed. Just upload, and our AI creates stunning ads instantly.' },
-    { q: 'What ad formats do you provide?', a: 'All major formats: Instagram Stories, Facebook Ads, Google Ads, TikTok, and custom sizes. Perfect for any platform!' },
-    { q: 'Can the AI match my brand style?', a: 'Absolutely! Our AI learns your brand colors, fonts, and style preferences to create perfectly on-brand advertisements.' },
-    { q: 'What if I want changes to my ad?', a: 'Simply regenerate with different style preferences! Our AI creates unlimited variations until you find the perfect ad.' },
-  ];
+import { useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
+import Link from "next/link";
+import { Reveal } from "./studio/StudioMotion";
+import { Icon } from "./studio/StudioIcons";
 
-  const [openIndex, setOpenIndex] = useState<number | null>(null);
-
-  const faqJsonLd = {
-    "@context": "https://schema.org",
-    "@type": "FAQPage",
-    mainEntity: faqs.map((faq) => ({
-      "@type": "Question",
-      name: faq.q,
-      acceptedAnswer: { "@type": "Answer", text: faq.a },
-    })),
-  };
-
+const faqs = [
+  {
+    q: "Do I need professional product photos?",
+    a: "No. Start with a clear photo of your product, including one taken on your phone. Good lighting and a visible product give the AI a stronger starting point.",
+  },
+  {
+    q: "How do I control the look of my ads?",
+    a: "Use your prompt to describe the scene, mood, colors, lighting, and composition you want. Try different creative directions until you find a result that fits your brand.",
+  },
+  {
+    q: "What can I create with Image2Ad?",
+    a: "Create images from text or an existing photo. Pro and Business also unlock text-to-video, image-to-video, and AI music tools in your workspace.",
+  },
+  {
+    q: "How do creative credits work?",
+    a: "Your plan includes a monthly credit allocation. Each generation uses credits, and the amount varies by format and model. Your workspace shows your available balance.",
+  },
+  {
+    q: "Can I try it before choosing a plan?",
+    a: "Yes. Create an account to start exploring with free credits. You can choose a paid plan when you need more room to create.",
+  },
+  {
+    q: "Can I cancel my subscription?",
+    a: "Yes. Manage or cancel your subscription from Usage & Billing in your workspace. Paid plans renew monthly until canceled.",
+  },
+];
+export default function FAQ() {
+  const [open, setOpen] = useState<number | null>(0);
+  const id = "studio-faq-answer";
   return (
-    <section className="py-24 px-6 relative">
+    <section id="faq" className="studio-faq studio-section">
+      <div className="studio-container studio-faq-grid">
+        <Reveal>
+          <span className="studio-eyebrow">04 / A FEW GOOD QUESTIONS</span>
+          <h2>
+            A little clarity.
+            <br />
+            <span className="studio-muted">Before you create.</span>
+          </h2>
+          <p>
+            Still curious about something?
+            <br />
+            We’re happy to help.
+          </p>
+          <Link href="/contact" className="studio-text-link">
+            Let’s talk <Icon name="diagonal" width="17" height="17" />
+          </Link>
+        </Reveal>
+        <Reveal className="studio-faq-list">
+          {faqs.map((faq, index) => (
+            <div
+              className={`studio-faq-item ${open === index ? "is-open" : ""}`}
+              key={faq.q}
+            >
+              <h3>
+                <button
+                  type="button"
+                  aria-expanded={open === index}
+                  aria-controls={`${id}-${index}`}
+                  onClick={() => setOpen(open === index ? null : index)}
+                >
+                  <span className="studio-faq-number">0{index + 1}</span>
+                  {faq.q}
+                  <span className="studio-faq-plus">
+                    <Icon name="plus" width="20" height="20" />
+                  </span>
+                </button>
+              </h3>
+              <AnimatePresence initial={false}>
+                {open === index && (
+                  <motion.div
+                    id={`${id}-${index}`}
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: "auto", opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    transition={{ duration: 0.25 }}
+                  >
+                    <p>{faq.a}</p>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          ))}
+        </Reveal>
+      </div>
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }}
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "FAQPage",
+            mainEntity: faqs.map((faq) => ({
+              "@type": "Question",
+              name: faq.q,
+              acceptedAnswer: { "@type": "Answer", text: faq.a },
+            })),
+          }),
+        }}
       />
-      <motion.h2
-        className="text-5xl md:text-6xl font-bold text-center mb-6 bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 bg-clip-text text-transparent"
-        initial={{ opacity: 0, y: 20 }}
-        whileInView={{ opacity: 1, y: 0 }}
-        viewport={{ once: true }}
-      >
-        Frequently Asked Questions
-      </motion.h2>
-      <motion.p
-        initial={{ opacity: 0, y: 20 }}
-        whileInView={{ opacity: 1, y: 0 }}
-        viewport={{ once: true }}
-        transition={{ delay: 0.1 }}
-        className="text-xl text-gray-700 text-center mb-16 max-w-2xl mx-auto"
-      >
-        Everything you need to know about our AI-powered service
-      </motion.p>
-      
-      <div className="max-w-3xl mx-auto">
-        {faqs.map((faq, index) => (
-          <motion.div 
-            key={index} 
-            className="mb-4"
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ delay: index * 0.1 }}
-          >
-            <motion.div
-              onClick={() => setOpenIndex(openIndex === index ? null : index)}
-              className="gradient-card rounded-2xl p-6 border border-gray-300/40 cursor-pointer flex justify-between items-center hover:border-gray-400/60 transition-all duration-300 group"
-              whileHover={{ scale: 1.01 }}
-            >
-              <h3 className="font-semibold text-lg text-gray-800 pr-4 group-hover:text-blue-600 transition-colors">{faq.q}</h3>
-              <motion.span 
-                className="text-2xl text-blue-500 flex-shrink-0"
-                animate={{ rotate: openIndex === index ? 45 : 0 }}
-                transition={{ duration: 0.2 }}
-              >
-                +
-              </motion.span>
-            </motion.div>
-            <AnimatePresence>
-              {openIndex === index && (
-                <motion.div
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: 'auto' }}
-                  exit={{ opacity: 0, height: 0 }}
-                  transition={{ duration: 0.3 }}
-                  className="overflow-hidden"
-                >
-                  <div className="p-6 mt-2 rounded-2xl bg-white/30 backdrop-blur-sm border border-gray-300/30 text-gray-700 leading-relaxed">
-                    {faq.a}
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </motion.div>
-        ))}
-      </div>
     </section>
   );
-};
-
-export default FAQ;
+}

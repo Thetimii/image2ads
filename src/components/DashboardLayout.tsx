@@ -1,118 +1,145 @@
-'use client'
+"use client";
 
-import React, { useState, useEffect, ReactNode } from 'react'
-import { createClient } from '@/lib/supabase/client'
-import { useRouter, usePathname } from 'next/navigation'
-import Link from 'next/link'
-import Image from 'next/image'
-import type { User } from '@supabase/supabase-js'
-import type { Profile } from '@/lib/validations'
-import { STRIPE_PLANS } from '@/lib/stripe-plans'
-import PricingPlans from '@/components/PricingPlans'
-import ProUpsellModal from '@/components/ProUpsellModal'
-import ProDiscountModal from '@/components/ProDiscountModal'
-import ProTrialModal from '@/components/ProTrialModal'
+import React, { useState, useEffect, ReactNode } from "react";
+import { createClient } from "@/lib/supabase/client";
+import { useRouter, usePathname } from "next/navigation";
+import Link from "next/link";
+import { Brand, Icon, type IconName } from "./studio/StudioIcons";
+import type { User } from "@supabase/supabase-js";
+import type { Profile } from "@/lib/validations";
+import { STRIPE_PLANS } from "@/lib/stripe-plans";
+import PricingPlans from "@/components/PricingPlans";
+import ProUpsellModal from "@/components/ProUpsellModal";
+import ProDiscountModal from "@/components/ProDiscountModal";
+import ProTrialModal from "@/components/ProTrialModal";
 import {
   trackMetaAddPaymentInfo,
   trackMetaInitiateCheckout,
   trackMetaPurchase,
   trackMetaSubscribedButtonClick,
-} from '@/lib/meta-events'
-
+} from "@/lib/meta-events";
 
 interface DashboardLayoutProps {
-  user: User
-  profile: Profile
-  children: ReactNode
-  onDemoOpen?: () => void
-  isNavigationLocked?: boolean
-  onShowUpgrade?: () => void
+  user: User;
+  profile: Profile;
+  children: ReactNode;
+  onDemoOpen?: () => void;
+  isNavigationLocked?: boolean;
+  onShowUpgrade?: () => void;
 }
 
-interface NavItem { name: string; href: string; locked?: boolean }
+interface NavItem {
+  name: string;
+  href: string;
+  locked?: boolean;
+  icon: IconName;
+}
 const navigation: NavItem[] = [
-  { name: '✨ Create Image', href: '/dashboard/generate/text-to-image' },
+  {
+    name: "Create image",
+    icon: "image",
+    href: "/dashboard/generate/text-to-image",
+  },
   // { name: '🖼 Image to Image', href: '/dashboard/generate/image-to-image' }, // Merged into Text to Image
-  { name: '🎬 Text to Video', href: '/dashboard/generate/text-to-video', locked: true },
-  { name: '🎥 Image to Video', href: '/dashboard/generate/image-to-video', locked: true },
-  { name: '🎵 Text to Music', href: '/dashboard/generate/text-to-music', locked: true },
-  { name: '📚 Library', href: '/dashboard/library' },
-]
+  {
+    name: "Text to video",
+    icon: "video",
+    href: "/dashboard/generate/text-to-video",
+    locked: true,
+  },
+  {
+    name: "Image to video",
+    icon: "video",
+    href: "/dashboard/generate/image-to-video",
+    locked: true,
+  },
+  {
+    name: "Text to music",
+    icon: "music",
+    href: "/dashboard/generate/text-to-music",
+    locked: true,
+  },
+  { name: "Your library", icon: "grid", href: "/dashboard/library" },
+];
 
 const bottomNavigation = [
   {
-    name: '💳 Usage & Billing',
-    href: '/billing',
+    name: "Usage & billing",
+    icon: "card" as const,
+    href: "/billing",
   },
   {
-    name: '⚙️ Settings',
-    href: '/dashboard/settings',
+    name: "Settings",
+    icon: "settings" as const,
+    href: "/dashboard/settings",
   },
-]
+];
 
-export default function DashboardLayout({ user, profile, children, onDemoOpen, isNavigationLocked = false, onShowUpgrade }: DashboardLayoutProps) {
-  const [sidebarOpen, setSidebarOpen] = useState(false)
-  const [isSafari, setIsSafari] = useState(false)
-  const [loadingPath, setLoadingPath] = useState<string | null>(null)
-  const [showUpgrade, setShowUpgrade] = useState(false)
-  const [showProUpsellModal, setShowProUpsellModal] = useState(false)
-  const [showProDiscountModal, setShowProDiscountModal] = useState(false)
-  const [showProTrialModal, setShowProTrialModal] = useState(false)
-  const [discountModalDismissed, setDiscountModalDismissed] = useState(false)
+export default function DashboardLayout({
+  user,
+  profile,
+  children,
+  onDemoOpen,
+  isNavigationLocked = false,
+  onShowUpgrade,
+}: DashboardLayoutProps) {
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [loadingPath, setLoadingPath] = useState<string | null>(null);
+  const [showUpgrade, setShowUpgrade] = useState(false);
+  const [showProUpsellModal, setShowProUpsellModal] = useState(false);
+  const [showProDiscountModal, setShowProDiscountModal] = useState(false);
+  const [showProTrialModal, setShowProTrialModal] = useState(false);
+  const [discountModalDismissed, setDiscountModalDismissed] = useState(false);
   const [trialModalDismissed, setTrialModalDismissed] = useState(() => {
     // Check localStorage on mount to persist across page navigations
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem(`trial-modal-dismissed-${user.id}`) === 'true'
+    if (typeof window !== "undefined") {
+      return (
+        localStorage.getItem(`trial-modal-dismissed-${user.id}`) === "true"
+      );
     }
-    return false
-  })
+    return false;
+  });
   const [hasSeenTrialModal, setHasSeenTrialModal] = useState(() => {
     // Check localStorage on mount
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem(`trial-modal-seen-${user.id}`) === 'true'
+    if (typeof window !== "undefined") {
+      return localStorage.getItem(`trial-modal-seen-${user.id}`) === "true";
     }
-    return false
-  })
-  const [isUpgrading, setIsUpgrading] = useState<string | null>(null)
-  const router = useRouter()
-  const pathname = usePathname()
-  const supabase = createClient()
+    return false;
+  });
+  const [isUpgrading, setIsUpgrading] = useState<string | null>(null);
+  const router = useRouter();
+  const pathname = usePathname();
+  const supabase = createClient();
 
   // Generator context removed for now to fix build issues
-  const generator = null
+  const generator = null;
 
   // Determine if user has pro access (not free)
-  const hasPro = profile.subscription_status !== 'free'
-
-  useEffect(() => {
-    // Detect Safari
-    const userAgent = navigator.userAgent.toLowerCase();
-    setIsSafari(userAgent.includes('safari') && !userAgent.includes('chrome'));
-  }, []);
+  const hasPro = profile.subscription_status !== "free";
 
   // Lock body scroll when sidebar is open on mobile
   useEffect(() => {
-    if (typeof document === 'undefined') return
-    const original = document.body.style.overflow
+    if (typeof document === "undefined") return;
+    const original = document.body.style.overflow;
     if (sidebarOpen) {
-      document.body.style.overflow = 'hidden'
+      document.body.style.overflow = "hidden";
     } else {
-      document.body.style.overflow = original
+      document.body.style.overflow = original;
     }
     return () => {
-      document.body.style.overflow = original
-    }
-  }, [sidebarOpen])
+      document.body.style.overflow = original;
+    };
+  }, [sidebarOpen]);
 
   // Prefetch dashboard routes for faster tab switching
   useEffect(() => {
-    navigation.forEach(item => {
-      router.prefetch(item.href)
-    })
-    bottomNavigation.forEach(item => {
-      router.prefetch(item.href)
-    })
-  }, [router])
+    navigation.forEach((item) => {
+      router.prefetch(item.href);
+    });
+    bottomNavigation.forEach((item) => {
+      router.prefetch(item.href);
+    });
+  }, [router]);
 
   // Check credits and show appropriate modal
   useEffect(() => {
@@ -121,177 +148,197 @@ export default function DashboardLayout({ user, profile, children, onDemoOpen, i
       if (hasPro) return;
 
       // Don't show if any modal is already open
-      if (showUpgrade || showProUpsellModal || showProDiscountModal || showProTrialModal) return;
+      if (
+        showUpgrade ||
+        showProUpsellModal ||
+        showProDiscountModal ||
+        showProTrialModal
+      )
+        return;
 
       // Only show trial modal at 0 credits (removed 20% discount modal logic)
       if (profile.credits === 0 && !trialModalDismissed) {
-        console.log('User has 0 credits - showing trial modal');
+        console.log("User has 0 credits - showing trial modal");
         setShowProTrialModal(true);
         setHasSeenTrialModal(true);
         // Save to localStorage so it persists across page navigations
-        localStorage.setItem(`trial-modal-seen-${user.id}`, 'true');
+        localStorage.setItem(`trial-modal-seen-${user.id}`, "true");
       }
     };
 
     checkCreditsAndShowModal();
-  }, [profile.credits, hasPro, showUpgrade, showProUpsellModal, showProDiscountModal, showProTrialModal, discountModalDismissed, trialModalDismissed]);
+  }, [
+    profile.credits,
+    hasPro,
+    showUpgrade,
+    showProUpsellModal,
+    showProDiscountModal,
+    showProTrialModal,
+    discountModalDismissed,
+    trialModalDismissed,
+  ]);
 
   const handleSignOut = async () => {
-    await supabase.auth.signOut()
-    router.push('/')
-  }
+    await supabase.auth.signOut();
+    router.push("/");
+  };
 
   // Handler to show trial/upgrade modal from children components
   const handleShowUpgradeModal = async () => {
     // Check if there's an active discount
     try {
-      const response = await fetch('/api/pro-discount-status')
-      const data = await response.json()
+      const response = await fetch("/api/pro-discount-status");
+      const data = await response.json();
 
       if (data.is_valid) {
-        setShowProUpsellModal(true)
+        setShowProUpsellModal(true);
       } else {
-        setShowProTrialModal(true)
+        setShowProTrialModal(true);
       }
     } catch (err) {
-      setShowProTrialModal(true)
+      setShowProTrialModal(true);
     }
-  }
+  };
 
-  const handleSubscribe = async (plan: 'starter' | 'pro' | 'business', couponId?: string) => {
-    setIsUpgrading(plan)
+  const handleSubscribe = async (
+    plan: "starter" | "pro" | "business",
+    couponId?: string,
+  ) => {
+    setIsUpgrading(plan);
     const metaOptions = {
       plan,
       couponId,
-      source: 'dashboard_layout_pricing',
-    }
-    trackMetaSubscribedButtonClick(metaOptions)
+      source: "dashboard_layout_pricing",
+    };
+    trackMetaSubscribedButtonClick(metaOptions);
     try {
-      trackMetaInitiateCheckout(metaOptions)
+      trackMetaInitiateCheckout(metaOptions);
       // Create checkout session via API
-      const response = await fetch('/api/stripe/create-checkout-session', {
-        method: 'POST',
+      const response = await fetch("/api/stripe/create-checkout-session", {
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
         body: JSON.stringify({
           plan,
           successUrl: `${window.location.origin}/billing?success=true`,
           cancelUrl: `${window.location.origin}${pathname}?checkout=cancelled`,
         }),
-      })
+      });
 
       if (response.ok) {
-        const { url } = await response.json()
-        trackMetaAddPaymentInfo(metaOptions)
-        window.location.href = url
+        const { url } = await response.json();
+        trackMetaAddPaymentInfo(metaOptions);
+        window.location.href = url;
       } else {
-        const errorData = await response.json()
-        console.error('Failed to create checkout session:', errorData.error)
-        alert('Failed to start checkout. Please try again.')
-        setIsUpgrading(null)
+        const errorData = await response.json();
+        console.error("Failed to create checkout session:", errorData.error);
+        alert("Failed to start checkout. Please try again.");
+        setIsUpgrading(null);
       }
     } catch (error) {
-      console.error('Error creating checkout session:', error)
-      alert('Failed to start checkout. Please try again.')
-      setIsUpgrading(null)
+      console.error("Error creating checkout session:", error);
+      alert("Failed to start checkout. Please try again.");
+      setIsUpgrading(null);
     }
-  }
+  };
 
   const handleNavigation = async (href: string) => {
-    if (href === pathname) return
+    if (href === pathname) return;
 
     // Check locked
-    const navItem = navigation.find(n => n.href === href)
+    const navItem = navigation.find((n) => n.href === href);
     if (navItem?.locked && !hasPro) {
-      console.log('🔒 Locked nav clicked, checking discount status...')
+      console.log("🔒 Locked nav clicked, checking discount status...");
       // Check if there's an active discount
       try {
-        const response = await fetch('/api/pro-discount-status')
-        const data = await response.json()
+        const response = await fetch("/api/pro-discount-status");
+        const data = await response.json();
 
         if (data.is_valid) {
-          console.log('✅ Showing discount modal')
-          setShowProUpsellModal(true)
+          console.log("✅ Showing discount modal");
+          setShowProUpsellModal(true);
         } else {
-          console.log('❌ Showing normal upgrade modal')
-          setShowUpgrade(true)
+          console.log("❌ Showing normal upgrade modal");
+          setShowUpgrade(true);
         }
       } catch (err) {
-        console.error('❌ Error checking discount:', err)
-        setShowUpgrade(true)
+        console.error("❌ Error checking discount:", err);
+        setShowUpgrade(true);
       }
-      return
+      return;
     }
 
     // Close sidebar immediately for instant feel
-    setSidebarOpen(false)
+    setSidebarOpen(false);
 
     // Generator context removed for build fix - navigation will work without this
 
     // Use router.push for proper Next.js navigation
-    router.push(href)
-  }
+    router.push(href);
+  };
 
   // Clear loading state when pathname changes
   useEffect(() => {
-    setLoadingPath(null)
-  }, [pathname])
+    setLoadingPath(null);
+  }, [pathname]);
 
   useEffect(() => {
-    if (typeof window === 'undefined') return
-    const params = new URLSearchParams(window.location.search)
-    const successTypes: Array<'upgrade' | 'trial'> = []
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const successTypes: Array<"upgrade" | "trial"> = [];
 
-    if (params.get('upgrade') === 'success') successTypes.push('upgrade')
-    if (params.get('trial') === 'success') successTypes.push('trial')
+    if (params.get("upgrade") === "success") successTypes.push("upgrade");
+    if (params.get("trial") === "success") successTypes.push("trial");
 
-    if (!successTypes.length) return
+    if (!successTypes.length) return;
 
-    const subscriptionId = profile.subscription_id?.toLowerCase() || ''
-    let planKey: 'starter' | 'pro' | 'business' | undefined
-    let planValue = 0
-    let planDisplayName = 'Subscription'
+    const subscriptionId = profile.subscription_id?.toLowerCase() || "";
+    let planKey: "starter" | "pro" | "business" | undefined;
+    let planValue = 0;
+    let planDisplayName = "Subscription";
 
-    if (subscriptionId.includes('starter')) {
-      planKey = 'starter'
-      planValue = STRIPE_PLANS.starter.price
-      planDisplayName = 'Starter Plan'
-    } else if (subscriptionId.includes('pro')) {
-      planKey = 'pro'
-      planValue = STRIPE_PLANS.pro.price
-      planDisplayName = 'Pro Plan'
-    } else if (subscriptionId.includes('business')) {
-      planKey = 'business'
-      planValue = STRIPE_PLANS.business.price
-      planDisplayName = 'Business Plan'
+    if (subscriptionId.includes("starter")) {
+      planKey = "starter";
+      planValue = STRIPE_PLANS.starter.price;
+      planDisplayName = "Starter Plan";
+    } else if (subscriptionId.includes("pro")) {
+      planKey = "pro";
+      planValue = STRIPE_PLANS.pro.price;
+      planDisplayName = "Pro Plan";
+    } else if (subscriptionId.includes("business")) {
+      planKey = "business";
+      planValue = STRIPE_PLANS.business.price;
+      planDisplayName = "Business Plan";
     }
 
-    successTypes.forEach(type => {
-      const eventValue = type === 'trial' ? 1 : planValue
+    successTypes.forEach((type) => {
+      const eventValue = type === "trial" ? 1 : planValue;
       trackMetaPurchase({
         ...(planKey ? { plan: planKey } : {}),
         value: eventValue || planValue || undefined,
         contentName: planDisplayName,
         source: `dashboard_${type}_success`,
-      })
-      params.delete(type)
-    })
+      });
+      params.delete(type);
+    });
 
-    const search = params.toString()
-    const nextUrl = search ? `${window.location.pathname}?${search}` : window.location.pathname
-    window.history.replaceState({}, '', nextUrl)
-  }, [profile.subscription_id, profile.subscription_status])
+    const search = params.toString();
+    const nextUrl = search
+      ? `${window.location.pathname}?${search}`
+      : window.location.pathname;
+    window.history.replaceState({}, "", nextUrl);
+  }, [profile.subscription_id, profile.subscription_status]);
 
   const isCurrentPath = (href: string) => {
     // Always check pathname for instant visual update
-    return pathname === href
-  }
+    return pathname === href;
+  };
 
-  const isGeneratorPage = pathname.startsWith('/dashboard/generate')
+  const isGeneratorPage = pathname.startsWith("/dashboard/generate");
 
   return (
-    <div className="h-screen bg-gray-50 flex">
+    <div className="studio-dashboard h-screen bg-gray-50 flex">
       {/* Mobile sidebar overlay */}
       {sidebarOpen && (
         <div
@@ -303,44 +350,35 @@ export default function DashboardLayout({ user, profile, children, onDemoOpen, i
       )}
 
       {/* Sidebar */}
-      <div className={`
-        fixed inset-y-0 left-0 z-50 w-[82vw] max-w-xs lg:w-64 bg-white border-r border-gray-200 transform transition-transform duration-300 ease-in-out lg:translate-x-0
-        ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
-      `}>
+      <div
+        className={`
+        studio-dashboard-sidebar fixed inset-y-0 left-0 z-50 w-[82vw] max-w-xs lg:w-64 bg-white border-r border-gray-200 transform transition-transform duration-300 ease-in-out lg:translate-x-0
+        ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}
+      `}
+      >
         <div className="flex flex-col min-h-screen w-[82vw] max-w-xs lg:w-64 overflow-y-auto">
           {/* Header */}
           <div className="flex items-center justify-between h-16 px-6 border-b border-gray-200 flex-shrink-0">
             <Link href="/" className="flex items-center space-x-2">
-              {isSafari ? (
-                // Safari-specific PNG fallback
-                <Image
-                  src="/logo.png"
-                  alt="Image2Ad Logo"
-                  width={32}
-                  height={32}
-                  className="w-8 h-8"
-                  style={{
-                    imageRendering: 'auto'
-                  } as React.CSSProperties}
-                />
-              ) : (
-                // Standard SVG for other browsers
-                <Image
-                  src="/logo.svg"
-                  alt="Image2Ad Logo"
-                  width={32}
-                  height={32}
-                  className="w-8 h-8"
-                />
-              )}
-              <span className="text-xl font-bold text-gray-900">Image2Ad</span>
+              <Brand />
             </Link>
             <button
               onClick={() => setSidebarOpen(false)}
+              aria-label="Close sidebar"
               className="lg:hidden p-1 rounded-md hover:bg-gray-100"
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              <svg
+                className="w-5 h-5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M6 18L18 6M6 6l12 12"
+                />
               </svg>
             </button>
           </div>
@@ -350,30 +388,32 @@ export default function DashboardLayout({ user, profile, children, onDemoOpen, i
             onClick={async () => {
               // Check if there's an active discount, show appropriate modal
               try {
-                const response = await fetch('/api/pro-discount-status')
-                const data = await response.json()
+                const response = await fetch("/api/pro-discount-status");
+                const data = await response.json();
 
                 if (data.is_valid) {
-                  setShowProUpsellModal(true)
+                  setShowProUpsellModal(true);
                 } else {
-                  setShowUpgrade(true)
+                  setShowUpgrade(true);
                 }
               } catch (err) {
-                setShowUpgrade(true)
+                setShowUpgrade(true);
               }
             }}
-            className="w-full px-6 py-4 border-b border-gray-200 flex-shrink-0 hover:bg-purple-50/30 transition-colors cursor-pointer text-left group"
+            className="studio-dashboard-profile w-full px-6 py-4 border-b border-gray-200 flex-shrink-0 hover:bg-purple-50/30 transition-colors cursor-pointer text-left group"
             title="Click to get more credits"
           >
             <div className="flex items-center space-x-3">
               <div className="w-14 h-9 bg-gradient-to-r from-blue-500 to-purple-500 rounded-2xl flex items-center justify-center">
                 <span className="text-white font-semibold text-sm">
-                  {profile.full_name ? profile.full_name.charAt(0).toUpperCase() : user.email?.charAt(0).toUpperCase()}
+                  {profile.full_name
+                    ? profile.full_name.charAt(0).toUpperCase()
+                    : user.email?.charAt(0).toUpperCase()}
                 </span>
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-gray-900 truncate">
-                  {profile.full_name || 'User'}
+                  {profile.full_name || "User"}
                 </p>
                 <div className="flex items-center space-x-1">
                   <div className="w-2 h-2 bg-green-400 rounded-full"></div>
@@ -388,56 +428,64 @@ export default function DashboardLayout({ user, profile, children, onDemoOpen, i
             </div>
           </button>
 
-
-
           {/* Main navigation - Fixed height, no scrolling */}
           <nav className="flex-1 px-4 py-4 space-y-1">
             {navigation.map((item) => {
-              const isLocked = item.locked && !hasPro
-              const isDisabledByOnboarding = isNavigationLocked && item.href !== pathname
-              const shouldDisable = isDisabledByOnboarding && !isLocked
+              const isLocked = item.locked && !hasPro;
+              const isDisabledByOnboarding =
+                isNavigationLocked && item.href !== pathname;
+              const shouldDisable = isDisabledByOnboarding && !isLocked;
 
               return (
                 <button
                   key={item.name}
+                  data-active={isCurrentPath(item.href)}
                   onClick={async () => {
                     if (isLocked) {
-                      console.log('🔒 Locked nav clicked, checking discount status...')
+                      console.log(
+                        "🔒 Locked nav clicked, checking discount status...",
+                      );
                       // Check if there's an active discount
                       try {
-                        const response = await fetch('/api/pro-discount-status')
-                        const data = await response.json()
+                        const response = await fetch(
+                          "/api/pro-discount-status",
+                        );
+                        const data = await response.json();
 
                         if (data.is_valid) {
-                          console.log('✅ Showing discount modal')
-                          setShowProUpsellModal(true)
+                          console.log("✅ Showing discount modal");
+                          setShowProUpsellModal(true);
                         } else {
-                          console.log('❌ Showing normal upgrade modal')
-                          setShowUpgrade(true)
+                          console.log("❌ Showing normal upgrade modal");
+                          setShowUpgrade(true);
                         }
                       } catch (err) {
-                        console.error('❌ Error checking discount:', err)
-                        setShowUpgrade(true)
+                        console.error("❌ Error checking discount:", err);
+                        setShowUpgrade(true);
                       }
-                      return
+                      return;
                     }
                     if (!shouldDisable) {
-                      handleNavigation(item.href)
+                      handleNavigation(item.href);
                     }
                   }}
                   disabled={loadingPath === item.href || shouldDisable}
                   className={`relative group flex items-center px-3 py-2.5 text-sm font-medium rounded-xl transition-all duration-150 w-full text-left
-                    ${isCurrentPath(item.href)
-                      ? 'bg-gradient-to-r from-purple-50 to-pink-50 text-purple-700'
-                      : 'text-gray-700 hover:bg-purple-50/50 hover:text-purple-600'}
-                    ${loadingPath === item.href ? 'opacity-75' : ''}
-                    ${isLocked ? 'opacity-60 blur-[0.2px] cursor-pointer' : ''}
-                    ${shouldDisable ? 'cursor-not-allowed' : ''}
+                    ${
+                      isCurrentPath(item.href)
+                        ? "bg-gradient-to-r from-purple-50 to-pink-50 text-purple-700"
+                        : "text-gray-700 hover:bg-purple-50/50 hover:text-purple-600"
+                    }
+                    ${loadingPath === item.href ? "opacity-75" : ""}
+                    ${isLocked ? "opacity-60 cursor-pointer" : ""}
+                    ${shouldDisable ? "cursor-not-allowed" : ""}
                   `}
                 >
-                  <span>{item.name}{isLocked && ' 🔒'}</span>
+                  <Icon name={item.icon} width="18" height="18" />
+                  <span>{item.name}</span>
+                  {isLocked && <span className="studio-nav-locked">PRO</span>}
                 </button>
-              )
+              );
             })}
           </nav>
 
@@ -459,16 +507,20 @@ export default function DashboardLayout({ user, profile, children, onDemoOpen, i
             {bottomNavigation.map((item) => (
               <button
                 key={item.name}
-                onClick={() => !isNavigationLocked && handleNavigation(item.href)}
+                data-active={isCurrentPath(item.href)}
+                onClick={() =>
+                  !isNavigationLocked && handleNavigation(item.href)
+                }
                 disabled={loadingPath === item.href || isNavigationLocked}
                 className={`
                   group flex items-center px-3 py-2.5 text-sm font-medium rounded-xl transition-all duration-150 w-full text-left
-                  ${isCurrentPath(item.href)
-                    ? 'bg-gradient-to-r from-purple-50 to-pink-50 text-purple-700'
-                    : 'text-gray-700 hover:bg-purple-50/50 hover:text-purple-600'
+                  ${
+                    isCurrentPath(item.href)
+                      ? "bg-gradient-to-r from-purple-50 to-pink-50 text-purple-700"
+                      : "text-gray-700 hover:bg-purple-50/50 hover:text-purple-600"
                   }
-                  ${loadingPath === item.href ? 'opacity-75' : ''}
-                  ${isNavigationLocked ? 'cursor-not-allowed' : ''}
+                  ${loadingPath === item.href ? "opacity-75" : ""}
+                  ${isNavigationLocked ? "cursor-not-allowed" : ""}
                 `}
               >
                 {loadingPath === item.href ? (
@@ -477,10 +529,15 @@ export default function DashboardLayout({ user, profile, children, onDemoOpen, i
                       <div className="w-5 h-5 border-2 border-purple-500/30 border-t-purple-500 rounded-full animate-spin"></div>
                     </span>
                     <span>{item.name}</span>
-                    <span className="ml-auto text-xs text-purple-500">Loading...</span>
+                    <span className="ml-auto text-xs text-purple-500">
+                      Loading...
+                    </span>
                   </>
                 ) : (
-                  <span>{item.name}</span>
+                  <>
+                    <Icon name={item.icon} width="18" height="18" />
+                    <span>{item.name}</span>
+                  </>
                 )}
               </button>
             ))}
@@ -490,7 +547,7 @@ export default function DashboardLayout({ user, profile, children, onDemoOpen, i
               onClick={handleSignOut}
               className="w-full group flex items-center px-3 py-2.5 text-sm font-medium rounded-xl transition-all duration-200 text-gray-700 hover:bg-red-50 hover:text-red-700"
             >
-              🚪 Sign Out
+              <Icon name="logout" width="18" height="18" /> Sign out
             </button>
           </div>
         </div>
@@ -502,10 +559,10 @@ export default function DashboardLayout({ user, profile, children, onDemoOpen, i
         {showProDiscountModal && (
           <ProDiscountModal
             onCloseAction={() => {
-              setShowProDiscountModal(false)
-              setDiscountModalDismissed(true)
+              setShowProDiscountModal(false);
+              setDiscountModalDismissed(true);
             }}
-            onUpgradeAction={() => { }}
+            onUpgradeAction={() => {}}
           />
         )}
 
@@ -513,12 +570,12 @@ export default function DashboardLayout({ user, profile, children, onDemoOpen, i
         {showProTrialModal && (
           <ProTrialModal
             onCloseAction={() => {
-              setShowProTrialModal(false)
-              setTrialModalDismissed(true)
+              setShowProTrialModal(false);
+              setTrialModalDismissed(true);
               // Save to localStorage to persist across page navigations
-              localStorage.setItem(`trial-modal-dismissed-${user.id}`, 'true')
+              localStorage.setItem(`trial-modal-dismissed-${user.id}`, "true");
             }}
-            onStartTrialAction={() => { }}
+            onStartTrialAction={() => {}}
           />
         )}
 
@@ -537,12 +594,13 @@ export default function DashboardLayout({ user, profile, children, onDemoOpen, i
               {/* Header */}
               <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex justify-between items-center rounded-t-2xl">
                 <div>
-                  <h2 className="text-xl font-bold text-gray-900">✨ Upgrade Your Plan</h2>
+                  <h2 className="text-xl font-bold text-gray-900">
+                    ✨ Upgrade Your Plan
+                  </h2>
                   <p className="text-sm text-gray-500 mt-1">
                     {hasPro
-                      ? 'Get more credits with a higher tier plan'
-                      : 'Unlock video generation, music creation, and get more credits. Choose a plan to get started:'
-                    }
+                      ? "Get more credits with a higher tier plan"
+                      : "Unlock video generation, music creation, and get more credits. Choose a plan to get started:"}
                   </p>
                 </div>
                 <button
@@ -563,7 +621,8 @@ export default function DashboardLayout({ user, profile, children, onDemoOpen, i
               {/* Footer */}
               <div className="border-t border-gray-200 px-6 py-4 bg-gray-50 rounded-b-2xl">
                 <p className="text-xs text-gray-500 text-center">
-                  💳 Secure payment powered by Stripe • Auto-renews monthly • Cancel anytime
+                  💳 Secure payment powered by Stripe • Auto-renews monthly •
+                  Cancel anytime
                 </p>
               </div>
             </div>
@@ -572,56 +631,53 @@ export default function DashboardLayout({ user, profile, children, onDemoOpen, i
         {/* Mobile header */}
         <div
           className="lg:hidden bg-white border-b border-gray-200 px-4 py-3 sticky top-0 z-30"
-          style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 6px)' }}
+          style={{ paddingTop: "calc(env(safe-area-inset-top, 0px) + 6px)" }}
         >
           <div className="flex items-center justify-between">
             <button
               onClick={() => setSidebarOpen(true)}
+              aria-label="Open sidebar"
+              aria-expanded={sidebarOpen}
               className="p-2 rounded-md hover:bg-gray-100"
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+              <svg
+                className="w-5 h-5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M4 6h16M4 12h16M4 18h16"
+                />
               </svg>
             </button>
             <div className="flex items-center space-x-2">
-              {isSafari ? (
-                // Safari-specific PNG fallback
-                <Image
-                  src="/logo.png"
-                  alt="Image2Ad Logo"
-                  width={24}
-                  height={24}
-                  className="w-6 h-6"
-                  style={{
-                    imageRendering: 'auto'
-                  } as React.CSSProperties}
-                />
-              ) : (
-                // Standard SVG for other browsers
-                <Image
-                  src="/logo.svg"
-                  alt="Image2Ad Logo"
-                  width={24}
-                  height={24}
-                  className="w-6 h-6"
-                />
-              )}
-              <span className="font-semibold text-gray-900">Image2Ad</span>
+              <Brand />
             </div>
           </div>
         </div>
 
         {/* Page content */}
-        <main className={`flex-1 flex flex-col min-h-0 overflow-hidden ${!isGeneratorPage && (pathname === '/dashboard/library' || pathname === '/dashboard/settings' || pathname === '/billing')
-          ? 'overflow-y-auto'
-          : ''
-          }`}>
+        <main
+          className={`flex-1 flex flex-col min-h-0 overflow-hidden ${
+            !isGeneratorPage &&
+            (pathname === "/dashboard/library" ||
+              pathname === "/dashboard/settings" ||
+              pathname === "/billing")
+              ? "overflow-y-auto"
+              : ""
+          }`}
+        >
           {React.isValidElement(children)
-            ? React.cloneElement(children, { onShowUpgrade: handleShowUpgradeModal } as any)
-            : children
-          }
+            ? React.cloneElement(children, {
+                onShowUpgrade: handleShowUpgradeModal,
+              } as any)
+            : children}
         </main>
       </div>
     </div>
-  )
+  );
 }

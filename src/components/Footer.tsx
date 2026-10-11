@@ -1,73 +1,64 @@
-"use client";
-import React, { useState, useEffect } from 'react';
-import Image from 'next/image';
+import Link from "next/link";
+import { Brand, Icon } from "./studio/StudioIcons";
+import { Reveal } from "./studio/StudioMotion";
 
-const Footer = () => {
-  const [isSafari, setIsSafari] = useState(false);
-
-  useEffect(() => {
-    const userAgent = navigator.userAgent.toLowerCase();
-    const isSafariBrowser = userAgent.includes('safari') && !userAgent.includes('chrome') && !userAgent.includes('firefox');
-    setIsSafari(isSafariBrowser);
-  }, []);
-
-
-
+export default function Footer() {
   return (
-    <footer className="py-16 px-6 bg-white/20 backdrop-blur-sm border-t border-gray-300/30">
-      <div className="max-w-6xl mx-auto">
-        <div className="flex flex-col md:flex-row justify-between items-center mb-12">
-          <div className="mb-8 md:mb-0">
-            <Image
-              src={isSafari ? "/logo.png" : "/logo.svg"}
-              alt="Image 2 Ads Logo"
-              width={160}
-              height={48}
-              className="h-12 w-auto"
-            />
-            <p className="text-gray-700 mt-2 max-w-md">
-              Transform your product photos into high-converting ads with AI-powered design.
-            </p>
-          </div>
-          
-          <div className="flex flex-col sm:flex-row items-center gap-8">
-            <div className="flex space-x-8">
-              <a href="/about" className="text-gray-600 hover:text-gray-800 transition-colors duration-300">About</a>
-              <a href="/blog" className="text-gray-600 hover:text-gray-800 transition-colors duration-300">Blog</a>
-              <a href="/contact" className="text-gray-600 hover:text-gray-800 transition-colors duration-300">Contact</a>
-              <a href="/privacy" className="text-gray-600 hover:text-gray-800 transition-colors duration-300">Privacy</a>
-              <a href="/terms" className="text-gray-600 hover:text-gray-800 transition-colors duration-300">Terms</a>
+    <footer className="studio-footer">
+      <div className="studio-container">
+        <Reveal>
+          <div className="studio-footer-cta">
+            <div>
+              <span className="studio-eyebrow">
+                YOUR NEXT GREAT IDEA STARTS HERE.
+              </span>
+              <h2>
+                Ready for your
+                <br />
+                <span>main character moment?</span>
+              </h2>
             </div>
-            
-            <a
+            <Link
               href="/signup"
-              className="px-6 py-3 text-white font-semibold rounded-full bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 transition-all duration-300 hover:scale-105"
+              className="studio-footer-cta-circle"
+              aria-label="Start creating your next campaign"
             >
-              Get Started
-            </a>
+              <Icon name="diagonal" width="43" height="43" />
+              <span>LET’S CREATE</span>
+            </Link>
           </div>
+        </Reveal>
+        <div className="studio-footer-links">
+          <div>
+            <Link href="/" aria-label="Image2Ad home">
+              <Brand />
+            </Link>
+            <p>A little AI. A whole new perspective.</p>
+          </div>
+          <nav aria-label="Footer navigation">
+            <Link href="/about">About</Link>
+            <Link href="/blog">Journal</Link>
+            <Link href="/contact">Contact</Link>
+            <Link href="/signin">
+              Your workspace <Icon name="diagonal" width="13" height="13" />
+            </Link>
+          </nav>
         </div>
-        
-        <div className="flex flex-col md:flex-row justify-between items-center pt-8 border-t border-gray-300/30">
-          <p className="text-gray-600 mb-4 md:mb-0">
-            &copy; 2025 Image 2 Ads. All rights reserved.
-          </p>
-          
-          <div className="flex space-x-4">
-            <a href="https://www.facebook.com/profile.php?id=61580386327319" target="_blank" rel="noopener noreferrer" className="w-10 h-10 rounded-full bg-gradient-to-r from-blue-500 to-purple-600 flex items-center justify-center hover:scale-110 transition-transform duration-300 text-white text-sm font-bold">
-              FB
-            </a>
-            <a href="#" className="w-10 h-10 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 flex items-center justify-center hover:scale-110 transition-transform duration-300 text-white text-sm font-bold">
-              IG
-            </a>
-            <a href="#" className="w-10 h-10 rounded-full bg-gradient-to-r from-pink-500 to-blue-500 flex items-center justify-center hover:scale-110 transition-transform duration-300 text-white text-sm font-bold">
-              TW
-            </a>
+        <div className="studio-footer-wordmark" aria-hidden="true">
+          good ideas<span>™</span>
+        </div>
+        <div className="studio-footer-bottom">
+          <span>© {new Date().getFullYear()} Image2Ad</span>
+          <span>
+            MADE FOR YOUR NEXT BIG THING.{" "}
+            <Icon name="spark" width="13" height="13" />
+          </span>
+          <div>
+            <Link href="/privacy">Privacy</Link>
+            <Link href="/terms">Terms</Link>
           </div>
         </div>
       </div>
     </footer>
   );
-};
-
-export default Footer;
+}
