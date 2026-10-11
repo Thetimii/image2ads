@@ -44,6 +44,12 @@ Guarantees:
 - **Safety-filter retry.** Image jobs blocked by the content filter are retried once with a softened prompt at no extra charge.
 - **Callback auth.** Either kie.ai's HMAC headers (`KIE_WEBHOOK_HMAC_KEY`) or our per-job signed `?sig=` token; anything else gets 401.
 
+## Known, accepted limits
+
+- If kie.ai's `createTask` times out (20 s) we refund the user, but kie.ai may still have accepted and billed that task. Rare; the cost is one render.
+- `sweep-stuck-jobs` accepts calls without a secret (pg_net has none to send). Abuse is bounded: it only re-checks already-stale jobs, at most once per job per minute.
+- Upgrade credits: at most one upgrade grant per subscription per billing period (difference between plans).
+
 ## Edge functions
 
 | Function | Purpose |
@@ -70,14 +76,16 @@ deno test --no-lock -A supabase/functions/_shared/backend_test.ts      # kie.ai 
 # SQL (needs a local Postgres 15+):
 createdb i2a_test
 psql -d i2a_test -f supabase/tests/pg_harness_setup.sql
-psql -d i2a_test -f supabase/migrations/20261011140000_generation_pipeline_v2.sql
+psql -d i2a_test -f supabase/migrations/20261012000000_generation_pipeline_v2.sql
 psql -d i2a_test -f supabase/tests/pipeline_v2.test.sql                # prints PASS 1..8
 ```
 
 ## Deploy
 
 ```bash
-supabase db push            # applies 20261011140000_generation_pipeline_v2.sql
+# migration: production's migration history doesn't track this repo, so apply
+# supabase/migrations/20261012000000_generation_pipeline_v2.sql directly
+# (SQL editor or `supabase db query`), not via `db push`.
 ./supabase/deploy.sh        # runs tests, deploys functions, deletes retired ones
 # then deploy the Next.js app (Vercel)
 ```

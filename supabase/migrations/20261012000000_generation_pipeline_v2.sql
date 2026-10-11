@@ -44,6 +44,11 @@ alter table public.jobs alter column credits_used set default 0;
 -- "refund" a credit that was never taken.
 update public.jobs set credits_used = 0 where status = 'pending' and coalesce(credits_used, 0) <> 0;
 
+-- Jobs already running at deploy time: give them a start time so timeouts
+-- apply to them too (updated_at is bumped on every status check).
+update public.jobs set started_at = coalesce(charged_at, created_at)
+ where status = 'processing' and started_at is null;
+
 create index if not exists idx_jobs_free_quota
   on public.jobs (user_id, created_at)
   where billing_tier = 'free_quota';

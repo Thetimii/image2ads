@@ -70,6 +70,9 @@ export const TIMEOUT_MS: Record<string, number> = {
 };
 /** A job charged but without a kie task after this long crashed mid-start. */
 export const ORPHAN_AFTER_MS = 3 * 60_000;
+/** Extra time for a finished render we couldn't download/store yet (kie.ai
+ * keeps files 14 days, so transient storage errors get several retries). */
+export const STORE_GRACE_MS = 15 * 60_000;
 /** A pending job (browser never called generate) is abandoned after this. */
 export const ABANDONED_AFTER_MS = 10 * 60_000;
 /** Signed reference-image URLs must outlive kie.ai's queue. */
@@ -320,14 +323,11 @@ export async function syncJob(jobId: string, opts: SyncOptions): Promise<JobRow 
   await db().from("jobs").update({ provider_checked_at: new Date().toISOString() }).eq("id", job.id).eq("status", "processing");
 
   if (task.state === "success") {
-    await completeJob(job, task, opts);
+    const stored = await completeJob(job, task, opts);
     // A finished render we can't store (download/upload keeps failing) must
-    // not sit in processing forever: refund once it's past the timeout.
-    if (age > timeout) {
-      const after = await loadJob(jobId);
-      if (after?.status === "processing") {
-        await failJob(job.id, "unknown", "result could not be stored", undefined, { providerCredits: task.creditsConsumed });
-      }
+    // not sit in processing forever: refund once well past the timeout.
+    if (!stored && age > timeout + STORE_GRACE_MS) {
+      await failJob(job.id, "unknown", "result could not be stored", undefined, { providerCredits: task.creditsConsumed });
     }
   } else if (task.state === "fail") {
     await handleProviderFailure(job, task);
@@ -408,12 +408,13 @@ async function download(url: string, timeoutMs: number): Promise<Uint8Array> {
   throw last instanceof Error ? last : new Error(String(last));
 }
 
-async function completeJob(job: JobRow, task: KieTask, opts: SyncOptions): Promise<void> {
+/** Returns true if the result is stored and the job is (now) completed. */
+async function completeJob(job: JobRow, task: KieTask, opts: SyncOptions): Promise<boolean> {
   const resultType = resultTypeOf(job);
   const url = pickMedia(resultType, task.resultUrls);
   if (!url) {
     await failJob(job.id, "unknown", `success without result url: ${JSON.stringify(task).slice(0, 500)}`);
-    return;
+    return true;
   }
 
   let bytes: Uint8Array;
@@ -423,7 +424,7 @@ async function completeJob(job: JobRow, task: KieTask, opts: SyncOptions): Promi
     // Leave the job processing: kie.ai keeps files for 14 days, so the next
     // poll / sweep can try again. The timeout path refunds if it never works.
     logError("sync", "download_failed", err, { jobId: job.id, url });
-    return;
+    return false;
   }
 
   // The library (api/generated-ads) lists results by extension: .png / .mp4 /
@@ -436,7 +437,7 @@ async function completeJob(job: JobRow, task: KieTask, opts: SyncOptions): Promi
   const up = await db().storage.from("results").upload(key, bytes, { contentType: type, upsert: true });
   if (up.error) {
     logError("sync", "upload_failed", up.error, { jobId: job.id, key });
-    return; // retried by the next sync
+    return false; // retried by the next sync
   }
 
   let coverKey: string | null = null;
@@ -469,7 +470,17 @@ async function completeJob(job: JobRow, task: KieTask, opts: SyncOptions): Promi
     .eq("status", "processing")
     .select("id")
     .maybeSingle();
-  if (!won) return; // another caller finished it first
+  if (!won) {
+    // Lost the race. If the job was completed by another caller it points at
+    // this same key - keep it. If it was failed (and refunded) meanwhile,
+    // remove what we just uploaded so the library doesn't show a refunded
+    // result.
+    const now = await loadJob(job.id);
+    if (now?.status === "failed") {
+      await db().storage.from("results").remove([key, ...(coverKey ? [coverKey] : [])]);
+    }
+    return now?.status === "completed";
+  }
 
   // Library metadata (folder_id null = shows in the main library, as before).
   const { error: mErr } = await db().from("generated_ads_metadata").upsert({
@@ -487,4 +498,5 @@ async function completeJob(job: JobRow, task: KieTask, opts: SyncOptions): Promi
     kieCredits: credits,
     model: job.provider_model,
   });
+  return true;
 }

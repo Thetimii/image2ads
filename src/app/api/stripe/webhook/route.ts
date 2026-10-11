@@ -70,7 +70,9 @@ async function grantCreditsOnce(
     .eq("stripe_customer_id", stripeCustomerId)
     .single();
   if (findError || !profile) {
-    throw new Error(`grantCreditsOnce: no profile for Stripe customer ${stripeCustomerId}`);
+    // Not an error worth retrying: the customer hasn't signed up / linked yet.
+    console.error("grantCreditsOnce: no profile for Stripe customer", stripeCustomerId, findError?.message);
+    return { granted: false };
   }
   const { data, error } = await supabaseAdmin.rpc("grant_credits_once", {
     p_user: profile.id,
@@ -515,9 +517,9 @@ export async function POST(req: NextRequest) {
         // grant a full month of credits each time. Renewals are granted once
         // per invoice in invoice.payment_succeeded; first payments in
         // checkout.session.completed.
-        // Upgrades only, and only the difference (Pro -> Business = +300),
-        // once per subscription + target price + billing period, so
-        // switching back and forth can't farm credits.
+        // Upgrades only, the credit difference (Pro -> Business = +300), and at
+        // most ONE upgrade grant per subscription per billing period, so
+        // switching plans back and forth can't farm credits.
         const previous = (event.data as { previous_attributes?: { items?: { data?: Array<{ price?: { id?: string } }> } } }).previous_attributes;
         const previousPriceId = previous?.items?.data?.[0]?.price?.id;
         const previousCredits = previousPriceId ? getCreditsByPriceId(previousPriceId) : 0;
@@ -535,7 +537,7 @@ export async function POST(req: NextRequest) {
             subscription.customer as string,
             upgradeCredits,
             `upgrade:${planName ?? "unknown"}`,
-            `upgrade:${subscription.id}:${planItem?.price?.id}:${periodStart}`
+            `upgrade:${subscription.id}:${periodStart}`
           );
         }
         break;
