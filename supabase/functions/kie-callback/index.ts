@@ -73,9 +73,17 @@ async function handler(req: Request) {
 
     console.log(`[kie-callback] Job ${job.id} (taskId ${taskId}) reported activity - triggering check-job-status`);
 
+    // check-job-status authorizes internal callers via x-internal-secret
+    // (see utils/auth.ts) - a service-role Bearer token is NOT a user session
+    // and was being rejected with 401, which silently broke every webhook.
+    const INTERNAL_SECRET = Deno.env.get("INTERNAL_FUNCTION_SECRET") ?? "";
+    if (!INTERNAL_SECRET) {
+      console.error("[kie-callback] INTERNAL_FUNCTION_SECRET not set - cannot trigger check-job-status");
+      return new Response("ok", { status: 200 });
+    }
     const resp = await fetch(
       `${SUPABASE_URL}/functions/v1/check-job-status?jobId=${job.id}`,
-      { headers: { Authorization: `Bearer ${SERVICE_ROLE_KEY}` } }
+      { headers: { "x-internal-secret": INTERNAL_SECRET } }
     );
 
     console.log(`[kie-callback] check-job-status responded ${resp.status} for job ${job.id}`);
@@ -83,8 +91,9 @@ async function handler(req: Request) {
     return new Response("ok", { status: 200 });
   } catch (err: any) {
     console.error("[kie-callback] Error processing callback:", err);
-    // Always 200 so Kie.ai doesn't hammer retries - the sweep cron is the
-    // backstop if this invocation genuinely failed to resolve anything.
+    // Always 200 so Kie.ai doesn't hammer retries - the SQL sweep
+    // (public.sweep_stuck_jobs, pg_cron) is the backstop if this invocation
+    // genuinely failed to resolve anything.
     return new Response("ok", { status: 200 });
   }
 }
