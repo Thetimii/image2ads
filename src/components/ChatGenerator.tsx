@@ -271,8 +271,8 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
   const requiresImage = gen.activeTab === 'image-to-image' || gen.activeTab === 'image-to-video'
   const isMusicMode = gen.activeTab === 'text-to-music'
   const isImageMode = gen.activeTab === 'text-to-image' || gen.activeTab === 'image-to-image'
-  // Check if feature is locked: only locked if marked as locked AND user has free status
-  const isLocked = !!meta.locked && profile?.subscription_status === 'free'
+  // Video / music are subscriber features (also covers a null subscription_status)
+  const isLocked = !!meta.locked && !(profile?.subscription_status === 'active' || profile?.subscription_status === 'trialing')
   const chatContainerRef = useRef<HTMLDivElement | null>(null)
 
   // Helper to get credit text based on user type
@@ -289,7 +289,8 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
 
   const getCreditText = () => {
     if (isFreeUser) {
-      return profile.credits === 1 ? '1 free image remaining' : `${profile.credits} free images remaining`
+      // Free plan: 3 free credits a day (1 image = 1 credit)
+      return profile.credits === 1 ? '1 free image left today' : `${profile.credits} free images left today`
     }
     return `${profile.credits} credits`
   }
@@ -305,8 +306,8 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
       count = isImageMode && selectedModel === 'nano-banana-pro' ? 6 : 1
     }
 
-    if (isFreeUser) {
-      return count === 1 ? '1 free image' : `${count} free images`
+    if (isFreeUser && count === 1) {
+      return '1 free image'
     }
     return `${count} credit${count > 1 ? 's' : ''}`
   }
@@ -814,6 +815,12 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
 
     // Check if user has sufficient credits BEFORE generation
     const requiredCredits = getCreditCost()
+    if (profile.credits < requiredCredits && isFreeUser) {
+      // A tab left open past midnight shows yesterday's balance: top up
+      // today's free credits before deciding (the server does the same).
+      const { data: refreshed } = await supabase.rpc('refill_my_free_credits')
+      if (typeof refreshed === 'number') Object.assign(profile, { credits: refreshed })
+    }
     if (profile.credits < requiredCredits) {
       console.log(`[ChatGenerator] Blocked: Insufficient credits (have: ${profile.credits}, need: ${requiredCredits})`)
 
@@ -823,8 +830,12 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
         return
       }
 
-      // Otherwise show regular credit popup
-      setShowCreditPopup(true)
+      // Subscriber out of credits
+      toast.error('Not enough credits', {
+        description: `This needs ${requiredCredits} credit${requiredCredits === 1 ? '' : 's'} and you have ${profile.credits}.`,
+        action: { label: 'Get credits', onClick: () => router.push('/billing') },
+        duration: 6000,
+      })
       return
     }
 
@@ -1026,6 +1037,8 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
         const errData = await resp.json().catch(() => ({}))
         console.error(`[ChatGenerator] API Response Error for ${gen.activeTab}:`, resp.status, errData)
         console.error(`[ChatGenerator] Response headers:`, Object.fromEntries(resp.headers.entries()))
+        // Out of today's free images (or credits) - offer the upgrade
+        if (resp.status === 402 && isFreeUser) checkCreditsAndShowUpgrade()
         throw new Error(errData.error || `HTTP ${resp.status}: Generation failed`)
       }
       const responseData = await resp.json()
@@ -1070,7 +1083,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
               if (shouldHighlightGenerate && !profile.tutorial_completed) {
                 const remainingCredits = profile.credits - requiredCredits
                 toast.success('🔥 That\'s your first AI-generated ad!', {
-                  description: `Try another — you've got ${remainingCredits} free ${remainingCredits === 1 ? 'image' : 'images'} left.`,
+                  description: `Try another — you've got ${remainingCredits} free ${remainingCredits === 1 ? 'image' : 'images'} left today.`,
                   duration: 6000,
                 })
               } else {
@@ -1176,7 +1189,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
                 // First-time user - show special encouragement message
                 const remainingCredits = profile.credits - 1 // They just used 1
                 toast.success('🔥 That\'s your first AI-generated ad!', {
-                  description: `Try another — you've got ${remainingCredits} free ${remainingCredits === 1 ? 'image' : 'images'} left.`,
+                  description: `Try another — you've got ${remainingCredits} free ${remainingCredits === 1 ? 'image' : 'images'} left today.`,
                   duration: 6000,
                 })
               } else {
@@ -1409,9 +1422,9 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
               <div>
                 {profile.credits === 0 && hasShownLastCreditModal.current ? (
                   <>
-                    <h2 className="text-xl font-bold text-gray-900">🎉 You've Used Your 2 Free Credits!</h2>
+                    <h2 className="text-xl font-bold text-gray-900">🎉 You've Used Today's 3 Free Images!</h2>
                     <p className="text-sm text-gray-500 mt-1">
-                      Upgrade now to unlock unlimited HD generations, faster rendering, and access to video & music creation.
+                      They refill tomorrow — or upgrade now for more HD generations, faster rendering, and video & music creation.
                     </p>
                   </>
                 ) : (

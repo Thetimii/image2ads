@@ -75,16 +75,14 @@ export function useOnboarding(user: User, profile: Profile) {
   }, [user.id, supabase])
 
   const checkCreditsAndShowUpgrade = useCallback(() => {
-    // Show upgrade prompt if:
-    // 1. User has no credits left
-    // 2. User is not a paying customer (no stripe_customer_id)
-    if (profile.credits === 0 && !profile.stripe_customer_id) {
-      console.log('Free images exhausted, showing upgrade prompt')
+    // Free plan user who has used today's free images
+    const subscribed = profile.subscription_status === 'active' || profile.subscription_status === 'trialing'
+    if (!subscribed) {
       setShouldShowUpgrade(true)
       return true
     }
     return false
-  }, [profile.credits, profile.stripe_customer_id])
+  }, [profile.subscription_status])
 
   const closeUpgradePrompt = useCallback(() => {
     setShouldShowUpgrade(false)

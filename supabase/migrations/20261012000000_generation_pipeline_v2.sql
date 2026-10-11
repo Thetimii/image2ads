@@ -20,6 +20,10 @@
 -- 6. credit_grants ledger + grant_credits_once(): idempotent Stripe credit
 --    grants (one grant per invoice / checkout, however often Stripe retries).
 -- 7. generation_economics / generation_margins_daily views.
+-- 8. Free plan = 3 free credits per day (1 standard image = 1 credit), refilled
+--    lazily (refill_free_credits) for non-subscribers. Replaces the old
+--    100-images/day free path. Accounts flagged by the signup IP guard get no
+--    refills.
 
 -- ---------------------------------------------------------------------------
 -- 1. Columns
@@ -49,9 +53,11 @@ update public.jobs set credits_used = 0 where status = 'pending' and coalesce(cr
 update public.jobs set started_at = coalesce(charged_at, created_at)
  where status = 'processing' and started_at is null;
 
-create index if not exists idx_jobs_free_quota
-  on public.jobs (user_id, created_at)
-  where billing_tier = 'free_quota';
+drop index if exists public.idx_jobs_free_quota;
+
+alter table public.profiles
+  add column if not exists free_quota_blocked      boolean not null default false,
+  add column if not exists free_credits_refilled_on date;
 
 -- ---------------------------------------------------------------------------
 -- 2. Guard triggers
@@ -115,6 +121,8 @@ begin
     new.total_generations    := old.total_generations;
     new.signup_ip            := old.signup_ip;
     new.email_reminders_sent := old.email_reminders_sent;
+    new.free_quota_blocked   := old.free_quota_blocked;
+    new.free_credits_refilled_on := old.free_credits_refilled_on;
   end if;
   return new;
 end;
@@ -140,6 +148,114 @@ end;
 $$;
 
 -- ---------------------------------------------------------------------------
+-- 8. Free plan: 3 free credits per day
+-- ---------------------------------------------------------------------------
+-- Single source of truth for the free allowance (mirrored for display only in
+-- supabase/functions/_shared/catalog.ts FREE_DAILY_CREDITS).
+create or replace function public.free_daily_credits()
+returns integer
+language sql
+immutable
+as $$ select 3 $$;
+
+-- Tops a non-subscriber up to at least free_daily_credits(), at most once per
+-- UTC day. Never lowers a balance (purchased / leftover credits are kept).
+-- Returns the user's current balance.
+create or replace function public.refill_free_credits(p_user uuid)
+returns integer
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_credits integer;
+  v_today   date := (now() at time zone 'utc')::date;
+begin
+  update public.profiles
+     set credits = greatest(credits, public.free_daily_credits()),
+         free_credits_refilled_on = v_today,
+         updated_at = now()
+   where id = p_user
+     and coalesce(subscription_status, 'free') not in ('active', 'trialing')
+     and not free_quota_blocked
+     and coalesce(free_credits_refilled_on, '-infinity'::date) < v_today
+  returning credits into v_credits;
+
+  if v_credits is null then
+    select credits into v_credits from public.profiles where id = p_user;
+  end if;
+  return v_credits;
+end;
+$$;
+revoke all on function public.refill_free_credits(uuid) from public, anon, authenticated;
+grant execute on function public.refill_free_credits(uuid) to service_role;
+
+-- Browser entry point: refill the caller's own free credits.
+create or replace function public.refill_my_free_credits()
+returns integer
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if auth.uid() is null then return null; end if;
+  return public.refill_free_credits(auth.uid());
+end;
+$$;
+revoke all on function public.refill_my_free_credits() from public, anon;
+grant execute on function public.refill_my_free_credits() to authenticated, service_role;
+
+-- New accounts: today's 3 free credits ARE the signup credits (no double
+-- grant on day one).
+create or replace function public.handle_new_user()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  insert into public.profiles (id, email, full_name, credits, free_credits_refilled_on)
+  values (new.id, new.email, new.raw_user_meta_data->>'full_name',
+          public.free_daily_credits(), (now() at time zone 'utc')::date);
+  return new;
+end;
+$$;
+
+-- Signup IP guard (4th+ account from one IP): no free credits, now or ever.
+create or replace function public.apply_signup_ip_guard(p_user_id uuid, p_ip inet)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_existing_count integer;
+begin
+  if p_ip is null then return; end if;
+
+  select count(*) into v_existing_count
+    from public.profiles
+   where signup_ip = p_ip and id <> p_user_id;
+
+  update public.profiles set signup_ip = p_ip where id = p_user_id;
+
+  if v_existing_count >= 3 then
+    update public.profiles set credits = 0, free_quota_blocked = true where id = p_user_id;
+  end if;
+end;
+$$;
+revoke all on function public.apply_signup_ip_guard(uuid, inet) from public, anon, authenticated;
+grant execute on function public.apply_signup_ip_guard(uuid, inet) to service_role;
+
+-- Backfill the flag for accounts the guard already zeroed.
+update public.profiles p
+   set free_quota_blocked = true
+ where p.signup_ip is not null
+   and not p.free_quota_blocked
+   and (select count(*) from public.profiles q
+         where q.signup_ip = p.signup_ip and q.created_at < p.created_at) >= 3;
+
+-- ---------------------------------------------------------------------------
 -- 3. start_job
 -- ---------------------------------------------------------------------------
 create or replace function public.start_job(
@@ -148,8 +264,7 @@ create or replace function public.start_job(
   p_billing_tier     text,
   p_product_model    text,
   p_provider_model   text,
-  p_provider_request jsonb default null,
-  p_free_daily_limit integer default null
+  p_provider_request jsonb default null
 )
 returns text
 language plpgsql
@@ -170,18 +285,10 @@ begin
   if not found then return 'not_found'; end if;
   if v_status <> 'pending' then return 'not_pending'; end if;
 
-  -- Free daily quota, counted under a per-user lock so parallel requests
-  -- can't all slip past the limit.
-  if p_billing_tier = 'free_quota' and p_free_daily_limit is not null then
-    perform pg_advisory_xact_lock(hashtextextended('free_quota:' || v_user::text, 0));
-    if (select count(*) from public.jobs
-         where user_id = v_user and billing_tier = 'free_quota' and status <> 'failed'
-           and created_at > now() - interval '24 hours') >= p_free_daily_limit then
-      return 'limit_reached';
-    end if;
-  end if;
-
   if p_credits > 0 then
+    -- Free plan: top up today's free credits first (no-op for subscribers,
+    -- blocked accounts, or if already refilled today).
+    perform public.refill_free_credits(v_user);
     update public.profiles
        set credits = credits - p_credits, updated_at = now()
      where id = v_user and credits >= p_credits;
@@ -205,8 +312,8 @@ begin
 end;
 $$;
 
-revoke all on function public.start_job(uuid, integer, text, text, text, jsonb, integer) from public, anon, authenticated;
-grant execute on function public.start_job(uuid, integer, text, text, text, jsonb, integer) to service_role;
+revoke all on function public.start_job(uuid, integer, text, text, text, jsonb) from public, anon, authenticated;
+grant execute on function public.start_job(uuid, integer, text, text, text, jsonb) to service_role;
 
 -- consume_credit is no longer used by the pipeline; kept (now race-free) for
 -- any external caller.
@@ -464,8 +571,11 @@ select
   case when j.status = 'completed' then coalesce(j.credits_used, 0) else 0 end as credits_billed,
   j.provider_credits,
   coalesce(j.provider_cost_usd, 0) as provider_cost_usd,
-  round(case when j.status = 'completed' then coalesce(j.credits_used, 0) else 0 end * public.net_revenue_per_credit(), 4) as est_revenue_usd,
-  round(case when j.status = 'completed' then coalesce(j.credits_used, 0) else 0 end * public.net_revenue_per_credit()
+  -- free_plan credits are given away, not sold: no revenue
+  round(case when j.status = 'completed' and j.billing_tier = 'subscription'
+             then coalesce(j.credits_used, 0) else 0 end * public.net_revenue_per_credit(), 4) as est_revenue_usd,
+  round(case when j.status = 'completed' and j.billing_tier = 'subscription'
+             then coalesce(j.credits_used, 0) else 0 end * public.net_revenue_per_credit()
         - coalesce(j.provider_cost_usd, 0), 4) as est_margin_usd,
   extract(epoch from (j.completed_at - j.created_at))::int as seconds_to_complete
 from public.jobs j

@@ -7,8 +7,8 @@ All AI generation runs on **kie.ai's unified Market API** (`POST /api/v1/jobs/cr
 | Product | kie.ai model | We charge | kie.ai cost | Margin |
 |---|---|---|---|---|
 | Image – Nano Banana (paid, 2K) | `nano-banana-2-1` | 1 credit | 6 cr = $0.030 | 69% |
-| Image – Nano Banana (free tier, 1K) | `nano-banana-2-1` | free, 100/day | 4 cr = $0.020 | – |
-| Image – Nano Banana Pro 1K/2K | `nano-banana-pro` | 6 credits (1 for free users) | 18 cr = $0.090 | 84% |
+| Image – Nano Banana (free plan, 1K) | `nano-banana-2-1` | 1 of the 3 free daily credits | 4 cr = $0.020 | – |
+| Image – Nano Banana Pro 1K/2K | `nano-banana-pro` | 6 credits | 18 cr = $0.090 | 84% |
 | Image – Nano Banana Pro 4K | `nano-banana-pro` | 6 credits | 24 cr = $0.120 | 79% |
 | Video – Veo 3.1 Fast 720p 8s | `veo-3-1` (`input.model: veo3_fast`) | 8 credits | 60 cr = $0.300 | 61% |
 | Music – Suno V6 (2 tracks) | `ai-music-api/generate` | 3 credits | 12 cr = $0.060 | 79% |
@@ -22,6 +22,12 @@ Live, per-job actuals (kie.ai's own `creditsConsumed` for every task):
 select * from generation_margins_daily order by day desc;   -- per day / model / tier
 select * from generation_economics order by created_at desc; -- per job
 ```
+
+## Free plan
+
+Non-subscribers get **3 free credits a day** = 3 standard images (1K). Credits are topped up to 3 (never lowered) once per UTC day, lazily: when a dashboard page loads (`refill_my_free_credits()`) and inside `start_job` before charging, so no cron is needed. Day one's 3 are the signup credits. Accounts flagged by the signup IP guard (4th+ account from one IP) never get refills. Worst case cost per free account: **$0.06/day**. The value lives in SQL `public.free_daily_credits()`.
+
+Subscribers' credits are sold (revenue); free-plan credits are not, so `generation_economics` counts revenue only for `billing_tier = 'subscription'`.
 
 ## Flow
 
@@ -54,7 +60,7 @@ Guarantees:
 
 | Function | Purpose |
 |---|---|
-| `generate` | Start a generation (all modes). Legacy names `generate-text-image`, `generate-image-image`, `generate-text-video`, `generate-image-video`, `generate-text-music` are aliases. |
+| `generate` | Start a generation (all modes). Legacy names `generate-text-image`, `generate-image-image`, `generate-text-video`, `generate-image-video`, `generate-text-music`, `generate-*-free`, `run-job` are aliases kept for already-open tabs; delete once their logs are quiet. |
 | `check-job-status` | Poll status. Cheap DB read; re-checks kie.ai at most every 10 s per job. |
 | `kie-callback` | kie.ai webhook. |
 | `sweep-stuck-jobs` | Backstop, only invoked by `sweep_stuck_jobs()` when needed. |

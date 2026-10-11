@@ -120,8 +120,8 @@ export default function PricingSection() {
       <Reveal>
         <div className="studio-pricing-footnote">
           <p>
-            Start exploring with free credits. Image, video, and music
-            generations use different amounts of credits.
+            Start free with 3 images every day, no card required. Image,
+            video, and music generations use different amounts of credits.
           </p>
           <div>
             <span>

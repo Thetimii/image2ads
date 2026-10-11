@@ -16,7 +16,7 @@
  * overwrites the same object.
  */
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2.57.4";
-import { buildSpec, FREE_DAILY_IMAGE_LIMIT, kieCreditsToUsd, resultTypeOf, type GenerateOptions } from "./catalog.ts";
+import { buildSpec, FREE_DAILY_CREDITS, kieCreditsToUsd, resultTypeOf, type GenerateOptions } from "./catalog.ts";
 import { createTask, getTask, KieError, type KieTask } from "./kie.ts";
 import { classifyFailure, friendlyMessage, sanitizePromptForRetry, type FailureCategory } from "./errors.ts";
 import { jobCallbackToken } from "./signing.ts";
@@ -136,6 +136,9 @@ export async function startGeneration(job: JobRow, opts: GenerateOptions): Promi
   if (pErr || !profile) return { http: 404, body: { success: false, error: "Profile not found", code: "PROFILE_NOT_FOUND", jobId: job.id } };
   const paid = profile.subscription_status === "active" || profile.subscription_status === "trialing";
 
+  // Older callers didn't always set has_images; image_ids is authoritative.
+  if (!job.has_images && Array.isArray(job.image_ids) && job.image_ids.length > 0) job = { ...job, has_images: true };
+
   let sourceUrls: string[] = [];
   if (resultType !== "music" && job.has_images) {
     sourceUrls = await signedSourceUrls(job);
@@ -155,17 +158,14 @@ export async function startGeneration(job: JobRow, opts: GenerateOptions): Promi
     p_product_model: spec.productModel,
     p_provider_model: spec.kieModel,
     p_provider_request: { model: spec.kieModel, input: spec.input },
-    p_free_daily_limit: spec.billingTier === "free_quota" ? FREE_DAILY_IMAGE_LIMIT : null,
   });
   if (sErr) throw new Error(`start_job: ${sErr.message}`);
-  if (started === "limit_reached") {
-    const msg = `Daily free limit reached (${FREE_DAILY_IMAGE_LIMIT} images/day). Upgrade to keep creating.`;
-    await failJob(job.id, "insufficient_credits", "free daily limit", msg, { requireStatus: "pending" });
-    return { http: 429, body: { success: false, error: msg, code: "LIMIT_REACHED", jobId: job.id } };
-  }
   if (started === "insufficient_credits") {
-    await failJob(job.id, "insufficient_credits", "insufficient credits", undefined, { requireStatus: "pending" });
-    return { http: 402, body: { success: false, error: friendlyMessage("insufficient_credits"), code: "INSUFFICIENT_CREDITS", jobId: job.id } };
+    const msg = paid
+      ? friendlyMessage("insufficient_credits")
+      : `You've used today's ${FREE_DAILY_CREDITS} free images. They refill tomorrow — or upgrade to keep creating now.`;
+    await failJob(job.id, "insufficient_credits", "insufficient credits", msg, { requireStatus: "pending" });
+    return { http: 402, body: { success: false, error: msg, code: paid ? "INSUFFICIENT_CREDITS" : "FREE_LIMIT_REACHED", jobId: job.id } };
   }
   if (started !== "ok") {
     const fresh = await loadJob(job.id);

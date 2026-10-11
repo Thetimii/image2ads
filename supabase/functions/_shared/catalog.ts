@@ -22,10 +22,11 @@ export const KIE_USD_PER_CREDIT = 0.005;
  */
 export const NET_REVENUE_USD_PER_CREDIT = 0.0955;
 
-/** Free (non-subscribed) users get the standard image model without spending
- * credits, up to this many per rolling 24h. Every one of these costs us real
- * money (see margins) - this is the main lever on free-tier burn. */
-export const FREE_DAILY_IMAGE_LIMIT = 100;
+/** Free plan: non-subscribers are topped up to this many credits once per
+ * UTC day (1 standard image = 1 credit -> 3 free images a day). The real
+ * value lives in SQL, public.free_daily_credits(); this copy is for
+ * messages and the margin report only. */
+export const FREE_DAILY_CREDITS = 3;
 
 export type ResultType = "image" | "video" | "music";
 export type ImageModelId = "nano-banana" | "nano-banana-pro";
@@ -45,10 +46,11 @@ export interface GenerationSpec {
   kieModel: string;
   /** kie.ai `input` object */
   input: Record<string, unknown>;
-  /** credits we deduct from the user (0 = free-tier quota) */
+  /** credits we deduct from the user (always > 0) */
   chargeCredits: number;
-  /** "credits" when we deduct, "free_quota" when it rides the daily allowance */
-  billingTier: "credits" | "free_quota";
+  /** "subscription" = paying subscriber (credits are revenue);
+   * "free_plan" = everyone else (daily free credits, leftovers) */
+  billingTier: "subscription" | "free_plan";
   /** what kie.ai bills us, in kie credits (estimate; the real figure comes
    * back as creditsConsumed and is stored per job) */
   expectedKieCredits: number;
@@ -79,14 +81,14 @@ export const KIE_PRICES = {
   "suno-generate": 12,
 } as const;
 
-/** Our credit prices. */
+/** Our credit prices - the same for everyone. */
 export const OUR_PRICES = {
-  image: { standard: 1, proPaid: 6, proFree: 1 },
+  image: { standard: 1, pro: 6 },
   video: 8,
   music: 3,
 } as const;
 
-/** Standard model output size per tier: free users get 1K (cheapest), paid 2K. */
+/** Standard model output size: free plan 1K (cheapest), subscribers 2K (HD). */
 export const STANDARD_RESOLUTION: Record<"free" | "paid", ImageResolution> = {
   free: "1K",
   paid: "2K",
@@ -137,6 +139,7 @@ export function buildSpec(
   imageUrls: string[],
 ): GenerationSpec {
   const resultType = resultTypeOf(job);
+  const billingTier = tier.paid ? "subscription" as const : "free_plan" as const;
 
   if (resultType === "image") {
     const pro = opts.model === "nano-banana-pro";
@@ -154,8 +157,8 @@ export function buildSpec(
           resolution,
           output_format: "png",
         },
-        chargeCredits: tier.paid ? OUR_PRICES.image.proPaid : OUR_PRICES.image.proFree,
-        billingTier: "credits",
+        chargeCredits: OUR_PRICES.image.pro,
+        billingTier,
         expectedKieCredits: KIE_PRICES["nano-banana-pro"][resolution],
       };
     }
@@ -171,8 +174,8 @@ export function buildSpec(
         resolution,
         output_format: "png",
       },
-      chargeCredits: tier.paid ? OUR_PRICES.image.standard : 0,
-      billingTier: tier.paid ? "credits" : "free_quota",
+      chargeCredits: OUR_PRICES.image.standard,
+      billingTier,
       expectedKieCredits: KIE_PRICES["nano-banana-2-1"][resolution],
     };
   }
@@ -194,7 +197,7 @@ export function buildSpec(
       kieModel: "veo-3-1",
       input,
       chargeCredits: OUR_PRICES.video,
-      billingTier: "credits",
+      billingTier,
       expectedKieCredits: KIE_PRICES["veo3_fast-720p-8s"],
     };
   }
@@ -237,7 +240,7 @@ export function buildSpec(
     kieModel: "ai-music-api/generate",
     input,
     chargeCredits: OUR_PRICES.music,
-    billingTier: "credits",
+    billingTier,
     expectedKieCredits: KIE_PRICES["suno-generate"],
   };
 }
@@ -277,10 +280,9 @@ export function marginTable(): MarginRow[] {
   const r = NET_REVENUE_USD_PER_CREDIT;
   return [
     row("Image · Nano Banana 2.1 · 2K", "paid", OUR_PRICES.image.standard, KIE_PRICES["nano-banana-2-1"]["2K"], r),
-    row("Image · Nano Banana 2.1 · 1K (free quota)", "free", 0, KIE_PRICES["nano-banana-2-1"]["1K"], 0),
-    row("Image · Nano Banana Pro · 1K/2K", "paid", OUR_PRICES.image.proPaid, KIE_PRICES["nano-banana-pro"]["2K"], r),
-    row("Image · Nano Banana Pro · 4K", "paid", OUR_PRICES.image.proPaid, KIE_PRICES["nano-banana-pro"]["4K"], r),
-    row("Image · Nano Banana Pro (signup credits)", "free", OUR_PRICES.image.proFree, KIE_PRICES["nano-banana-pro"]["2K"], 0),
+    row("Image · Nano Banana 2.1 · 1K (free daily credit)", "free", OUR_PRICES.image.standard, KIE_PRICES["nano-banana-2-1"]["1K"], 0),
+    row("Image · Nano Banana Pro · 1K/2K", "paid", OUR_PRICES.image.pro, KIE_PRICES["nano-banana-pro"]["2K"], r),
+    row("Image · Nano Banana Pro · 4K", "paid", OUR_PRICES.image.pro, KIE_PRICES["nano-banana-pro"]["4K"], r),
     row("Video · Veo 3.1 Fast · 720p · 8s", "paid", OUR_PRICES.video, KIE_PRICES["veo3_fast-720p-8s"], r),
     row("Music · Suno V6 (2 tracks)", "paid", OUR_PRICES.music, KIE_PRICES["suno-generate"], r),
   ];

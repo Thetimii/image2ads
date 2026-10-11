@@ -25,7 +25,7 @@ const faqs = [
   },
   {
     q: "Can I try it before choosing a plan?",
-    a: "Yes. Create an account to start exploring with free credits. You can choose a paid plan when you need more room to create.",
+    a: "Yes. The free plan includes 3 free images every day, no card required. Choose a paid plan when you need more images, HD quality, video or music.",
   },
   {
     q: "Can I cancel my subscription?",

@@ -38,3 +38,17 @@ create trigger update_jobs_updated_at before update on public.jobs for each row 
 create function public.increment_total_generations() returns trigger language plpgsql as $$
 begin update profiles set total_generations = total_generations + 1 where id = new.user_id; return new; end $$;
 create trigger trigger_increment_total_generations after insert on public.jobs for each row execute function public.increment_total_generations();
+
+-- auth.users + signup trigger (as in production)
+create table auth.users (id uuid primary key, email text, raw_user_meta_data jsonb default '{}');
+create function public.handle_new_user() returns trigger language plpgsql security definer as $$
+begin insert into public.profiles (id, email, full_name, credits) values (new.id, new.email, new.raw_user_meta_data->>'full_name', 3); return new; end $$;
+create trigger on_auth_user_created after insert on auth.users for each row execute function public.handle_new_user();
+
+-- pre-existing data the migration must backfill: 4 accounts from one IP,
+-- the 4th was zeroed by the old signup IP guard.
+insert into public.profiles (id, email, credits, signup_ip, created_at) values
+  ('99999999-0000-0000-0000-000000000001', 'ip1@x.com', 3, '10.0.0.9', now() - interval '4 days'),
+  ('99999999-0000-0000-0000-000000000002', 'ip2@x.com', 3, '10.0.0.9', now() - interval '3 days'),
+  ('99999999-0000-0000-0000-000000000003', 'ip3@x.com', 3, '10.0.0.9', now() - interval '2 days'),
+  ('99999999-0000-0000-0000-000000000004', 'ip4@x.com', 0, '10.0.0.9', now() - interval '1 days');

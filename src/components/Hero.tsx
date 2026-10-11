@@ -111,8 +111,8 @@ export default function Hero() {
               </a>
             </div>
             <div className="studio-hero-note">
-              <Icon name="check" width="14" height="14" /> Start with free
-              credits
+              <Icon name="check" width="14" height="14" /> 3 free images
+              every day
               <span />
               No design skills needed
             </div>

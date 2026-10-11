@@ -215,7 +215,7 @@ export function TutorialProvider({ children, userTutorialCompleted = false }: Tu
       id: 'complete',
       page: 'folder',
       title: 'Congratulations! 🎉',
-      description: 'You\'ve successfully started generating your first ad! Your ad will appear in the folder when it\'s ready. You can now create more folders, upload more images, and generate unlimited professional ads.',
+      description: 'You\'ve successfully started generating your first ad! Your ad will appear in the folder when it\'s ready. You can now create more folders, upload more images, and generate more professional ads.',
       position: 'center'
     }
   ]

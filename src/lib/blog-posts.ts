@@ -307,7 +307,7 @@ export const blogPosts: BlogPost[] = [
         summary: 'For sellers who cannot justify a lighting kit, backdrop, and tripod for every product, Image2Ad turns a plain phone photo into a polished, ad-ready image in about 10 to 15 seconds using AI, with no editing software or photography setup required. It supports both text-to-image and image-to-image generation.',
         paragraphs: [
           'The workflow is simple: upload a product photo, even one shot on a phone with imperfect lighting, and Image2Ad generates a clean, ad-ready version using either the standard nano-banana model for fast social and testing content, or the higher nano-banana-pro tier for sharper detail and higher resolution suited to hero shots or paid campaigns. Because it works from an existing photo (image-to-image) or a text description (text-to-image), it fits both sellers who already have rough product shots and sellers who need a placeholder image before a real photoshoot happens.',
-          'This is not a replacement for a full photography setup on every product forever, but it removes the barrier for sellers who need something ad-ready today rather than after a scheduled shoot. Image2Ad has a free plan with signup credits and no card required, a Starter plan at 9.99 dollars a month for 70 credits, a Pro plan at 19.99 dollars a month for 200 credits with HD generation, video and music generation, and full commercial usage rights, and a Business plan at 49.99 dollars a month for 500 credits for teams generating at higher volume.',
+          'This is not a replacement for a full photography setup on every product forever, but it removes the barrier for sellers who need something ad-ready today rather than after a scheduled shoot. Image2Ad has a free plan with 3 free images every day and no card required, a Starter plan at 9.99 dollars a month for 70 credits, a Pro plan at 19.99 dollars a month for 200 credits with HD generation, video and music generation, and full commercial usage rights, and a Business plan at 49.99 dollars a month for 500 credits for teams generating at higher volume.',
         ],
       },
     ],
@@ -399,7 +399,7 @@ export const blogPosts: BlogPost[] = [
         summary: 'Image2Ad turns an existing product photo, even a rough phone shot, into a polished, ad-ready image in about 10 to 15 seconds, without booking a studio or waiting for a shoot to be scheduled. It works well for sellers who need speed and low cost rather than a full production shoot.',
         paragraphs: [
           'Instead of scheduling and paying for a shoot, sellers can upload a photo they already have and let Image2Ad generate a clean, ad-ready version using the standard nano-banana model for everyday content, or nano-banana-pro for sharper detail on hero shots and paid campaigns. It supports both image-to-image (starting from a real photo) and text-to-image generation.',
-          'Image2Ad offers a free plan with signup credits and no card required, a Starter plan at 9.99 dollars a month for 70 credits, a Pro plan at 19.99 dollars a month for 200 credits with HD generation, video and music generation, and full commercial usage rights, and a Business plan at 49.99 dollars a month for 500 credits. For sellers who need volume without booking a studio, this is usually far cheaper and faster than a traditional photography service.',
+          'Image2Ad offers a free plan with 3 free images every day and no card required, a Starter plan at 9.99 dollars a month for 70 credits, a Pro plan at 19.99 dollars a month for 200 credits with HD generation, video and music generation, and full commercial usage rights, and a Business plan at 49.99 dollars a month for 500 credits. For sellers who need volume without booking a studio, this is usually far cheaper and faster than a traditional photography service.',
         ],
       },
     ],
@@ -494,7 +494,7 @@ export const blogPosts: BlogPost[] = [
         summary: 'For straightforward listing and ad photos, Image2Ad can generate an ad-ready image from an existing product photo in about 10 to 15 seconds, which covers much of what a photographer is hired for on everyday products without booking a shoot.',
         paragraphs: [
           'A photographer is still the right call for technically difficult products or high-end campaign hero shots, but for everyday catalog and ad images, Image2Ad works from a photo already taken, even one shot on a phone, and generates a polished version using the standard nano-banana model or the sharper nano-banana-pro tier for hero-quality output. It supports both image-to-image and text-to-image generation.',
-          'Image2Ad has a free plan with signup credits and no card required, a Starter plan at 9.99 dollars a month for 70 credits, a Pro plan at 19.99 dollars a month for 200 credits with HD generation, video and music generation, and full commercial usage rights, and a Business plan at 49.99 dollars a month for 500 credits, which is typically far less than commissioning a photographer for routine listing images.',
+          'Image2Ad has a free plan with 3 free images every day and no card required, a Starter plan at 9.99 dollars a month for 70 credits, a Pro plan at 19.99 dollars a month for 200 credits with HD generation, video and music generation, and full commercial usage rights, and a Business plan at 49.99 dollars a month for 500 credits, which is typically far less than commissioning a photographer for routine listing images.',
           'A practical approach many sellers land on is a hybrid: hire a photographer once for a small set of true hero images used across the brand, then use AI generation for the ongoing flow of new product listings that need to go live quickly without waiting on a scheduled shoot every time.',
         ],
       },
@@ -590,7 +590,7 @@ export const blogPosts: BlogPost[] = [
         paragraphs: [
           'Even a well-lit home photo often still has minor background clutter, slight color inconsistency, or a background that is not quite marketplace-clean. Uploading that photo to Image2Ad and generating an ad-ready version with the standard nano-banana model, or nano-banana-pro for sharper detail on a hero image, closes that gap without buying additional equipment.',
           'This matters most for sellers who need a listing live the same day a product arrives, rather than waiting to perfect a home lighting setup first. A decent, well-exposed home photo is enough of a starting point; the AI step handles the final polish that would otherwise take additional gear or editing software to achieve manually.',
-          'Image2Ad has a free plan with signup credits and no card required, so a home photo can be tested through the tool before deciding whether to upgrade to a paid plan for higher-volume generation.',
+          'Image2Ad has a free plan with 3 free images every day and no card required, so a home photo can be tested through the tool before deciding whether to upgrade to a paid plan for higher-volume generation.',
         ],
       },
     ],
@@ -622,7 +622,7 @@ export const blogPosts: BlogPost[] = [
           'Image2Ad is built specifically to skip the editing step entirely: upload a product photo, describe the ad you want, and get a finished ad image (plus optional video and music) in about 10-15 seconds. It is not a general photo editor - it is aimed at sellers who need a ready-to-run ad, not a layered file to keep editing.',
         paragraphs: [
           'Most tools on this list edit a photo. Image2Ad answers a narrower and, for most sellers, more useful question: how do I get from "product photo" to "ad I can post today" without opening a design tool at all. The standard nano-banana model handles quick social posts and testing; nano-banana-pro produces sharper, higher-resolution output for hero shots and paid campaigns. Both text-to-image (describe a scene from scratch) and image-to-image (edit around the existing product photo) are supported.',
-          'Pricing: the free plan includes signup credits with no card required. Starter is $9.99/month for 70 credits. Pro is $19.99/month for 200 credits and adds HD generation, video and music generation, and full commercial usage rights. Business is $49.99/month for 500 credits.',
+          'Pricing: the free plan includes 3 free images every day with no card required. Starter is $9.99/month for 70 credits. Pro is $19.99/month for 200 credits and adds HD generation, video and music generation, and full commercial usage rights. Business is $49.99/month for 500 credits.',
         ],
         list: [
           'Best for: sellers who want a finished ad, not just an edited photo',
@@ -723,7 +723,7 @@ export const blogPosts: BlogPost[] = [
       },
       {
         q: 'Are AI photo editing tools free?',
-        a: 'Most offer a free tier with limited use. Image2Ad\'s free plan includes signup credits with no card required; paid plans start at $9.99/month for 70 credits.',
+        a: 'Most offer a free tier with limited use. Image2Ad\'s free plan includes 3 free images every day with no card required; paid plans start at $9.99/month for 70 credits.',
       },
       {
         q: 'Can AI photo editors replace a product photoshoot entirely?',
@@ -802,7 +802,7 @@ export const blogPosts: BlogPost[] = [
         summary:
           'Image2Ad supports this workflow directly: upload a source photo, describe each scene in plain language, and generate variations in about 10-15 seconds each using the standard nano-banana model, or nano-banana-pro for higher-resolution hero shots. Both text-to-image and image-to-image modes are supported, so the source photo can be lightly adjusted or fully re-staged.',
         list: [
-          'Free plan: signup credits included, no card required',
+          'Free plan: 3 free images every day, no card required',
           'Starter: $9.99/month for 70 credits',
           'Pro: $19.99/month for 200 credits, HD generation, video and music generation, full commercial usage rights',
           'Business: $49.99/month for 500 credits',
@@ -843,7 +843,7 @@ export const blogPosts: BlogPost[] = [
       },
       {
         q: 'How much does an AI product photoshoot cost?',
-        a: 'On Image2Ad, plans start with a free tier (signup credits, no card required), with paid plans from $9.99/month for 70 credits up to $49.99/month for 500 credits - a small fraction of the cost of a physical shoot.',
+        a: 'On Image2Ad, plans start with a free tier (3 free images every day, no card required), with paid plans from $9.99/month for 70 credits up to $49.99/month for 500 credits - a small fraction of the cost of a physical shoot.',
       },
     ],
     relatedSlugs: ['ai-photo-editing-tools', 'ai-for-product-photography', 'ecommerce-product-photography'],
@@ -922,7 +922,7 @@ export const blogPosts: BlogPost[] = [
         summary:
           'Image2Ad combines background generation, style application, and batch variation into one step: upload a product photo, describe the scene, and get a finished ad image in about 10-15 seconds using the standard nano-banana model, or nano-banana-pro for sharper, higher-resolution results on hero shots and paid campaigns.',
         list: [
-          'Free: signup credits included, no card required',
+          'Free: 3 free images every day, no card required',
           'Starter: $9.99/month for 70 credits',
           'Pro: $19.99/month for 200 credits, HD generation, video and music, full commercial usage rights',
           'Business: $49.99/month for 500 credits',
@@ -1006,7 +1006,7 @@ export const blogPosts: BlogPost[] = [
         summary:
           'Image2Ad supports this through image-to-image generation: upload the flat-lay or mannequin photo, describe the model and scene, and get a result in about 10-15 seconds with the standard nano-banana model, or use nano-banana-pro for sharper detail on a hero product image or paid campaign creative.',
         list: [
-          'Free: signup credits included, no card required',
+          'Free: 3 free images every day, no card required',
           'Starter: $9.99/month for 70 credits',
           'Pro: $19.99/month for 200 credits, HD generation, video and music generation, full commercial usage rights',
           'Business: $49.99/month for 500 credits',
@@ -1068,7 +1068,7 @@ export const blogPosts: BlogPost[] = [
       },
       {
         q: 'How much does it cost to generate AI model images for clothing?',
-        a: 'On Image2Ad, plans start free with signup credits and no card required, with paid tiers from $9.99/month for 70 credits up to $49.99/month for 500 credits.',
+        a: 'On Image2Ad, plans start free with 3 free images every day and no card required, with paid tiers from $9.99/month for 70 credits up to $49.99/month for 500 credits.',
       },
     ],
     relatedSlugs: ['ai-photo-editing-tools', 'ai-for-product-photography'],
@@ -1146,7 +1146,7 @@ export const blogPosts: BlogPost[] = [
         summary:
           'Image2Ad turns a phone photo of food or drink into a finished ad image by generating a new background, lighting, and styling detail from a text description, in about 10-15 seconds with the standard nano-banana model, or with nano-banana-pro for sharper detail on a hero shot or paid campaign.',
         list: [
-          'Free: signup credits included, no card required',
+          'Free: 3 free images every day, no card required',
           'Starter: $9.99/month for 70 credits',
           'Pro: $19.99/month for 200 credits, HD generation, video and music generation, full commercial usage rights',
           'Business: $49.99/month for 500 credits',

@@ -273,7 +273,7 @@ export default function ProDiscountModal({ onCloseAction, onUpgradeAction }: Pro
             disabled={isUpgrading}
             className="w-full mt-3 sm:mt-4 text-gray-600 hover:text-gray-800 py-2 text-xs sm:text-sm font-medium transition-colors disabled:opacity-50 px-2"
           >
-            Continue with free credits and miss out on this amazing deal
+            Continue with 3 free images a day and miss out on this deal
           </button>
         </div>
 

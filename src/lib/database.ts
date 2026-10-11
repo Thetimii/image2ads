@@ -8,6 +8,11 @@ import type { Profile, Folder, Image, Job } from "./validations";
 export async function getUserProfile(userId: string): Promise<Profile | null> {
   const supabase = await createClient();
 
+  // Free plan: top up today's 3 free credits (once per day, no-op for
+  // subscribers) so the balance shown is current. Never blocks page loads.
+  const { error: refillError } = await supabase.rpc("refill_my_free_credits");
+  if (refillError) console.warn("refill_my_free_credits failed:", refillError.message);
+
   const { data, error } = await supabase
     .from("profiles")
     .select("*")

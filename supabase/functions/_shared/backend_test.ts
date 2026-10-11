@@ -4,7 +4,7 @@
 import { assert, assertEquals } from "jsr:@std/assert@1";
 import { extractUrls, normalizeState, parseRecord } from "./kie.ts";
 import { jobCallbackToken, kieSignature, verifyJobCallbackToken, verifyKieSignature } from "./signing.ts";
-import { buildSpec, marginTable, OUR_PRICES } from "./catalog.ts";
+import { buildSpec, FREE_DAILY_CREDITS, marginTable, OUR_PRICES } from "./catalog.ts";
 import { classifyFailure } from "./errors.ts";
 import { sniff } from "./pipeline.ts";
 
@@ -92,16 +92,16 @@ Deno.test("job callback token: per-job, secret-bound, url-safe", async () => {
 
 const urls = ["https://s/1.png", "https://s/2.png"];
 
-Deno.test("buildSpec: standard image - paid charged 1 @2K, free rides quota @1K", () => {
+Deno.test("buildSpec: standard image costs 1 credit for everyone - 2K for subscribers, 1K on the free plan", () => {
   const paid = buildSpec({ prompt: "shoe", result_type: "image", aspect_ratio: "portrait" }, { model: "nano-banana" }, { paid: true }, []);
   assertEquals(paid.kieModel, "nano-banana-2-1");
   assertEquals(paid.chargeCredits, 1);
-  assertEquals(paid.billingTier, "credits");
+  assertEquals(paid.billingTier, "subscription");
   assertEquals(paid.input.resolution, "2K");
   assertEquals(paid.input.aspect_ratio, "9:16");
   const free = buildSpec({ prompt: "shoe", result_type: "image" }, {}, { paid: false }, urls);
-  assertEquals(free.chargeCredits, 0);
-  assertEquals(free.billingTier, "free_quota");
+  assertEquals(free.chargeCredits, 1);
+  assertEquals(free.billingTier, "free_plan");
   assertEquals(free.input.resolution, "1K");
   assertEquals(free.input.image_input, urls);
 });
@@ -110,11 +110,12 @@ Deno.test("buildSpec: pro image pricing + caps reference images at 8", () => {
   const many = Array.from({ length: 12 }, (_, i) => `https://s/${i}.png`);
   const p = buildSpec({ prompt: "x", result_type: "image" }, { model: "nano-banana-pro", resolution: "4K" }, { paid: true }, many);
   assertEquals(p.kieModel, "nano-banana-pro");
-  assertEquals(p.chargeCredits, OUR_PRICES.image.proPaid);
+  assertEquals(p.chargeCredits, OUR_PRICES.image.pro);
   assertEquals(p.expectedKieCredits, 24);
   assertEquals((p.input.image_input as string[]).length, 8);
   const f = buildSpec({ prompt: "x", result_type: "image" }, { model: "nano-banana-pro", resolution: "bogus" }, { paid: false }, []);
-  assertEquals(f.chargeCredits, OUR_PRICES.image.proFree);
+  assertEquals(f.chargeCredits, 6); // no discounted Pro on the free plan
+  assertEquals(f.billingTier, "free_plan");
   assertEquals(f.input.resolution, "2K");
 });
 
@@ -145,6 +146,16 @@ Deno.test("buildSpec: music - simple mode needs a style; custom lyrics use custo
   assertEquals(custom.input.duration, 30);
   assert(String(custom.input.title).length > 0 && String(custom.input.title).length <= 80);
   assertEquals(custom.chargeCredits, 3);
+});
+
+Deno.test("free plan: 3 free images a day, nothing is ever free of charge", () => {
+  assertEquals(FREE_DAILY_CREDITS, 3); // must match public.free_daily_credits() in SQL
+  for (const resultType of ["image", "video", "music"]) {
+    for (const paid of [true, false]) {
+      const s = buildSpec({ prompt: "x", result_type: resultType }, {}, { paid }, []);
+      assert(s.chargeCredits >= 1, `${resultType} paid=${paid} is free`);
+    }
+  }
 });
 
 Deno.test("margins: every paid product is profitable", () => {

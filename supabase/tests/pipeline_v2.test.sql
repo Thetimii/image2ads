@@ -31,10 +31,10 @@ end $$;
 
 -- 3. browser roles cannot call the money RPCs
 do $$ begin
-  if has_function_privilege('authenticated', 'public.start_job(uuid,integer,text,text,text,jsonb,integer)', 'execute') then raise exception 'FAIL: start_job exposed'; end if;
+  if has_function_privilege('authenticated', 'public.start_job(uuid,integer,text,text,text,jsonb)', 'execute') then raise exception 'FAIL: start_job exposed'; end if;
   if has_function_privilege('authenticated', 'public.grant_credits_once(uuid,integer,text,text,text)', 'execute') then raise exception 'FAIL: grant exposed'; end if;
   if has_function_privilege('anon', 'public.refund_credit(uuid)', 'execute') then raise exception 'FAIL: refund exposed'; end if;
-  if not has_function_privilege('service_role', 'public.start_job(uuid,integer,text,text,text,jsonb,integer)', 'execute') then raise exception 'FAIL: service_role cannot start'; end if;
+  if not has_function_privilege('service_role', 'public.start_job(uuid,integer,text,text,text,jsonb)', 'execute') then raise exception 'FAIL: service_role cannot start'; end if;
   raise notice 'PASS 3 rpc privileges';
 end $$;
 
@@ -44,17 +44,17 @@ insert into jobs (id, user_id, prompt) values
   ('bbbbbbbb-0000-0000-0000-000000000002', '11111111-1111-1111-1111-111111111111', 'p'),
   ('bbbbbbbb-0000-0000-0000-000000000003', '22222222-2222-2222-2222-222222222222', 'p');
 do $$ declare r text; begin
-  r := start_job('bbbbbbbb-0000-0000-0000-000000000001', 6, 'credits', 'nano-banana-pro', 'nano-banana-pro', '{"model":"nano-banana-pro"}');
+  r := start_job('bbbbbbbb-0000-0000-0000-000000000001', 6, 'subscription', 'nano-banana-pro', 'nano-banana-pro', '{"model":"nano-banana-pro"}');
   if r <> 'ok' then raise exception 'FAIL: start %', r; end if;
-  r := start_job('bbbbbbbb-0000-0000-0000-000000000001', 6, 'credits', 'nano-banana-pro', 'nano-banana-pro', null);
+  r := start_job('bbbbbbbb-0000-0000-0000-000000000001', 6, 'subscription', 'nano-banana-pro', 'nano-banana-pro', null);
   if r <> 'not_pending' then raise exception 'FAIL: double start %', r; end if;
   if (select credits from profiles where id = '11111111-1111-1111-1111-111111111111') <> 4 then raise exception 'FAIL: balance after charge'; end if;
-  r := start_job('bbbbbbbb-0000-0000-0000-000000000002', 8, 'credits', 'veo-3.1-fast', 'veo-3-1', null);
+  r := start_job('bbbbbbbb-0000-0000-0000-000000000002', 8, 'subscription', 'veo-3.1-fast', 'veo-3-1', null);
   if r <> 'insufficient_credits' then raise exception 'FAIL: expected insufficient, got %', r; end if;
   if (select credits from profiles where id = '11111111-1111-1111-1111-111111111111') <> 4 then raise exception 'FAIL: balance changed on insufficient'; end if;
   if (select status from jobs where id = 'bbbbbbbb-0000-0000-0000-000000000002') <> 'pending' then raise exception 'FAIL: job moved on insufficient'; end if;
-  r := start_job('bbbbbbbb-0000-0000-0000-000000000003', 0, 'free_quota', 'nano-banana', 'nano-banana-2-1', null);
-  if r <> 'ok' or (select charged_at from jobs where id = 'bbbbbbbb-0000-0000-0000-000000000003') is not null then raise exception 'FAIL: free quota start'; end if;
+  r := start_job('bbbbbbbb-0000-0000-0000-000000000003', 0, 'free_plan', 'nano-banana', 'nano-banana-2-1', null);
+  if r <> 'ok' or (select charged_at from jobs where id = 'bbbbbbbb-0000-0000-0000-000000000003') is not null then raise exception 'FAIL: zero-credit start'; end if;
   if (select used_pro_model from jobs where id = 'bbbbbbbb-0000-0000-0000-000000000001') is not true then raise exception 'FAIL: used_pro_model'; end if;
   raise notice 'PASS 4 start_job';
 end $$;
@@ -75,8 +75,8 @@ insert into jobs (id, user_id, prompt) values
   ('cccccccc-0000-0000-0000-000000000001', '11111111-1111-1111-1111-111111111111', 'abandoned'),
   ('cccccccc-0000-0000-0000-000000000002', '11111111-1111-1111-1111-111111111111', 'orphan'),
   ('cccccccc-0000-0000-0000-000000000003', '11111111-1111-1111-1111-111111111111', 'stale');
-select start_job('cccccccc-0000-0000-0000-000000000002', 1, 'credits', 'nano-banana', 'nano-banana-2-1', null);
-select start_job('cccccccc-0000-0000-0000-000000000003', 1, 'credits', 'nano-banana', 'nano-banana-2-1', null);
+select start_job('cccccccc-0000-0000-0000-000000000002', 1, 'subscription', 'nano-banana', 'nano-banana-2-1', null);
+select start_job('cccccccc-0000-0000-0000-000000000003', 1, 'subscription', 'nano-banana', 'nano-banana-2-1', null);
 alter table jobs disable trigger update_jobs_updated_at;
 update jobs set created_at = now() - interval '20 minutes', updated_at = now() - interval '20 minutes' where id::text like 'cccccccc%';
 update jobs set task_id = 'task-live' where id = 'cccccccc-0000-0000-0000-000000000003';
@@ -119,28 +119,83 @@ do $$ begin
   raise notice 'PASS 9 created_at pinned';
 end $$;
 
--- 10. free daily quota enforced atomically inside start_job
+-- 10. free plan: 3 free credits a day, refilled once per UTC day
+insert into profiles (id, email, credits, subscription_status, free_credits_refilled_on) values
+  ('77777777-0000-0000-0000-000000000001', 'free@x.com', 0, 'free', current_date - 1),
+  ('77777777-0000-0000-0000-000000000002', 'sub@x.com',  0, 'active', current_date - 1),
+  ('77777777-0000-0000-0000-000000000003', 'rich@x.com', 50, null, current_date - 1);
+insert into jobs (id, user_id, prompt) values
+  ('eeeeeeee-0000-0000-0000-000000000001', '77777777-0000-0000-0000-000000000001', 'q1'),
+  ('eeeeeeee-0000-0000-0000-000000000002', '77777777-0000-0000-0000-000000000001', 'q2'),
+  ('eeeeeeee-0000-0000-0000-000000000003', '77777777-0000-0000-0000-000000000001', 'q3'),
+  ('eeeeeeee-0000-0000-0000-000000000004', '77777777-0000-0000-0000-000000000001', 'q4'),
+  ('eeeeeeee-0000-0000-0000-000000000005', '77777777-0000-0000-0000-000000000002', 's1'),
+  ('eeeeeeee-0000-0000-0000-000000000006', '99999999-0000-0000-0000-000000000004', 'abuser');
 do $$ declare r text; i int; begin
+  if free_daily_credits() <> 3 then raise exception 'FAIL: free_daily_credits must be 3 (matches catalog.ts)'; end if;
+  -- free user at 0 credits, last refilled yesterday: gets exactly 3 images today
   for i in 1..3 loop
-    insert into jobs (id, user_id, prompt) values (('eeeeeeee-0000-0000-0000-00000000000' || i)::uuid, '22222222-2222-2222-2222-222222222222', 'q');
+    r := start_job(('eeeeeeee-0000-0000-0000-00000000000' || i)::uuid, 1, 'free_plan', 'nano-banana', 'nano-banana-2-1', null);
+    if r <> 'ok' then raise exception 'FAIL: free image % -> %', i, r; end if;
   end loop;
-  -- user 2 already has 1 free_quota job (bbbb..3, but it is failed -> not counted)
-  r := start_job('eeeeeeee-0000-0000-0000-000000000001', 0, 'free_quota', 'nano-banana', 'nano-banana-2-1', null, 2);
-  if r <> 'ok' then raise exception 'FAIL: quota 1 %', r; end if;
-  r := start_job('eeeeeeee-0000-0000-0000-000000000002', 0, 'free_quota', 'nano-banana', 'nano-banana-2-1', null, 2);
-  if r <> 'ok' then raise exception 'FAIL: quota 2 %', r; end if;
-  r := start_job('eeeeeeee-0000-0000-0000-000000000003', 0, 'free_quota', 'nano-banana', 'nano-banana-2-1', null, 2);
-  if r <> 'limit_reached' then raise exception 'FAIL: quota not enforced %', r; end if;
-  if (select started_at from jobs where id = 'eeeeeeee-0000-0000-0000-000000000001') is null then raise exception 'FAIL: started_at not set'; end if;
-  raise notice 'PASS 10 free quota';
+  r := start_job('eeeeeeee-0000-0000-0000-000000000004', 1, 'free_plan', 'nano-banana', 'nano-banana-2-1', null);
+  if r <> 'insufficient_credits' then raise exception 'FAIL: 4th free image allowed (%)', r; end if;
+  if (select credits from profiles where id = '77777777-0000-0000-0000-000000000001') <> 0 then raise exception 'FAIL: free balance'; end if;
+  -- second refill the same day does nothing
+  if refill_free_credits('77777777-0000-0000-0000-000000000001') <> 0 then raise exception 'FAIL: refilled twice in a day'; end if;
+  -- subscribers never get free credits
+  r := start_job('eeeeeeee-0000-0000-0000-000000000005', 1, 'subscription', 'nano-banana', 'nano-banana-2-1', null);
+  if r <> 'insufficient_credits' then raise exception 'FAIL: subscriber got free credits (%)', r; end if;
+  -- refill never lowers a balance
+  if refill_free_credits('77777777-0000-0000-0000-000000000003') <> 50 then raise exception 'FAIL: refill lowered balance'; end if;
+  -- next day: back to 3
+  update profiles set free_credits_refilled_on = current_date - 1 where id = '77777777-0000-0000-0000-000000000001';
+  if refill_free_credits('77777777-0000-0000-0000-000000000001') <> 3 then raise exception 'FAIL: next-day refill'; end if;
+  -- IP-flagged account (backfilled by the migration) gets nothing
+  if not (select free_quota_blocked from profiles where id = '99999999-0000-0000-0000-000000000004') then raise exception 'FAIL: backfill flag'; end if;
+  if (select free_quota_blocked from profiles where id = '99999999-0000-0000-0000-000000000003') then raise exception 'FAIL: 3rd account wrongly flagged'; end if;
+  r := start_job('eeeeeeee-0000-0000-0000-000000000006', 1, 'free_plan', 'nano-banana', 'nano-banana-2-1', null);
+  if r <> 'insufficient_credits' then raise exception 'FAIL: flagged account generated (%)', r; end if;
+  raise notice 'PASS 10 free plan daily credits';
+end $$;
+
+-- 10b. signup: 3 credits that count as today's refill; IP guard flags the 4th account
+insert into auth.users (id, email) values ('88888888-0000-0000-0000-000000000001', 'new@x.com');
+select apply_signup_ip_guard('88888888-0000-0000-0000-000000000001', '10.0.0.9');
+insert into auth.users (id, email) values ('88888888-0000-0000-0000-000000000002', 'new2@x.com');
+select apply_signup_ip_guard('88888888-0000-0000-0000-000000000002', '10.0.0.77');
+do $$ declare p profiles; begin
+  select * into p from profiles where id = '88888888-0000-0000-0000-000000000002';
+  if p.credits <> 3 or p.free_credits_refilled_on <> (now() at time zone 'utc')::date or p.free_quota_blocked then raise exception 'FAIL: new signup %', row_to_json(p); end if;
+  if refill_free_credits(p.id) <> 3 then raise exception 'FAIL: signup day double grant'; end if;
+  select * into p from profiles where id = '88888888-0000-0000-0000-000000000001';
+  if p.credits <> 0 or not p.free_quota_blocked then raise exception 'FAIL: ip guard %', row_to_json(p); end if;
+  raise notice 'PASS 10b signup + IP guard';
+end $$;
+
+-- 10c. browser can refill only itself, can't flip the flags
+set role authenticated;
+select set_config('request.jwt.claim.sub', '77777777-0000-0000-0000-000000000003', false);
+update profiles set free_quota_blocked = true, free_credits_refilled_on = null where id = '77777777-0000-0000-0000-000000000003';
+select set_config('request.jwt.claim.sub', '99999999-0000-0000-0000-000000000004', false);
+update profiles set free_quota_blocked = false where id = '99999999-0000-0000-0000-000000000004';
+select refill_my_free_credits();
+reset role;
+do $$ begin
+  if (select free_quota_blocked from profiles where id = '77777777-0000-0000-0000-000000000003') then raise exception 'FAIL: browser set flag'; end if;
+  if not (select free_quota_blocked from profiles where id = '99999999-0000-0000-0000-000000000004') then raise exception 'FAIL: browser cleared flag'; end if;
+  if (select credits from profiles where id = '99999999-0000-0000-0000-000000000004') <> 0 then raise exception 'FAIL: blocked refill via rpc'; end if;
+  if has_function_privilege('anon', 'public.refill_my_free_credits()', 'execute') then raise exception 'FAIL: anon can refill'; end if;
+  if has_function_privilege('authenticated', 'public.refill_free_credits(uuid)', 'execute') then raise exception 'FAIL: refill any user exposed'; end if;
+  raise notice 'PASS 10c refill rpc security';
 end $$;
 
 -- 11. fail_job is atomic with refund, and respects its conditions
 insert into jobs (id, user_id, prompt) values
   ('ffffffff-0000-0000-0000-000000000001', '11111111-1111-1111-1111-111111111111', 'f1'),
   ('ffffffff-0000-0000-0000-000000000002', '11111111-1111-1111-1111-111111111111', 'f2');
-select start_job('ffffffff-0000-0000-0000-000000000001', 2, 'credits', 'nano-banana', 'nano-banana-2-1', null);
-select start_job('ffffffff-0000-0000-0000-000000000002', 2, 'credits', 'nano-banana', 'nano-banana-2-1', null);
+select start_job('ffffffff-0000-0000-0000-000000000001', 2, 'subscription', 'nano-banana', 'nano-banana-2-1', null);
+select start_job('ffffffff-0000-0000-0000-000000000002', 2, 'subscription', 'nano-banana', 'nano-banana-2-1', null);
 update jobs set task_id = 'live' where id = 'ffffffff-0000-0000-0000-000000000002';
 do $$ declare before int; begin
   before := (select credits from profiles where id = '11111111-1111-1111-1111-111111111111');
