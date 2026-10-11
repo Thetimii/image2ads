@@ -21,14 +21,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    // Client IP as set by Vercel's edge.
     const ip =
-      request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
       request.headers.get('x-real-ip') ||
+      request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
       null
-
-    if (!ip) {
-      return NextResponse.json({ ok: true, skipped: 'no-ip' })
-    }
 
     const { error } = await supabaseAdmin.rpc('apply_signup_ip_guard', {
       p_user_id: user.id,

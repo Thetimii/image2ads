@@ -150,6 +150,14 @@ export async function startGeneration(job: JobRow, opts: GenerateOptions): Promi
 
   const spec = buildSpec(job, opts, { paid }, sourceUrls);
 
+  // Free plan = standard images only (video, music and Nano Banana Pro are
+  // subscriber features - the UI locks them, this enforces it).
+  if (!paid && (spec.resultType !== "image" || spec.productModel !== "nano-banana")) {
+    const msg = "Video, music and Nano Banana Pro are part of the paid plans. Upgrade to unlock them.";
+    await failJob(job.id, "insufficient_credits", "subscriber feature", msg, { requireStatus: "pending" });
+    return { http: 402, body: { success: false, error: msg, code: "SUBSCRIBERS_ONLY", jobId: job.id } };
+  }
+
   // Atomic: lock job, deduct credits (if any), mark processing.
   const { data: started, error: sErr } = await db().rpc("start_job", {
     job_uuid: job.id,

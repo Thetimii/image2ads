@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createServiceClient } from '@/lib/supabase/server'
 
 export const runtime = 'nodejs'
 
@@ -102,7 +102,9 @@ export async function POST(req: NextRequest) {
     console.log('💾 Activating Pro discount for user:', user.id)
     console.log('⏰ Expiry time will be:', expiresAt.toISOString())
 
-    const { error: updateError } = await supabase
+    // Service client: pro_discount_expires_at is server-owned (browser writes
+    // to it are ignored, so nobody can grant themselves a permanent discount).
+    const { error: updateError } = await createServiceClient()
       .from('profiles')
       .update({
         pro_discount_expires_at: expiresAt.toISOString()

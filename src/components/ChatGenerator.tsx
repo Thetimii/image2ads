@@ -289,7 +289,9 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
 
   const getCreditText = () => {
     if (isFreeUser) {
-      // Free plan: 3 free credits a day (1 image = 1 credit)
+      // Free plan: 3 free credits a day (1 image = 1 credit). More than that
+      // means leftover purchased credits - just show the balance.
+      if (profile.credits > 3) return `${profile.credits} credits`
       return profile.credits === 1 ? '1 free image left today' : `${profile.credits} free images left today`
     }
     return `${profile.credits} credits`

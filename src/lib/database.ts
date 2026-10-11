@@ -1,5 +1,6 @@
 import { createClient } from "./supabase/server";
 import { createServiceClient } from "./supabase/server";
+import { headers } from "next/headers";
 import type { Profile, Folder, Image, Job } from "./validations";
 
 /**
@@ -7,6 +8,20 @@ import type { Profile, Folder, Image, Job } from "./validations";
  */
 export async function getUserProfile(userId: string): Promise<Profile | null> {
   const supabase = await createClient();
+
+  // New accounts: run the signup anti-abuse guard server-side (once; it is a
+  // no-op afterwards). Free credits are only granted after it has run.
+  const { data: checked } = await supabase
+    .from("profiles")
+    .select("signup_checked_at")
+    .eq("id", userId)
+    .maybeSingle();
+  if (checked && !checked.signup_checked_at) {
+    const h = await headers();
+    const ip = h.get("x-real-ip") || h.get("x-forwarded-for")?.split(",")[0]?.trim() || null;
+    const { error: guardError } = await createServiceClient().rpc("apply_signup_ip_guard", { p_user_id: userId, p_ip: ip });
+    if (guardError) console.warn("apply_signup_ip_guard failed:", guardError.message);
+  }
 
   // Free plan: top up today's 3 free credits (once per day, no-op for
   // subscribers) so the balance shown is current. Never blocks page loads.

@@ -25,6 +25,9 @@
 --    100-images/day free path. Accounts flagged by the signup IP guard get no
 --    refills.
 
+-- Don't queue live traffic behind a long-running query while altering tables.
+set lock_timeout = '5s';
+
 -- ---------------------------------------------------------------------------
 -- 1. Columns
 -- ---------------------------------------------------------------------------
@@ -57,7 +60,8 @@ drop index if exists public.idx_jobs_free_quota;
 
 alter table public.profiles
   add column if not exists free_quota_blocked      boolean not null default false,
-  add column if not exists free_credits_refilled_on date;
+  add column if not exists free_credits_refilled_on date,
+  add column if not exists signup_checked_at        timestamptz;
 
 -- ---------------------------------------------------------------------------
 -- 2. Guard triggers
@@ -123,6 +127,8 @@ begin
     new.email_reminders_sent := old.email_reminders_sent;
     new.free_quota_blocked   := old.free_quota_blocked;
     new.free_credits_refilled_on := old.free_credits_refilled_on;
+    new.pro_discount_expires_at := old.pro_discount_expires_at;
+    new.signup_checked_at    := old.signup_checked_at;
   end if;
   return new;
 end;
@@ -150,6 +156,38 @@ $$;
 -- ---------------------------------------------------------------------------
 -- 8. Free plan: 3 free credits per day
 -- ---------------------------------------------------------------------------
+-- Every signup's IP and (hashed) email, kept even after account deletion, so
+-- deleting an account and signing up again doesn't mint fresh free credits.
+create table if not exists public.signup_log (
+  user_id    uuid primary key,
+  ip         inet,
+  email_hash text,
+  created_at timestamptz not null default now()
+);
+alter table public.signup_log enable row level security; -- no policies: service role only
+create index if not exists idx_signup_log_ip on public.signup_log (ip);
+create index if not exists idx_signup_log_email on public.signup_log (email_hash);
+
+create or replace function public.email_hash(p_email text)
+returns text
+language sql
+immutable
+as $$ select case when p_email is null then null
+                  else encode(sha256(convert_to(lower(trim(p_email)), 'UTF8')), 'hex') end $$;
+
+insert into public.signup_log (user_id, ip, email_hash, created_at)
+select id, signup_ip, public.email_hash(email), coalesce(created_at, now())
+  from public.profiles
+on conflict (user_id) do nothing;
+
+-- Existing accounts count as checked (their signup credits were granted
+-- under the old rules); new accounts are checked server-side on first load.
+update public.profiles set signup_checked_at = coalesce(created_at, now()) where signup_checked_at is null;
+
+-- New accounts start at 0: the free credits arrive with the first refill,
+-- which needs the signup guard to have run.
+alter table public.profiles alter column credits set default 0;
+
 -- Single source of truth for the free allowance (mirrored for display only in
 -- supabase/functions/_shared/catalog.ts FREE_DAILY_CREDITS).
 create or replace function public.free_daily_credits()
@@ -168,9 +206,13 @@ security definer
 set search_path = public
 as $$
 declare
+  v_before  integer;
   v_credits integer;
   v_today   date := (now() at time zone 'utc')::date;
 begin
+  select credits into v_before from public.profiles where id = p_user for update;
+  if not found then return null; end if;
+
   update public.profiles
      set credits = greatest(credits, public.free_daily_credits()),
          free_credits_refilled_on = v_today,
@@ -178,11 +220,15 @@ begin
    where id = p_user
      and coalesce(subscription_status, 'free') not in ('active', 'trialing')
      and not free_quota_blocked
+     -- the signup guard must have run (server-side, apply_signup_ip_guard)
+     and signup_checked_at is not null
      and coalesce(free_credits_refilled_on, '-infinity'::date) < v_today
   returning credits into v_credits;
 
-  if v_credits is null then
-    select credits into v_credits from public.profiles where id = p_user;
+  if v_credits is null then return v_before; end if;
+  if v_credits > v_before then
+    insert into public.usage_events (user_id, event_type, credits_consumed, metadata)
+    values (p_user, 'free_daily_refill', -(v_credits - v_before), jsonb_build_object('day', v_today));
   end if;
   return v_credits;
 end;
@@ -205,8 +251,9 @@ $$;
 revoke all on function public.refill_my_free_credits() from public, anon;
 grant execute on function public.refill_my_free_credits() to authenticated, service_role;
 
--- New accounts: today's 3 free credits ARE the signup credits (no double
--- grant on day one).
+-- New accounts start with 0 credits; the server runs the signup guard on
+-- first load and the first refill then grants today's 3 free credits.
+-- (Accounts that never load the app - e.g. scripted signups - get nothing.)
 create or replace function public.handle_new_user()
 returns trigger
 language plpgsql
@@ -214,14 +261,16 @@ security definer
 set search_path = public
 as $$
 begin
-  insert into public.profiles (id, email, full_name, credits, free_credits_refilled_on)
-  values (new.id, new.email, new.raw_user_meta_data->>'full_name',
-          public.free_daily_credits(), (now() at time zone 'utc')::date);
+  insert into public.profiles (id, email, full_name, credits)
+  values (new.id, new.email, new.raw_user_meta_data->>'full_name', 0);
   return new;
 end;
 $$;
 
--- Signup IP guard (4th+ account from one IP): no free credits, now or ever.
+-- Signup guard, run once per account (server-side): records IP + email hash;
+-- the 4th+ account from one IP, or an email that signed up before (deleted
+-- and re-created), gets no free credits now or ever. Never touches
+-- subscribers' balances. Idempotent: a second call is a no-op.
 create or replace function public.apply_signup_ip_guard(p_user_id uuid, p_ip inet)
 returns void
 language plpgsql
@@ -229,18 +278,32 @@ security definer
 set search_path = public
 as $$
 declare
-  v_existing_count integer;
+  v_profile   public.profiles;
+  v_hash      text;
+  v_ip_count  integer;
+  v_email_hit boolean;
 begin
-  if p_ip is null then return; end if;
+  select * into v_profile from public.profiles where id = p_user_id for update;
+  if not found or v_profile.signup_checked_at is not null then return; end if;
 
-  select count(*) into v_existing_count
-    from public.profiles
-   where signup_ip = p_ip and id <> p_user_id;
+  v_hash := public.email_hash(v_profile.email);
 
-  update public.profiles set signup_ip = p_ip where id = p_user_id;
+  select count(*) into v_ip_count
+    from public.signup_log where ip = p_ip and user_id <> p_user_id;
+  select exists (select 1 from public.signup_log
+                  where email_hash = v_hash and user_id <> p_user_id) into v_email_hit;
 
-  if v_existing_count >= 3 then
-    update public.profiles set credits = 0, free_quota_blocked = true where id = p_user_id;
+  insert into public.signup_log (user_id, ip, email_hash) values (p_user_id, p_ip, v_hash)
+  on conflict (user_id) do update set ip = excluded.ip, email_hash = excluded.email_hash;
+
+  update public.profiles set signup_ip = p_ip, signup_checked_at = now() where id = p_user_id;
+
+  if (p_ip is not null and v_ip_count >= 3) or v_email_hit then
+    update public.profiles
+       set free_quota_blocked = true,
+           credits = case when coalesce(subscription_status, 'free') in ('active', 'trialing')
+                          then credits else 0 end
+     where id = p_user_id;
   end if;
 end;
 $$;

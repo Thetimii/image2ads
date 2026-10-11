@@ -120,10 +120,10 @@ do $$ begin
 end $$;
 
 -- 10. free plan: 3 free credits a day, refilled once per UTC day
-insert into profiles (id, email, credits, subscription_status, free_credits_refilled_on) values
-  ('77777777-0000-0000-0000-000000000001', 'free@x.com', 0, 'free', current_date - 1),
-  ('77777777-0000-0000-0000-000000000002', 'sub@x.com',  0, 'active', current_date - 1),
-  ('77777777-0000-0000-0000-000000000003', 'rich@x.com', 50, null, current_date - 1);
+insert into profiles (id, email, credits, subscription_status, free_credits_refilled_on, signup_checked_at) values
+  ('77777777-0000-0000-0000-000000000001', 'free@x.com', 0, 'free', current_date - 1, now()),
+  ('77777777-0000-0000-0000-000000000002', 'sub@x.com',  0, 'active', current_date - 1, now()),
+  ('77777777-0000-0000-0000-000000000003', 'rich@x.com', 50, null, current_date - 1, now());
 insert into jobs (id, user_id, prompt) values
   ('eeeeeeee-0000-0000-0000-000000000001', '77777777-0000-0000-0000-000000000001', 'q1'),
   ('eeeeeeee-0000-0000-0000-000000000002', '77777777-0000-0000-0000-000000000001', 'q2'),
@@ -159,18 +159,53 @@ do $$ declare r text; i int; begin
   raise notice 'PASS 10 free plan daily credits';
 end $$;
 
--- 10b. signup: 3 credits that count as today's refill; IP guard flags the 4th account
-insert into auth.users (id, email) values ('88888888-0000-0000-0000-000000000001', 'new@x.com');
-select apply_signup_ip_guard('88888888-0000-0000-0000-000000000001', '10.0.0.9');
+-- 10b. signup: 0 credits until the server guard runs, then today's 3; the
+-- guard blocks the 4th account per IP and re-used emails; it runs only once.
 insert into auth.users (id, email) values ('88888888-0000-0000-0000-000000000002', 'new2@x.com');
-select apply_signup_ip_guard('88888888-0000-0000-0000-000000000002', '10.0.0.77');
 do $$ declare p profiles; begin
   select * into p from profiles where id = '88888888-0000-0000-0000-000000000002';
-  if p.credits <> 3 or p.free_credits_refilled_on <> (now() at time zone 'utc')::date or p.free_quota_blocked then raise exception 'FAIL: new signup %', row_to_json(p); end if;
-  if refill_free_credits(p.id) <> 3 then raise exception 'FAIL: signup day double grant'; end if;
+  if p.credits <> 0 then raise exception 'FAIL: signup credits before guard %', p.credits; end if;
+  if refill_free_credits(p.id) <> 0 then raise exception 'FAIL: refill before guard'; end if;
+  perform apply_signup_ip_guard(p.id, '10.0.0.77');
+  if refill_free_credits(p.id) <> 3 then raise exception 'FAIL: first refill after guard'; end if;
+  if refill_free_credits(p.id) <> 3 then raise exception 'FAIL: double first-day grant'; end if;
+  raise notice 'PASS 10b signup gets 3 after server guard';
+end $$;
+
+-- 4th account from 10.0.0.9 (3 backfilled earlier accounts share it)
+insert into auth.users (id, email) values ('88888888-0000-0000-0000-000000000001', 'new@x.com');
+select apply_signup_ip_guard('88888888-0000-0000-0000-000000000001', '10.0.0.9');
+-- delete + re-sign-up with the same email from a fresh IP
+delete from profiles where id = '88888888-0000-0000-0000-000000000002';
+insert into auth.users (id, email) values ('88888888-0000-0000-0000-000000000003', 'NEW2@x.com ');
+select apply_signup_ip_guard('88888888-0000-0000-0000-000000000003', '10.9.9.9');
+-- re-running the guard later (e.g. from a shared office IP) changes nothing
+insert into auth.users (id, email) values ('88888888-0000-0000-0000-000000000004', 'ok@x.com');
+select apply_signup_ip_guard('88888888-0000-0000-0000-000000000004', '10.1.1.1');
+select apply_signup_ip_guard('88888888-0000-0000-0000-000000000004', '10.0.0.9');
+-- legacy subscriber flagged by backfill keeps their balance when the guard runs (no-op: already checked)
+do $$ declare p profiles; begin
   select * into p from profiles where id = '88888888-0000-0000-0000-000000000001';
-  if p.credits <> 0 or not p.free_quota_blocked then raise exception 'FAIL: ip guard %', row_to_json(p); end if;
-  raise notice 'PASS 10b signup + IP guard';
+  if p.credits <> 0 or not p.free_quota_blocked or refill_free_credits(p.id) <> 0 then raise exception 'FAIL: ip guard %', row_to_json(p); end if;
+  select * into p from profiles where id = '88888888-0000-0000-0000-000000000003';
+  if not p.free_quota_blocked or refill_free_credits(p.id) <> 0 then raise exception 'FAIL: email re-signup %', row_to_json(p); end if;
+  select * into p from profiles where id = '88888888-0000-0000-0000-000000000004';
+  if p.free_quota_blocked or p.signup_ip <> '10.1.1.1' or refill_free_credits(p.id) <> 3 then raise exception 'FAIL: guard re-run %', row_to_json(p); end if;
+  if (select count(*) from usage_events where user_id = p.id and event_type = 'free_daily_refill') <> 1 then raise exception 'FAIL: refill ledger'; end if;
+  -- legacy accounts are pre-checked
+  if (select signup_checked_at from profiles where id = '99999999-0000-0000-0000-000000000001') is null then raise exception 'FAIL: legacy not checked'; end if;
+  raise notice 'PASS 10b2 IP / email guard, idempotent';
+end $$;
+
+-- 10b3. browser cannot change the discount expiry
+set role authenticated;
+select set_config('request.jwt.claim.sub', '77777777-0000-0000-0000-000000000001', false);
+update profiles set pro_discount_expires_at = now() + interval '10 years', signup_checked_at = null where id = '77777777-0000-0000-0000-000000000001';
+reset role;
+do $$ begin
+  if (select pro_discount_expires_at from profiles where id = '77777777-0000-0000-0000-000000000001') is not null then raise exception 'FAIL: discount writable'; end if;
+  if (select signup_checked_at from profiles where id = '77777777-0000-0000-0000-000000000001') is null then raise exception 'FAIL: checked flag writable'; end if;
+  raise notice 'PASS 10b3 server-owned profile columns';
 end $$;
 
 -- 10c. browser can refill only itself, can't flip the flags
