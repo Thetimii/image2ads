@@ -53,23 +53,24 @@ function getPlanByProductId(productId: string): { credits: number; planName: str
 }
 
 // Grants credits exactly once per Stripe object (checkout session, invoice,
-// event). Stripe retries webhooks and fires several events per payment; the
+// upgrade). Stripe retries webhooks and fires several events per payment; the
 // credit_grants ledger (unique source_ref) makes every grant idempotent and the
-// balance update atomic (no read-modify-write race).
+// balance update atomic (no read-modify-write race). Throws on failure so the
+// handler answers 500 and Stripe retries - safe precisely because it's
+// idempotent - instead of silently losing a paying customer's credits.
 async function grantCreditsOnce(
   stripeCustomerId: string,
   credits: number,
   reason: string,
   sourceRef: string
-): Promise<{ granted: boolean; error?: string }> {
+): Promise<{ granted: boolean }> {
   const { data: profile, error: findError } = await supabaseAdmin
     .from("profiles")
     .select("id")
     .eq("stripe_customer_id", stripeCustomerId)
     .single();
   if (findError || !profile) {
-    console.error("Profile not found for customer:", stripeCustomerId, findError);
-    return { granted: false, error: "Profile not found" };
+    throw new Error(`grantCreditsOnce: no profile for Stripe customer ${stripeCustomerId}`);
   }
   const { data, error } = await supabaseAdmin.rpc("grant_credits_once", {
     p_user: profile.id,
@@ -77,10 +78,7 @@ async function grantCreditsOnce(
     p_reason: reason,
     p_ref: sourceRef,
   });
-  if (error) {
-    console.error("grant_credits_once failed:", error);
-    return { granted: false, error: error.message };
-  }
+  if (error) throw new Error(`grant_credits_once failed: ${error.message}`);
   console.log(`${data ? "Granted" : "Already granted"} ${credits} credits (${reason}, ${sourceRef}) to ${stripeCustomerId}`);
   return { granted: !!data };
 }
@@ -165,7 +163,7 @@ export async function POST(req: NextRequest) {
               p_ref: `trial:${session.id}`,
               p_mode: "set_min",
             });
-            if (grantError) console.error("Error granting trial credits:", grantError);
+            if (grantError) throw new Error(`Trial credit grant failed: ${grantError.message}`);
 
             // Track TikTok purchase event for trial
             try {
@@ -517,11 +515,28 @@ export async function POST(req: NextRequest) {
         // grant a full month of credits each time. Renewals are granted once
         // per invoice in invoice.payment_succeeded; first payments in
         // checkout.session.completed.
+        // Upgrades only, and only the difference (Pro -> Business = +300),
+        // once per subscription + target price + billing period, so
+        // switching back and forth can't farm credits.
         const previous = (event.data as { previous_attributes?: { items?: { data?: Array<{ price?: { id?: string } }> } } }).previous_attributes;
         const previousPriceId = previous?.items?.data?.[0]?.price?.id;
-        const planChanged = !!previousPriceId && previousPriceId !== planItem?.price?.id;
-        if (event.type === "customer.subscription.updated" && subscription.status === "active" && planChanged && creditsToAdd > 0) {
-          await grantCreditsOnce(subscription.customer as string, creditsToAdd, `plan_change:${planName ?? "unknown"}`, `event:${event.id}`);
+        const previousCredits = previousPriceId ? getCreditsByPriceId(previousPriceId) : 0;
+        const upgradeCredits = creditsToAdd - previousCredits;
+        if (
+          event.type === "customer.subscription.updated" &&
+          subscription.status === "active" &&
+          previousPriceId && previousPriceId !== planItem?.price?.id &&
+          previousCredits > 0 && upgradeCredits > 0
+        ) {
+          const periodStart =
+            (planItem as unknown as { current_period_start?: number }).current_period_start ??
+            (subscription as unknown as { current_period_start?: number }).current_period_start ?? 0;
+          await grantCreditsOnce(
+            subscription.customer as string,
+            upgradeCredits,
+            `upgrade:${planName ?? "unknown"}`,
+            `upgrade:${subscription.id}:${planItem?.price?.id}:${periodStart}`
+          );
         }
         break;
       }

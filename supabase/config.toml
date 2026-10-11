@@ -32,6 +32,12 @@ verify_jwt = false
 [functions.generate-text-music]
 verify_jwt = false
 
+[functions.generate-text-image-free]
+verify_jwt = false
+
+[functions.generate-image-image-free]
+verify_jwt = false
+
 [functions.check-job-status]
 verify_jwt = false
 

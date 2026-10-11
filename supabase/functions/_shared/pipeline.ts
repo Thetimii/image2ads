@@ -54,12 +54,13 @@ export interface JobRow {
   provider_request: { model: string; input: Record<string, unknown> } | null;
   provider_checked_at: string | null;
   charged_at: string | null;
+  started_at: string | null;
   created_at: string;
   updated_at: string | null;
 }
 
 const JOB_COLUMNS =
-  "id,user_id,status,prompt,result_type,has_images,image_ids,aspect_ratio,music_options,custom_name,task_id,result_url,cover_url,error_message,credits_used,retry_count,product_model,provider_model,provider_request,provider_checked_at,charged_at,created_at,updated_at";
+  "id,user_id,status,prompt,result_type,has_images,image_ids,aspect_ratio,music_options,custom_name,task_id,result_url,cover_url,error_message,credits_used,retry_count,product_model,provider_model,provider_request,provider_checked_at,charged_at,started_at,created_at,updated_at";
 
 /** Give up on a task kie.ai hasn't finished after this long (refund). */
 export const TIMEOUT_MS: Record<string, number> = {
@@ -99,7 +100,8 @@ async function signedSourceUrls(job: JobRow): Promise<string[]> {
   const urls: string[] = [];
   for (const id of ids) {
     const path = byId.get(id);
-    if (!path || path === "text-only-placeholder") continue;
+    // file_path is browser-supplied: only ever sign the job owner's own files.
+    if (!path || path === "text-only-placeholder" || !path.startsWith(`${job.user_id}/`)) continue;
     for (const bucket of ["uploads", "results"]) {
       const { data } = await db().storage.from(bucket).createSignedUrl(path, SOURCE_URL_TTL_SEC);
       if (data?.signedUrl) {
@@ -135,28 +137,12 @@ export async function startGeneration(job: JobRow, opts: GenerateOptions): Promi
   if (resultType !== "music" && job.has_images) {
     sourceUrls = await signedSourceUrls(job);
     if (sourceUrls.length === 0) {
-      await failJob(job.id, "invalid_input", "reference images not found");
+      await failJob(job.id, "invalid_input", "reference images not found", undefined, { requireStatus: "pending" });
       return { http: 400, body: { success: false, error: friendlyMessage("invalid_input"), code: "IMAGE_NOT_FOUND", jobId: job.id } };
     }
   }
 
   const spec = buildSpec(job, opts, { paid }, sourceUrls);
-
-  if (spec.billingTier === "free_quota") {
-    const since = new Date(Date.now() - 24 * 60 * 60_000).toISOString();
-    const { count } = await db()
-      .from("jobs")
-      .select("id", { count: "exact", head: true })
-      .eq("user_id", job.user_id)
-      .eq("billing_tier", "free_quota")
-      .neq("status", "failed")
-      .gte("created_at", since);
-    if ((count ?? 0) >= FREE_DAILY_IMAGE_LIMIT) {
-      const msg = `Daily free limit reached (${FREE_DAILY_IMAGE_LIMIT} images/day). Upgrade to keep creating.`;
-      await failJob(job.id, "insufficient_credits", "free daily limit", msg);
-      return { http: 429, body: { success: false, error: msg, code: "LIMIT_REACHED", jobId: job.id } };
-    }
-  }
 
   // Atomic: lock job, deduct credits (if any), mark processing.
   const { data: started, error: sErr } = await db().rpc("start_job", {
@@ -166,10 +152,16 @@ export async function startGeneration(job: JobRow, opts: GenerateOptions): Promi
     p_product_model: spec.productModel,
     p_provider_model: spec.kieModel,
     p_provider_request: { model: spec.kieModel, input: spec.input },
+    p_free_daily_limit: spec.billingTier === "free_quota" ? FREE_DAILY_IMAGE_LIMIT : null,
   });
   if (sErr) throw new Error(`start_job: ${sErr.message}`);
+  if (started === "limit_reached") {
+    const msg = `Daily free limit reached (${FREE_DAILY_IMAGE_LIMIT} images/day). Upgrade to keep creating.`;
+    await failJob(job.id, "insufficient_credits", "free daily limit", msg, { requireStatus: "pending" });
+    return { http: 429, body: { success: false, error: msg, code: "LIMIT_REACHED", jobId: job.id } };
+  }
   if (started === "insufficient_credits") {
-    await failJob(job.id, "insufficient_credits", "insufficient credits");
+    await failJob(job.id, "insufficient_credits", "insufficient credits", undefined, { requireStatus: "pending" });
     return { http: 402, body: { success: false, error: friendlyMessage("insufficient_credits"), code: "INSUFFICIENT_CREDITS", jobId: job.id } };
   }
   if (started !== "ok") {
@@ -185,12 +177,24 @@ export async function startGeneration(job: JobRow, opts: GenerateOptions): Promi
     const raw = err instanceof Error ? err.message : String(err);
     const category = err instanceof KieError && err.code === 402 ? "provider_unavailable" : classifyFailure(raw, err instanceof KieError ? err.code : null);
     logError("generate", "create_task_failed", err, { jobId: job.id, model: spec.kieModel });
-    await failJob(job.id, category, raw);
+    await failJob(job.id, category, raw, undefined, { requireNoTask: true });
     const http = category === "provider_unavailable" ? 503 : category === "invalid_input" || category === "safety_filter" ? 400 : 500;
     return { http, body: { success: false, error: friendlyMessage(category), code: category.toUpperCase(), jobId: job.id } };
   }
 
-  await db().from("jobs").update({ task_id: taskId, updated_at: new Date().toISOString() }).eq("id", job.id).eq("status", "processing");
+  const { data: attached } = await db()
+    .from("jobs")
+    .update({ task_id: taskId, updated_at: new Date().toISOString() })
+    .eq("id", job.id)
+    .eq("status", "processing")
+    .is("task_id", null)
+    .select("id")
+    .maybeSingle();
+  if (!attached) {
+    // Should be impossible now that orphan detection waits ORPHAN_AFTER_MS
+    // from started_at, but if it happens kie.ai bills a task nobody owns.
+    logError("generate", "task_not_attached", new Error("job left processing before task attached"), { jobId: job.id, taskId });
+  }
   await db().from("usage_events").insert({
     user_id: job.user_id,
     event_type: job.has_images ? `image-to-${resultType}` : `text-to-${resultType}`,
@@ -206,47 +210,52 @@ export async function startGeneration(job: JobRow, opts: GenerateOptions): Promi
 // Fail / refund
 // ---------------------------------------------------------------------------
 
+export interface FailOptions {
+  /** only fail if the job is still in this status (e.g. "pending") */
+  requireStatus?: "pending" | "processing";
+  /** only fail if no kie.ai task is attached yet */
+  requireNoTask?: boolean;
+  providerCredits?: number | null;
+}
+
 /**
- * Moves a non-terminal job to failed and refunds whatever it was charged.
- * Returns false if someone else already resolved it (no-op).
+ * Moves a non-terminal job to failed AND refunds whatever it was charged, in
+ * one transaction (fail_job RPC). Returns false if the job was already
+ * resolved or didn't match the conditions (no-op).
  */
 export async function failJob(
   jobId: string,
   category: FailureCategory,
   raw?: string,
   userMessage?: string,
-  extra: Record<string, unknown> = {},
-  onlyIfNoTask = false,
+  opts: FailOptions = {},
 ): Promise<boolean> {
-  let q = db()
-    .from("jobs")
-    .update({
-      status: "failed",
-      error_message: userMessage ?? friendlyMessage(category),
-      failure_category: category,
-      provider_error: raw ? raw.slice(0, 1000) : null,
-      updated_at: new Date().toISOString(),
-      ...extra,
-    })
-    .eq("id", jobId)
-    .in("status", ["pending", "processing"]);
-  if (onlyIfNoTask) q = q.is("task_id", null);
-  const { data, error } = await q.select("id,user_id,prompt").maybeSingle();
+  const { data, error } = await db().rpc("fail_job", {
+    job_uuid: jobId,
+    p_message: userMessage ?? friendlyMessage(category),
+    p_category: category,
+    p_provider_error: raw ?? null,
+    p_require_status: opts.requireStatus ?? null,
+    p_require_no_task: opts.requireNoTask ?? false,
+    p_provider_credits: opts.providerCredits ?? null,
+    p_provider_cost_usd: opts.providerCredits == null ? null : kieCreditsToUsd(opts.providerCredits),
+  });
   if (error) {
-    logError("pipeline", "fail_update_error", error, { jobId });
+    logError("pipeline", "fail_job_error", error, { jobId });
     return false;
   }
   if (!data) return false;
-  const { error: rErr } = await db().rpc("refund_credit", { job_uuid: jobId });
-  if (rErr) logError("pipeline", "refund_error", rErr, { jobId });
   if (category === "safety_filter") {
-    await db().from("usage_events").insert({
-      user_id: data.user_id,
-      event_type: "safety_filter_rejected",
-      credits_consumed: 0,
-      job_id: jobId,
-      metadata: { prompt: data.prompt, raw_error: raw?.slice(0, 500) },
-    });
+    const { data: j } = await db().from("jobs").select("user_id,prompt").eq("id", jobId).maybeSingle();
+    if (j) {
+      await db().from("usage_events").insert({
+        user_id: (j as { user_id: string }).user_id,
+        event_type: "safety_filter_rejected",
+        credits_consumed: 0,
+        job_id: jobId,
+        metadata: { prompt: (j as { prompt: string | null }).prompt, raw_error: raw?.slice(0, 500) },
+      });
+    }
   }
   log("pipeline", "job_failed", { jobId, category, raw: raw?.slice(0, 200) });
   return true;
@@ -267,14 +276,25 @@ export async function syncJob(jobId: string, opts: SyncOptions): Promise<JobRow 
   const job = await loadJob(jobId);
   if (!job || isTerminal(job.status)) return job;
 
-  const age = Date.now() - new Date(job.created_at).getTime();
+  // Ages count from when generation actually started (start_job / safety
+  // retry), never from browser-side insert time.
+  const since = (iso: string | null | undefined) => (iso ? Date.now() - new Date(iso).getTime() : 0);
+  const age = since(job.started_at ?? job.updated_at ?? job.created_at);
   const timeout = TIMEOUT_MS[resultTypeOf(job)] ?? TIMEOUT_MS.image;
 
   if (!job.task_id) {
-    // pending = user never called generate (closed tab) - nothing was charged.
-    // processing without a task = crashed between charge and createTask.
-    if (age > (job.status === "pending" ? ABANDONED_AFTER_MS : ORPHAN_AFTER_MS)) {
-      await failJob(job.id, "unknown", "no provider task was created", "Generation failed to start — no credits were used. Please try again.");
+    if (job.status === "pending") {
+      // Browser never called generate (closed tab) - nothing was charged.
+      if (since(job.created_at) > ABANDONED_AFTER_MS) {
+        await failJob(job.id, "unknown", "abandoned before start", "Generation was not started. Please try again.", { requireStatus: "pending" });
+        return await loadJob(jobId);
+      }
+      return job;
+    }
+    // Charged but no task: crashed between start_job and createTask (or a
+    // safety retry is mid-submit). createTask gives up well within this.
+    if (age > ORPHAN_AFTER_MS) {
+      await failJob(job.id, "unknown", "no provider task was created", "Generation failed to start — no credits were used. Please try again.", { requireNoTask: true });
       return await loadJob(jobId);
     }
     return job;
@@ -301,6 +321,14 @@ export async function syncJob(jobId: string, opts: SyncOptions): Promise<JobRow 
 
   if (task.state === "success") {
     await completeJob(job, task, opts);
+    // A finished render we can't store (download/upload keeps failing) must
+    // not sit in processing forever: refund once it's past the timeout.
+    if (age > timeout) {
+      const after = await loadJob(jobId);
+      if (after?.status === "processing") {
+        await failJob(job.id, "unknown", "result could not be stored", undefined, { providerCredits: task.creditsConsumed });
+      }
+    }
   } else if (task.state === "fail") {
     await handleProviderFailure(job, task);
   } else if (age > timeout) {
@@ -316,28 +344,31 @@ async function handleProviderFailure(job: JobRow, task: KieTask): Promise<void> 
   // One free retry with a softened prompt for image safety rejections - the
   // credit already charged covers it.
   if (category === "safety_filter" && (job.retry_count ?? 0) === 0 && resultTypeOf(job) === "image" && job.provider_request) {
+    // Claim the retry first so a concurrent callback + poll can't both
+    // submit (and pay for) a retry task. Clearing task_id + restarting the
+    // clock keeps orphan detection correct while the new task is submitted.
+    const input = { ...job.provider_request.input, prompt: sanitizePromptForRetry(job.prompt ?? "") };
+    const { data: claimed } = await db()
+      .from("jobs")
+      .update({ retry_count: 1, task_id: null, started_at: new Date().toISOString(), provider_checked_at: null, provider_request: { model: job.provider_request.model, input } })
+      .eq("id", job.id)
+      .eq("status", "processing")
+      .eq("retry_count", 0)
+      .eq("task_id", job.task_id ?? "")
+      .select("id")
+      .maybeSingle();
+    if (!claimed) return; // someone else is already handling this failure
     try {
-      const input = { ...job.provider_request.input, prompt: sanitizePromptForRetry(job.prompt ?? "") };
       const token = await jobCallbackToken(job.id, Deno.env.get("INTERNAL_FUNCTION_SECRET") ?? "");
       const newTaskId = await createTask(job.provider_request.model, input, callbackUrlFor(job.id, token));
-      const { data } = await db()
-        .from("jobs")
-        .update({ task_id: newTaskId, retry_count: 1, provider_checked_at: null, provider_request: { model: job.provider_request.model, input }, updated_at: new Date().toISOString() })
-        .eq("id", job.id)
-        .eq("status", "processing")
-        .eq("task_id", job.task_id ?? "")
-        .select("id")
-        .maybeSingle();
-      log("sync", "safety_retry", { jobId: job.id, oldTask: job.task_id, newTask: newTaskId, applied: !!data });
+      await db().from("jobs").update({ task_id: newTaskId }).eq("id", job.id).eq("status", "processing").is("task_id", null);
+      log("sync", "safety_retry", { jobId: job.id, oldTask: job.task_id, newTask: newTaskId });
       return;
     } catch (err) {
       logError("sync", "safety_retry_failed", err, { jobId: job.id });
     }
   }
-  await failJob(job.id, category, raw, undefined, {
-    provider_credits: task.creditsConsumed ?? 0,
-    provider_cost_usd: kieCreditsToUsd(task.creditsConsumed ?? 0),
-  });
+  await failJob(job.id, category, raw, undefined, { providerCredits: task.creditsConsumed ?? 0 });
 }
 
 function pickMedia(resultType: string, urls: string[]): string | null {

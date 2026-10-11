@@ -31,10 +31,10 @@ end $$;
 
 -- 3. browser roles cannot call the money RPCs
 do $$ begin
-  if has_function_privilege('authenticated', 'public.start_job(uuid,integer,text,text,text,jsonb)', 'execute') then raise exception 'FAIL: start_job exposed'; end if;
+  if has_function_privilege('authenticated', 'public.start_job(uuid,integer,text,text,text,jsonb,integer)', 'execute') then raise exception 'FAIL: start_job exposed'; end if;
   if has_function_privilege('authenticated', 'public.grant_credits_once(uuid,integer,text,text,text)', 'execute') then raise exception 'FAIL: grant exposed'; end if;
   if has_function_privilege('anon', 'public.refund_credit(uuid)', 'execute') then raise exception 'FAIL: refund exposed'; end if;
-  if not has_function_privilege('service_role', 'public.start_job(uuid,integer,text,text,text,jsonb)', 'execute') then raise exception 'FAIL: service_role cannot start'; end if;
+  if not has_function_privilege('service_role', 'public.start_job(uuid,integer,text,text,text,jsonb,integer)', 'execute') then raise exception 'FAIL: service_role cannot start'; end if;
   raise notice 'PASS 3 rpc privileges';
 end $$;
 
@@ -107,4 +107,66 @@ do $$ declare m record; begin
   if m.est_revenue_usd <> 0.0955 or m.est_margin_usd <> 0.0655 then raise exception 'FAIL: economics %', row_to_json(m); end if;
   perform 1 from generation_margins_daily;
   raise notice 'PASS 8 economics views';
+end $$;
+
+-- 9. browser can't backdate created_at (free-quota bypass)
+set role authenticated;
+select set_config('request.jwt.claim.sub', '22222222-2222-2222-2222-222222222222', false);
+insert into jobs (id, user_id, prompt, created_at) values ('dddddddd-0000-0000-0000-000000000001', '22222222-2222-2222-2222-222222222222', 'p', now() - interval '3 days');
+reset role;
+do $$ begin
+  if (select created_at from jobs where id = 'dddddddd-0000-0000-0000-000000000001') < now() - interval '1 minute' then raise exception 'FAIL: created_at backdated'; end if;
+  raise notice 'PASS 9 created_at pinned';
+end $$;
+
+-- 10. free daily quota enforced atomically inside start_job
+do $$ declare r text; i int; begin
+  for i in 1..3 loop
+    insert into jobs (id, user_id, prompt) values (('eeeeeeee-0000-0000-0000-00000000000' || i)::uuid, '22222222-2222-2222-2222-222222222222', 'q');
+  end loop;
+  -- user 2 already has 1 free_quota job (bbbb..3, but it is failed -> not counted)
+  r := start_job('eeeeeeee-0000-0000-0000-000000000001', 0, 'free_quota', 'nano-banana', 'nano-banana-2-1', null, 2);
+  if r <> 'ok' then raise exception 'FAIL: quota 1 %', r; end if;
+  r := start_job('eeeeeeee-0000-0000-0000-000000000002', 0, 'free_quota', 'nano-banana', 'nano-banana-2-1', null, 2);
+  if r <> 'ok' then raise exception 'FAIL: quota 2 %', r; end if;
+  r := start_job('eeeeeeee-0000-0000-0000-000000000003', 0, 'free_quota', 'nano-banana', 'nano-banana-2-1', null, 2);
+  if r <> 'limit_reached' then raise exception 'FAIL: quota not enforced %', r; end if;
+  if (select started_at from jobs where id = 'eeeeeeee-0000-0000-0000-000000000001') is null then raise exception 'FAIL: started_at not set'; end if;
+  raise notice 'PASS 10 free quota';
+end $$;
+
+-- 11. fail_job is atomic with refund, and respects its conditions
+insert into jobs (id, user_id, prompt) values
+  ('ffffffff-0000-0000-0000-000000000001', '11111111-1111-1111-1111-111111111111', 'f1'),
+  ('ffffffff-0000-0000-0000-000000000002', '11111111-1111-1111-1111-111111111111', 'f2');
+select start_job('ffffffff-0000-0000-0000-000000000001', 2, 'credits', 'nano-banana', 'nano-banana-2-1', null);
+select start_job('ffffffff-0000-0000-0000-000000000002', 2, 'credits', 'nano-banana', 'nano-banana-2-1', null);
+update jobs set task_id = 'live' where id = 'ffffffff-0000-0000-0000-000000000002';
+do $$ declare before int; begin
+  before := (select credits from profiles where id = '11111111-1111-1111-1111-111111111111');
+  if fail_job('ffffffff-0000-0000-0000-000000000001', 'x', 'unknown', null, 'pending') then raise exception 'FAIL: require_status ignored'; end if;
+  if fail_job('ffffffff-0000-0000-0000-000000000002', 'x', 'unknown', null, null, true) then raise exception 'FAIL: require_no_task ignored'; end if;
+  if not fail_job('ffffffff-0000-0000-0000-000000000001', 'x', 'timeout', 'raw', null, false, 0, 0) then raise exception 'FAIL: fail_job'; end if;
+  if fail_job('ffffffff-0000-0000-0000-000000000001', 'x', 'timeout') then raise exception 'FAIL: double fail'; end if;
+  if (select credits from profiles where id = '11111111-1111-1111-1111-111111111111') <> before + 2 then raise exception 'FAIL: fail_job refund'; end if;
+  if (select refunded_at from jobs where id = 'ffffffff-0000-0000-0000-000000000001') is null then raise exception 'FAIL: refunded_at'; end if;
+  raise notice 'PASS 11 fail_job';
+end $$;
+
+-- 12. sweep refunds a failed-but-unrefunded charged job (safety net)
+update jobs set status = 'failed' where id = 'ffffffff-0000-0000-0000-000000000002';
+do $$ declare before int; res jsonb; begin
+  before := (select credits from profiles where id = '11111111-1111-1111-1111-111111111111');
+  res := sweep_stuck_jobs();
+  if (res->>'late_refunds')::int < 1 or (select credits from profiles where id = '11111111-1111-1111-1111-111111111111') <> before + 2 then raise exception 'FAIL: late refund %', res; end if;
+  raise notice 'PASS 12 late refund safety net';
+end $$;
+
+-- 13. set_min only logs what it actually added
+do $$ begin
+  update profiles set credits = 150 where id = '11111111-1111-1111-1111-111111111111';
+  perform grant_credits_once('11111111-1111-1111-1111-111111111111', 200, 'trial', 'trial:cs_2', 'set_min');
+  if (select credits from profiles where id = '11111111-1111-1111-1111-111111111111') <> 200 then raise exception 'FAIL: set_min result'; end if;
+  if (select credits_consumed from usage_events where metadata->>'ref' = 'trial:cs_2') <> -50 then raise exception 'FAIL: set_min logged wrong amount'; end if;
+  raise notice 'PASS 13 set_min ledger';
 end $$;

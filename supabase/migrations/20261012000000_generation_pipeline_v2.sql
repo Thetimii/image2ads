@@ -1,6 +1,6 @@
 -- Generation pipeline v2 + billing hardening
 --
--- 1. jobs: provider/cost tracking columns (per-job margin), credits_used
+-- 1. jobs: provider/cost tracking columns + started_at (per-job margin), credits_used
 --    default 0 (it is only ever set by the server when it actually charges).
 -- 2. Security: browsers could
 --      a) UPDATE their own profile row with no column restriction - i.e. set
@@ -34,6 +34,7 @@ alter table public.jobs
   add column if not exists provider_checked_at timestamptz,
   add column if not exists billing_tier        text,
   add column if not exists charged_at          timestamptz,
+  add column if not exists started_at          timestamptz,
   add column if not exists completed_at        timestamptz;
 
 alter table public.jobs alter column credits_used set default 0;
@@ -58,6 +59,9 @@ as $$
 begin
   -- current_user is the PostgREST role for browser requests.
   if current_user in ('anon', 'authenticated') then
+    new.created_at          := now();  -- quota windows + timeouts depend on it
+    new.updated_at          := now();
+    new.started_at          := null;
     new.status              := 'pending';
     new.credits_used        := 0;
     new.charged_at          := null;
@@ -139,7 +143,8 @@ create or replace function public.start_job(
   p_billing_tier     text,
   p_product_model    text,
   p_provider_model   text,
-  p_provider_request jsonb default null
+  p_provider_request jsonb default null,
+  p_free_daily_limit integer default null
 )
 returns text
 language plpgsql
@@ -160,6 +165,17 @@ begin
   if not found then return 'not_found'; end if;
   if v_status <> 'pending' then return 'not_pending'; end if;
 
+  -- Free daily quota, counted under a per-user lock so parallel requests
+  -- can't all slip past the limit.
+  if p_billing_tier = 'free_quota' and p_free_daily_limit is not null then
+    perform pg_advisory_xact_lock(hashtextextended('free_quota:' || v_user::text, 0));
+    if (select count(*) from public.jobs
+         where user_id = v_user and billing_tier = 'free_quota' and status <> 'failed'
+           and created_at > now() - interval '24 hours') >= p_free_daily_limit then
+      return 'limit_reached';
+    end if;
+  end if;
+
   if p_credits > 0 then
     update public.profiles
        set credits = credits - p_credits, updated_at = now()
@@ -176,6 +192,7 @@ begin
          provider_model   = p_provider_model,
          provider_request = p_provider_request,
          used_pro_model   = (p_product_model = 'nano-banana-pro'),
+         started_at       = now(),
          updated_at       = now()
    where id = job_uuid;
 
@@ -183,8 +200,8 @@ begin
 end;
 $$;
 
-revoke all on function public.start_job(uuid, integer, text, text, text, jsonb) from public, anon, authenticated;
-grant execute on function public.start_job(uuid, integer, text, text, text, jsonb) to service_role;
+revoke all on function public.start_job(uuid, integer, text, text, text, jsonb, integer) from public, anon, authenticated;
+grant execute on function public.start_job(uuid, integer, text, text, text, jsonb, integer) to service_role;
 
 -- consume_credit is no longer used by the pipeline; kept (now race-free) for
 -- any external caller.
@@ -239,6 +256,45 @@ $$;
 revoke all on function public.refund_credit(uuid) from public, anon, authenticated;
 grant execute on function public.refund_credit(uuid) to service_role;
 
+-- Fail + refund in ONE transaction (no window where a job is failed but not
+-- refunded). Only acts on non-terminal jobs; optional extra conditions let
+-- callers say "only if still pending" / "only if no provider task exists".
+create or replace function public.fail_job(
+  job_uuid               uuid,
+  p_message              text,
+  p_category             text,
+  p_provider_error       text    default null,
+  p_require_status       text    default null,
+  p_require_no_task      boolean default false,
+  p_provider_credits     numeric default null,
+  p_provider_cost_usd    numeric default null
+)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  update public.jobs
+     set status            = 'failed',
+         error_message     = p_message,
+         failure_category  = p_category,
+         provider_error    = left(p_provider_error, 1000),
+         provider_credits  = coalesce(p_provider_credits, provider_credits),
+         provider_cost_usd = coalesce(p_provider_cost_usd, provider_cost_usd),
+         updated_at        = now()
+   where id = job_uuid
+     and status in ('pending', 'processing')
+     and (p_require_status is null or status = p_require_status)
+     and (not p_require_no_task or task_id is null);
+  if not found then return false; end if;
+  perform public.refund_credit(job_uuid);
+  return true;
+end;
+$$;
+revoke all on function public.fail_job(uuid, text, text, text, text, boolean, numeric, numeric) from public, anon, authenticated;
+grant execute on function public.fail_job(uuid, text, text, text, text, boolean, numeric, numeric) to service_role;
+
 -- ---------------------------------------------------------------------------
 -- 5. sweep_stuck_jobs
 -- ---------------------------------------------------------------------------
@@ -252,6 +308,7 @@ declare
   v_abandoned int := 0;
   v_orphaned  int := 0;
   v_stale     int := 0;
+  v_refunded  int := 0;
   v_request   bigint := null;
   r record;
 begin
@@ -285,6 +342,16 @@ begin
     v_orphaned := v_orphaned + 1;
   end loop;
 
+  -- Safety net: any charged, failed, unrefunded job (should never exist now
+  -- that fail_job is atomic, but legacy paths and crashes are covered).
+  for r in
+    select id from public.jobs
+     where status = 'failed' and refunded_at is null
+       and charged_at is not null and coalesce(credits_used, 0) > 0
+  loop
+    if public.refund_credit(r.id) then v_refunded := v_refunded + 1; end if;
+  end loop;
+
   -- Live tasks nobody (callback / browser) has touched for a while: only
   -- now spend an HTTP request on the edge sweep.
   select count(*) into v_stale
@@ -302,7 +369,7 @@ begin
     ) into v_request;
   end if;
 
-  return jsonb_build_object('abandoned_failed', v_abandoned, 'orphaned_refunded', v_orphaned,
+  return jsonb_build_object('abandoned_failed', v_abandoned, 'orphaned_refunded', v_orphaned, 'late_refunds', v_refunded,
                             'stale_found', v_stale, 'http_request_id', v_request);
 end;
 $$;
@@ -339,6 +406,8 @@ language plpgsql
 security definer
 set search_path = public
 as $$
+declare
+  v_added integer;
 begin
   if p_amount is null or p_amount <= 0 then return false; end if;
 
@@ -348,13 +417,16 @@ begin
   if not found then return false; end if; -- already granted for this ref
 
   if p_mode = 'set_min' then
-    update public.profiles set credits = greatest(credits, p_amount), updated_at = now() where id = p_user;
+    select greatest(p_amount - credits, 0) into v_added from public.profiles where id = p_user for update;
   else
-    update public.profiles set credits = credits + p_amount, updated_at = now() where id = p_user;
+    v_added := p_amount;
   end if;
+  update public.profiles set credits = credits + coalesce(v_added, 0), updated_at = now() where id = p_user;
 
-  insert into public.usage_events (user_id, event_type, credits_consumed, metadata)
-  values (p_user, 'purchase', -p_amount, jsonb_build_object('reason', p_reason, 'ref', p_ref));
+  if coalesce(v_added, 0) > 0 then
+    insert into public.usage_events (user_id, event_type, credits_consumed, metadata)
+    values (p_user, 'purchase', -v_added, jsonb_build_object('reason', p_reason, 'ref', p_ref));
+  end if;
   return true;
 end;
 $$;

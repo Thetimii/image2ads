@@ -14,7 +14,7 @@ All AI generation runs on **kie.ai's unified Market API** (`POST /api/v1/jobs/cr
 | Music – Suno V6 (2 tracks) | `ai-music-api/generate` | 3 credits | 12 cr = $0.060 | 79% |
 
 Revenue basis: $0.0955 net per credit (Pro plan, after Stripe 2.9% + $0.30). 1 kie.ai credit = $0.005. Prices verified against kie.ai/pricing on 2026-10-11.
-`deno run scripts/margins.ts` prints this table from the code. **Everything above lives in one file: `supabase/functions/_shared/catalog.ts`.**
+`deno run supabase/scripts/margins.ts` prints this table from the code. **Everything above lives in one file: `supabase/functions/_shared/catalog.ts`.**
 
 Live, per-job actuals (kie.ai's own `creditsConsumed` for every task):
 

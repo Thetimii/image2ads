@@ -1,8 +1,8 @@
 // Unit economics per generation type, from the backend's own price catalog.
-//   deno run scripts/margins.ts
+//   deno run supabase/scripts/margins.ts
 // Live per-job numbers (actual kie.ai cost per task) are in the database:
 //   select * from generation_margins_daily order by day desc;
-import { marginTable, NET_REVENUE_USD_PER_CREDIT, KIE_USD_PER_CREDIT, FREE_DAILY_IMAGE_LIMIT, KIE_PRICES } from "../supabase/functions/_shared/catalog.ts";
+import { marginTable, NET_REVENUE_USD_PER_CREDIT, KIE_USD_PER_CREDIT, FREE_DAILY_IMAGE_LIMIT, KIE_PRICES } from "../functions/_shared/catalog.ts";
 
 const usd = (n: number) => `$${n.toFixed(4)}`;
 console.log(`Net revenue per credit: $${NET_REVENUE_USD_PER_CREDIT} (Pro plan after Stripe fees) · kie.ai credit: $${KIE_USD_PER_CREDIT}\n`);

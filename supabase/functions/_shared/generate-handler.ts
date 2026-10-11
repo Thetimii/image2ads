@@ -39,7 +39,7 @@ export async function handleGenerate(req: Request): Promise<Response> {
     // Refund right away if no kie.ai task exists yet (otherwise the task is
     // live and the callback / sweep will resolve it).
     if (jobId && authorized) {
-      await failJob(jobId, "unknown", err instanceof Error ? err.message : String(err), undefined, {}, true).catch(() => {});
+      await failJob(jobId, "unknown", err instanceof Error ? err.message : String(err), undefined, { requireNoTask: true }).catch(() => {});
     }
     return json({ success: false, error: "Generation failed to start. Please try again.", code: "INTERNAL", jobId }, 500, cors);
   }

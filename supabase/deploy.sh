@@ -37,6 +37,8 @@ FUNCTIONS=(
   generate-text-video
   generate-image-video
   generate-text-music
+  generate-text-image-free
+  generate-image-image-free
   retarget-email-daily
   create-signed-upload-url
   convert-to-png
@@ -47,9 +49,9 @@ for fn in "${FUNCTIONS[@]}"; do
   supabase functions deploy "$fn" --no-verify-jwt
 done
 
-# Functions that no longer exist in the codebase (OpenAI run-job, the old
-# client-routed "-free" endpoints, and two orphaned experiments).
-for fn in run-job generate-text-image-free generate-image-image-free kie-webhook poll-job-status; do
+# Functions that no longer exist in the codebase (OpenAI run-job and two
+# orphaned experiments).
+for fn in run-job kie-webhook poll-job-status; do
   supabase functions delete "$fn" 2>/dev/null && echo "🗑  deleted $fn" || true
 done
 

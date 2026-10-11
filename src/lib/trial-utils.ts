@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createServiceClient } from '@/lib/supabase/server'
 
 /**
  * Check if user's trial has expired and update their status accordingly
@@ -32,8 +32,9 @@ export async function checkAndUpdateTrialExpiration(userId: string) {
     if (now > trialEndDate) {
       console.log(`Trial expired for user ${userId}, reverting to free plan`)
 
-      // Update user to free plan
-      const { data: updatedProfile, error: updateError } = await supabase
+      // Update user to free plan. Service client: subscription columns are
+      // server-owned (profiles_guard_client_update ignores browser-role writes).
+      const { data: updatedProfile, error: updateError } = await createServiceClient()
         .from('profiles')
         .update({
           subscription_status: 'free',
