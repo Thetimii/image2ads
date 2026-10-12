@@ -669,3 +669,11 @@ revoke all on public.generation_economics, public.generation_margins_daily from 
 -- default browser grants too).
 revoke all on public.signup_log, public.credit_grants from anon, authenticated;
 revoke all on sequence public.credit_grants_id_seq from anon, authenticated;
+
+-- Advisor hygiene: trigger-only functions aren't API endpoints; pin search_path.
+revoke all on function public.handle_new_user() from public, anon, authenticated;
+revoke all on function public.increment_total_generations() from public, anon, authenticated;
+alter function public.email_hash(text) set search_path = public;
+alter function public.free_daily_credits() set search_path = public;
+alter function public.net_revenue_per_credit() set search_path = public;
+alter function public.add_credits(uuid, integer) set search_path = public;

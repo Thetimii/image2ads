@@ -39,6 +39,7 @@ create function public.increment_total_generations() returns trigger language pl
 begin update profiles set total_generations = total_generations + 1 where id = new.user_id; return new; end $$;
 create trigger trigger_increment_total_generations after insert on public.jobs for each row execute function public.increment_total_generations();
 
+create function public.add_credits(user_uuid uuid, credit_amount integer) returns void language sql as $$ select $$;
 -- auth.users + signup trigger (as in production)
 create table auth.users (id uuid primary key, email text, raw_user_meta_data jsonb default '{}');
 create function public.handle_new_user() returns trigger language plpgsql security definer as $$
