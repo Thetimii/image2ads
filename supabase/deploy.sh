@@ -22,8 +22,14 @@ fi
 
 cd "$(dirname "$0")/.."
 
-echo "🧪 Running backend tests..."
-deno test --no-lock -A supabase/functions/_shared/backend_test.ts
+PROJECT_REF="cqnaooicfxqtnbuwsopu"
+
+if command -v deno &> /dev/null; then
+  echo "🧪 Running backend tests..."
+  deno test --no-lock -A supabase/functions/_shared/backend_test.ts
+else
+  echo "ℹ️  deno not installed - skipping local tests"
+fi
 
 FUNCTIONS=(
   generate               # single entry point for image / video / music
@@ -47,12 +53,12 @@ FUNCTIONS=(
 
 for fn in "${FUNCTIONS[@]}"; do
   echo "📦 Deploying $fn..."
-  supabase functions deploy "$fn" --no-verify-jwt
+  supabase functions deploy "$fn" --no-verify-jwt --project-ref "$PROJECT_REF"
 done
 
 # Orphaned experiments that no code calls.
 for fn in kie-webhook poll-job-status; do
-  supabase functions delete "$fn" 2>/dev/null && echo "🗑  deleted $fn" || true
+  supabase functions delete "$fn" --project-ref "$PROJECT_REF" 2>/dev/null && echo "🗑  deleted $fn" || true
 done
 
 echo "🎉 Done."
