@@ -664,3 +664,8 @@ from public.generation_economics
 group by 1, 2, 3;
 
 revoke all on public.generation_economics, public.generation_margins_daily from anon, authenticated;
+
+-- Ledger tables are service-role only (RLS already hides rows; drop the
+-- default browser grants too).
+revoke all on public.signup_log, public.credit_grants from anon, authenticated;
+revoke all on sequence public.credit_grants_id_seq from anon, authenticated;
