@@ -1,5 +1,6 @@
 'use client'
 
+import { getStoredFbc } from '@/lib/analytics'
 import { CREDIT_PACKS, type CreditPackId } from '@/lib/stripe-plans'
 import {
   trackMetaAddPaymentInfo,
@@ -29,6 +30,7 @@ export async function startCreditPackCheckout(packId: CreditPackId, source: stri
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
+        fbc: getStoredFbc(),
         pack: packId,
         successUrl: `${window.location.origin}/billing?success=true&pack=${packId}`,
         cancelUrl: `${window.location.origin}${window.location.pathname}?checkout=cancelled`,

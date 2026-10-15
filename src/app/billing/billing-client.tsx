@@ -1,11 +1,13 @@
 'use client'
 
+import { getStoredFbc } from '@/lib/analytics'
 import { useState, useEffect } from 'react'
 import type { User } from '@supabase/supabase-js'
 import type { Profile } from '@/lib/validations'
 import { type StripePlan } from '@/lib/stripe-plans'
 import DashboardLayout from '@/components/DashboardLayout'
 import PricingPlans from '@/components/PricingPlans'
+import { marketingAllowed } from '@/lib/consent'
 import {
   trackMetaAddPaymentInfo,
   trackMetaInitiateCheckout,
@@ -88,6 +90,7 @@ export default function BillingClient({ user, profile }: BillingClientProps) {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
+                fbc: getStoredFbc(),
                 plan: 'pro',
                 applyProDiscount: true, // Special flag for discount
                 successUrl: `${window.location.origin}/billing?success=true`,
@@ -141,7 +144,7 @@ export default function BillingClient({ user, profile }: BillingClientProps) {
           : `${planKey ? planKey.charAt(0).toUpperCase() + planKey.slice(1) : 'Subscription'} Plan (${summary.interval === 'year' ? 'yearly' : 'monthly'})`
         const value = Number(summary.amount)
 
-        if (typeof window !== 'undefined' && (window as any).fbq && localStorage.getItem('cookieConsent') === 'accepted') {
+        if (typeof window !== 'undefined' && (window as any).fbq && marketingAllowed()) {
           if (summary.isTrial) {
             (window as any).fbq('track', 'StartTrial', { value, currency: summary.currency }, { eventID: eventId })
           } else {
@@ -214,6 +217,7 @@ export default function BillingClient({ user, profile }: BillingClientProps) {
       plan,
       couponId,
       source: 'billing_page',
+      interval,
     }
     trackMetaSubscribedButtonClick(metaOptions)
     trackMetaAddToCart(metaOptions)
@@ -243,6 +247,7 @@ export default function BillingClient({ user, profile }: BillingClientProps) {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
+          fbc: getStoredFbc(),
           plan,
           interval,
           successUrl: `${window.location.origin}/billing?success=true`,

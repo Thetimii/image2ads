@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   CREDIT_PACKS,
@@ -11,7 +11,7 @@ import {
   type BillingInterval,
   type StripePlan,
 } from "@/lib/stripe-plans";
-import { trackMetaSubscribedButtonClick } from "@/lib/meta-events";
+import { trackMetaSubscribedButtonClick, trackMetaViewContent } from "@/lib/meta-events";
 import { Reveal } from "./studio/StudioMotion";
 import { Icon } from "./studio/StudioIcons";
 
@@ -45,10 +45,34 @@ export default function PricingSection() {
   const router = useRouter();
   const [interval, setBillingInterval] = useState<BillingInterval>("year");
   const yearly = interval === "year";
+  const sectionRef = useRef<HTMLElement>(null);
+
+  // Tell Meta when someone actually looks at pricing (strong buying signal)
+  useEffect(() => {
+    const el = sectionRef.current;
+    if (!el || typeof IntersectionObserver === "undefined") return;
+    let sent = false;
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (sent || !entries.some((e) => e.isIntersecting)) return;
+        sent = true;
+        trackMetaViewContent({
+          contentName: "Pricing",
+          contentCategory: "pricing",
+          source: "landing_pricing_section",
+        });
+        io.disconnect();
+      },
+      { threshold: 0.35 },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
 
   function subscribe(plan: StripePlan) {
     trackMetaSubscribedButtonClick({
       plan,
+      interval,
       source: `marketing_pricing_${interval}`,
     });
     rememberIntent({ plan, interval });
@@ -62,6 +86,7 @@ export default function PricingSection() {
 
   return (
     <section
+      ref={sectionRef}
       id="pricing"
       className="studio-pricing studio-section studio-container"
       aria-labelledby="pricing-title"

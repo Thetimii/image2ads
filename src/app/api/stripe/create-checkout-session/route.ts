@@ -43,6 +43,15 @@ export async function POST(request: NextRequest) {
 
     const { plan, interval = 'month', pack, successUrl, cancelUrl, couponId, applyProDiscount } = validation.data
 
+    // Ad-click context for the server-side Meta Purchase event (see webhook)
+    const rawFbc = typeof body?.fbc === 'string' && body.fbc.startsWith('fb.') ? body.fbc : undefined
+    const tracking = {
+      fbc: request.cookies.get('_fbc')?.value || rawFbc,
+      fbp: request.cookies.get('_fbp')?.value,
+      ip: request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || request.headers.get('x-real-ip') || undefined,
+      ua: request.headers.get('user-agent') || undefined,
+    }
+
     // One-time credit pack
     if (pack) {
       const session = await createCreditPackCheckoutSession({
@@ -52,6 +61,7 @@ export async function POST(request: NextRequest) {
         cancelUrl,
         customerEmail: user.email || undefined,
         stripeCustomerId: stripeCustomerId || undefined,
+        tracking,
       })
       return NextResponse.json({ sessionId: session.id, url: session.url })
     }
@@ -108,6 +118,7 @@ export async function POST(request: NextRequest) {
       customerEmail: user.email || undefined, // Pass user's email to prefill if no existing customer
       stripeCustomerId: stripeCustomerId || undefined, // Use existing customer ID if available
       couponId: finalCouponId || undefined,
+      tracking,
     })
 
     return NextResponse.json({

@@ -4,6 +4,7 @@ import Script from 'next/script'
 import { useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { trackMetaEvent } from '@/lib/meta-client'
+import { marketingAllowed, marketingDeclined } from '@/lib/consent'
 
 const PIXEL_ID = process.env.NEXT_PUBLIC_META_PIXEL_ID || '1317994616486123'
 
@@ -14,17 +15,17 @@ export default function MetaPixel() {
       const supabase = createClient()
       const { data: { user } } = await supabase.auth.getUser()
 
-      // Check cookie consent
-      const cookieConsent = localStorage.getItem('cookieConsent')
+      // Consent: explicit choice, else opt-out default outside EU/UK/CH
+      const allowed = marketingAllowed()
+      const declined = marketingDeclined()
 
       // META PIXEL
       if (typeof window !== 'undefined' && (window as any).fbq) {
         const fbq = (window as any).fbq
 
-        if (cookieConsent === 'accepted') {
+        if (allowed) {
           // If user is logged in, send their email for advanced matching
           if (user?.email) {
-            console.log('[MetaPixel] Initializing with advanced matching for user:', user.email)
             // Re-init with user data - pixel hashes this automatically
             fbq('init', PIXEL_ID, {
               em: user.email, // Email will be hashed by Meta automatically
@@ -38,8 +39,9 @@ export default function MetaPixel() {
             eventName: 'PageView',
             userData: { email: user?.email || undefined },
           })
-        } else if (cookieConsent === 'declined') {
-          fbq('consent', 'revoke')
+        } else {
+          // Opted out, or EU/UK/CH visitor who hasn't accepted yet
+          if (declined || !allowed) fbq('consent', 'revoke')
         }
       }
 
@@ -47,10 +49,10 @@ export default function MetaPixel() {
       if (typeof window !== 'undefined' && (window as any).ttq) {
         const ttq = (window as any).ttq
 
-        if (cookieConsent === 'accepted') {
+        if (allowed) {
           console.log('[TikTokPixel] Tracking PageView')
           ttq.page()
-        } else if (cookieConsent === 'declined') {
+        } else if (declined) {
           console.log('[TikTokPixel] Cookie consent declined')
           ttq.disableCookie()
         }

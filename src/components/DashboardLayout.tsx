@@ -1,5 +1,6 @@
 "use client";
 
+import { getStoredFbc } from "@/lib/analytics"
 import React, { useState, useEffect, ReactNode } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter, usePathname } from "next/navigation";
@@ -238,6 +239,7 @@ export default function DashboardLayout({
       plan,
       couponId,
       source: "dashboard_layout_pricing",
+      interval,
     };
     trackMetaSubscribedButtonClick(metaOptions);
     try {
@@ -249,6 +251,7 @@ export default function DashboardLayout({
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
+          fbc: getStoredFbc(),
           plan,
           interval,
           successUrl: `${window.location.origin}/billing?success=true`,

@@ -4,6 +4,7 @@ import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { trackMetaCompleteRegistration } from '@/lib/meta-events'
 import { createClient } from '@/lib/supabase/client'
+import { marketingAllowed } from "@/lib/consent";
 
 // The Meta Pixel script loads async; on this freshly-loaded redirect page it is
 // usually NOT ready yet. Poll for it instead of checking once and giving up.
@@ -77,8 +78,7 @@ export default function SignupSuccessTracking() {
       }
 
       // Fire Meta Pixel CompleteRegistration event for OAuth signups
-      const cookieConsent = localStorage.getItem('cookieConsent')
-      if (cookieConsent === 'accepted') {
+      if (marketingAllowed()) {
         const fbq = await waitForFbq()
         if (fbq) {
           fbq('track', 'CompleteRegistration', {

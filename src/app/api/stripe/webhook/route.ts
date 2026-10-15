@@ -5,6 +5,20 @@ import { CREDIT_PACKS, STRIPE_PLANS, isCreditPackId, resolveSubscriptionPlan } f
 import { trackPurchase } from "@/lib/tiktok-events";
 import { sendMetaEvent } from "@/lib/meta-capi";
 
+// Ad-click context saved on the Checkout Session when checkout started
+// (see CheckoutTracking in src/lib/stripe.ts) - lets Meta match the
+// server-side Purchase to the ad click.
+function metaClickData(session: Stripe.Checkout.Session) {
+  const m = session.metadata || {};
+  return {
+    fbc: m.meta_fbc || undefined,
+    fbp: m.meta_fbp || undefined,
+    ipAddress: m.meta_ip || undefined,
+    clientUserAgent: m.meta_ua || undefined,
+  };
+}
+
+
 export const runtime = "nodejs"; // raw body + crypto
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
@@ -210,7 +224,7 @@ export async function POST(req: NextRequest) {
                   eventId: `purchase_${session.id}`,
                   eventTime: Math.floor(Date.now() / 1000),
                   customData: { value: amount, currency: currency.toUpperCase(), content_name: '3-Day Pro Trial' },
-                  userData: { email: profile.email, externalId: userId },
+                  userData: { email: profile.email, externalId: userId, ...metaClickData(session) },
                 });
               }
             } catch (error) {
@@ -279,15 +293,17 @@ export async function POST(req: NextRequest) {
                 url: `${process.env.NEXT_PUBLIC_SITE_URL || 'https://image2ad.com'}/billing`,
               });
             }
-            await sendMetaEvent({
-              eventName: 'Purchase',
-              eventSourceUrl: `${process.env.NEXT_PUBLIC_SITE_URL || 'https://image2ad.com'}/billing`,
-              actionSource: 'website',
-              eventId: `purchase_${session.id}`,
-              eventTime: Math.floor(Date.now() / 1000),
-              customData: { value: amount, currency, content_name: pack.name, content_type: 'product', content_ids: [pack.id] },
-              userData: { email, externalId: userId },
-            });
+            if (amount > 0) {
+              await sendMetaEvent({
+                eventName: 'Purchase',
+                eventSourceUrl: `${process.env.NEXT_PUBLIC_SITE_URL || 'https://image2ad.com'}/billing`,
+                actionSource: 'website',
+                eventId: `purchase_${session.id}`,
+                eventTime: Math.floor(Date.now() / 1000),
+                customData: { value: amount, currency, content_name: pack.name, content_type: 'product', content_ids: [pack.id] },
+                userData: { email, externalId: userId, ...metaClickData(session) },
+              });
+            }
             await supabaseAdmin.rpc('track_server_event', {
               p_user_id: userId,
               p_event_name: 'payment_completed',
@@ -426,21 +442,25 @@ export async function POST(req: NextRequest) {
                 // truth (shares an eventId with the client-side billing
                 // success page fire so Meta dedupes to one conversion; see
                 // StartTrial above for why this matters).
-                await sendMetaEvent({
-                  eventName: 'Purchase',
-                  eventSourceUrl: `${process.env.NEXT_PUBLIC_SITE_URL || 'https://image2ad.com'}/billing`,
-                  actionSource: 'website',
-                  eventId: `purchase_${session.id}`,
-                  eventTime: Math.floor(Date.now() / 1000),
-                  customData: {
-                    value: amount,
-                    currency: currency.toUpperCase(),
-                    content_name: `${planName.charAt(0).toUpperCase() + planName.slice(1)} Plan`,
-                    content_type: 'product',
-                    content_ids: [planName],
-                  },
-                  userData: { email: customer.email, externalId: profile.id },
-                });
+                // $0 checkouts (100%-off codes) aren't sales - don't teach
+                // Meta that they are.
+                if (amount > 0) {
+                  await sendMetaEvent({
+                    eventName: 'Purchase',
+                    eventSourceUrl: `${process.env.NEXT_PUBLIC_SITE_URL || 'https://image2ad.com'}/billing`,
+                    actionSource: 'website',
+                    eventId: `purchase_${session.id}`,
+                    eventTime: Math.floor(Date.now() / 1000),
+                    customData: {
+                      value: amount,
+                      currency: currency.toUpperCase(),
+                      content_name: `${planName.charAt(0).toUpperCase() + planName.slice(1)} Plan (${resolved?.interval === 'year' ? 'yearly' : 'monthly'})`,
+                      content_type: 'product',
+                      content_ids: [planName],
+                    },
+                    userData: { email: customer.email, externalId: profile.id, ...metaClickData(session) },
+                  });
+                }
 
                 // First-party analytics: source of truth for revenue
                 await supabaseAdmin.rpc('track_server_event', {

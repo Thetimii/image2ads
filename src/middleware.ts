@@ -81,6 +81,18 @@ export async function middleware(request: NextRequest) {
   // ✅ Always refresh Supabase session
   const response = await updateSession(request);
 
+  // 🌍 Visitor country for the cookie-consent default (see src/lib/consent.ts)
+  const country = request.headers.get("x-vercel-ip-country");
+  if (country && request.cookies.get("i2a_cc")?.value !== country) {
+    response.cookies.set("i2a_cc", country, {
+      path: "/",
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      httpOnly: false,
+      maxAge: 60 * 60 * 24 * 30,
+    });
+  }
+
   // 🚫 Disable caching for dashboard pages to avoid hydration mismatches
   if (pathname.startsWith("/dashboard")) {
     response.headers.set(

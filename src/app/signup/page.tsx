@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import AuthShell from "@/components/studio/AuthShell";
 import { trackMetaCompleteRegistration } from "@/lib/meta-events";
+import { marketingAllowed } from "@/lib/consent";
 
 export default function SignUpPage() {
   const [email, setEmail] = useState("");
@@ -97,8 +98,7 @@ export default function SignUpPage() {
 
       // 🔥 Fire Meta Pixel CompleteRegistration event
       if (typeof window !== "undefined" && (window as any).fbq) {
-        const cookieConsent = localStorage.getItem("cookieConsent");
-        if (cookieConsent === "accepted") {
+        if (marketingAllowed()) {
           (window as any).fbq(
             "track",
             "CompleteRegistration",

@@ -15,6 +15,8 @@ interface SubscriptionEventOptions {
   currency?: string
   contentName?: string
   eventId?: string
+  /** 'year' reports the yearly price (e.g. $299) instead of the monthly one */
+  interval?: 'month' | 'year' | string
 }
 
 interface ViewContentEventOptions {
@@ -50,10 +52,19 @@ const cleanObject = <T extends Record<string, unknown>>(obj: T) => {
 const buildSubscriptionCustomData = (options: SubscriptionEventOptions = {}) => {
   const planKey = isStripePlan(options.plan) ? options.plan : undefined
   const planDetails = planKey ? STRIPE_PLANS[planKey] : undefined
-  const value = typeof options.value === 'number' ? options.value : planDetails?.price
+  const isYearly = options.interval === 'year'
+  const value =
+    typeof options.value === 'number'
+      ? options.value
+      : isYearly
+        ? planDetails?.yearlyPrice
+        : planDetails?.price
   const currency = options.currency || DEFAULT_CURRENCY
   const productId = planDetails?.productId || options.plan
-  const contentName = options.contentName || planDetails?.name || titleCase(options.plan) || 'Subscription'
+  const baseName = options.contentName || planDetails?.name || titleCase(options.plan) || 'Subscription'
+  const contentName = planDetails && !options.contentName
+    ? `${baseName} (${isYearly ? 'yearly' : 'monthly'})`
+    : baseName
 
   const contentsEntry = cleanObject({
     id: productId,
@@ -70,6 +81,7 @@ const buildSubscriptionCustomData = (options: SubscriptionEventOptions = {}) => 
     content_ids: productId ? [productId] : undefined,
     contents: Object.keys(contentsEntry).length ? [contentsEntry] : undefined,
     plan_tier: options.plan,
+    billing_interval: planDetails ? (isYearly ? 'year' : 'month') : undefined,
     coupon_id: options.couponId,
     source: options.source,
   })

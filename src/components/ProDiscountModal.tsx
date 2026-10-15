@@ -1,5 +1,6 @@
 'use client'
 
+import { getStoredFbc } from '@/lib/analytics'
 import { STRIPE_PLANS } from '@/lib/stripe-plans'
 
 import { useState, useEffect } from 'react'
@@ -142,6 +143,7 @@ export default function ProDiscountModal({ onCloseAction, onUpgradeAction }: Pro
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          fbc: getStoredFbc(),
           plan: 'pro',
           successUrl: `${window.location.origin}/dashboard?upgrade=success`,
           cancelUrl: `${window.location.origin}/dashboard?checkout=cancelled`,

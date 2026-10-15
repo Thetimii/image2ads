@@ -1,3 +1,5 @@
+import { marketingDeclined } from '@/lib/consent'
+
 export interface MetaClientEventPayload {
   eventName: string
   eventSourceUrl?: string
@@ -12,10 +14,8 @@ export interface MetaClientEventPayload {
 
 const shouldSendMetaEvent = () => {
   if (typeof window === 'undefined') return false
-  const consent = localStorage.getItem('cookieConsent')
-  // If the user has explicitly declined tracking, skip
-  if (consent === 'declined') return false
-  return true
+  // Skip only if the visitor explicitly opted out of marketing tracking
+  return !marketingDeclined()
 }
 
 // Mirror Meta conversion events into our first-party analytics

@@ -1,5 +1,6 @@
 'use client'
 
+import { getStoredFbc } from '@/lib/analytics'
 import { useEffect, useRef, useState } from 'react'
 import { useGenerator, ChatMessage } from '@/contexts/GeneratorContext'
 import { createClient } from '@/lib/supabase/client'
@@ -384,6 +385,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
       plan,
       couponId,
       source: 'generator_inline_pricing',
+      interval,
     }
     trackMetaSubscribedButtonClick(metaOptions)
     try {
@@ -412,6 +414,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
+          fbc: getStoredFbc(),
           plan,
           interval,
           successUrl: `${window.location.origin}/billing?success=true`,

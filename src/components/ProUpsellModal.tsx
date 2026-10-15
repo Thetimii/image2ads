@@ -1,5 +1,6 @@
 'use client'
 
+import { getStoredFbc } from '@/lib/analytics'
 import { useState, useEffect } from 'react'
 import PricingPlans from './PricingPlans'
 import {
@@ -145,6 +146,7 @@ export default function ProUpsellModal({ onCloseAction, onUpgradeAction, isUpgra
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          fbc: getStoredFbc(),
           plan,
           interval,
           successUrl: `${window.location.origin}/billing?success=true`,

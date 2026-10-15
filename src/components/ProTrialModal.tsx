@@ -7,6 +7,7 @@
  * one-time credit packs as alternatives. File name kept for its many callers.
  */
 
+import { getStoredFbc } from '@/lib/analytics'
 import { useEffect, useState } from 'react'
 import PricingPlans from './PricingPlans'
 import { type BillingInterval, type StripePlan } from '@/lib/stripe-plans'
@@ -41,7 +42,7 @@ export default function ProTrialModal({ onCloseAction, source = 'auto', title, d
 
   const subscribe = async (plan: StripePlan, _couponId?: string, interval: BillingInterval = 'year') => {
     setLoading(plan)
-    const metaOptions = { plan, source: `paywall_${source}_${interval}` }
+    const metaOptions = { plan, interval, source: `paywall_${source}_${interval}` }
     trackMetaSubscribedButtonClick(metaOptions)
     trackMetaInitiateCheckout(metaOptions)
     import('@/lib/analytics').then(({ track }) => track('checkout_started', { plan, interval, source: `paywall_${source}` })).catch(() => {})
@@ -50,6 +51,7 @@ export default function ProTrialModal({ onCloseAction, source = 'auto', title, d
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          fbc: getStoredFbc(),
           plan,
           interval,
           successUrl: `${window.location.origin}/billing?success=true`,

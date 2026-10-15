@@ -30,6 +30,28 @@ export async function createStripeCustomer({
 
   return customer;
 }
+/**
+ * Ad-click context captured when checkout starts, so the webhook's server-side
+ * Meta Purchase event can be matched to the ad click (fbc/fbp/IP/UA).
+ * Stored on the Checkout Session metadata (values max 500 chars).
+ */
+export type CheckoutTracking = {
+  fbc?: string;
+  fbp?: string;
+  ip?: string;
+  ua?: string;
+};
+
+function trackingMetadata(t?: CheckoutTracking): Record<string, string> {
+  if (!t) return {};
+  const out: Record<string, string> = {};
+  if (t.fbc) out.meta_fbc = t.fbc.slice(0, 490);
+  if (t.fbp) out.meta_fbp = t.fbp.slice(0, 490);
+  if (t.ip) out.meta_ip = t.ip.slice(0, 64);
+  if (t.ua) out.meta_ua = t.ua.slice(0, 490);
+  return out;
+}
+
 export async function createCheckoutSession({
   userId,
   plan,
@@ -39,6 +61,7 @@ export async function createCheckoutSession({
   customerEmail,
   stripeCustomerId,
   couponId,
+  tracking,
 }: {
   userId: string;
   plan: StripePlan;
@@ -48,6 +71,7 @@ export async function createCheckoutSession({
   customerEmail?: string;
   stripeCustomerId?: string;
   couponId?: string;
+  tracking?: CheckoutTracking;
 }) {
   const planData = STRIPE_PLANS[plan];
   const credits = creditsFor(plan, interval);
@@ -79,7 +103,7 @@ export async function createCheckoutSession({
     // required so Meta dedupes the client pixel + server CAPI Purchase events.
     success_url: withSessionId(successUrl),
     cancel_url: cancelUrl,
-    metadata: planMetadata,
+    metadata: { ...planMetadata, ...trackingMetadata(tracking) },
     // Renewals only see the subscription, so it carries the plan too.
     subscription_data: { metadata: planMetadata },
     automatic_tax: { enabled: false },
@@ -117,6 +141,7 @@ export async function createCreditPackCheckoutSession({
   cancelUrl,
   customerEmail,
   stripeCustomerId,
+  tracking,
 }: {
   userId: string;
   packId: CreditPackId;
@@ -124,6 +149,7 @@ export async function createCreditPackCheckoutSession({
   cancelUrl: string;
   customerEmail?: string;
   stripeCustomerId?: string;
+  tracking?: CheckoutTracking;
 }) {
   const pack = CREDIT_PACKS[packId];
   const sessionOptions: Stripe.Checkout.SessionCreateParams = {
@@ -150,6 +176,7 @@ export async function createCreditPackCheckoutSession({
       pack: pack.id,
       credits: String(pack.credits),
       pricing_version: "v2",
+      ...trackingMetadata(tracking),
     },
     payment_intent_data: {
       metadata: { user_id: userId, type: "credit_pack", pack: pack.id },

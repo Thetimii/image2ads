@@ -1,5 +1,6 @@
 'use client'
 
+import { getStoredFbc } from '@/lib/analytics'
 import { useState, useEffect } from 'react'
 import DashboardLayout from '@/components/DashboardLayout'
 import ChatGenerator from '@/components/ChatGenerator'
@@ -132,6 +133,7 @@ export default function GeneratorPageWrapper({ user, profile, onShowUpgrade }: G
       plan,
       couponId,
       source: 'generator_pricing_modal',
+      interval,
     }
     trackMetaSubscribedButtonClick(metaOptions)
     try {
@@ -160,6 +162,7 @@ export default function GeneratorPageWrapper({ user, profile, onShowUpgrade }: G
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
+          fbc: getStoredFbc(),
           plan,
           interval,
           successUrl: `${window.location.origin}/billing?success=true`,
