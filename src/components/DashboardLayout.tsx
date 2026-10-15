@@ -448,7 +448,7 @@ export default function DashboardLayout({
                 <div className="flex items-center space-x-1">
                   <div className="w-2 h-2 bg-[#d1f45a] rounded-full ring-2 ring-[#d1f45a]/40"></div>
                   <p className="text-xs text-gray-500 group-hover:text-[#20221e] transition-colors">
-                    {profile.credits} credits
+                    {profile.credits} {profile.credits === 1 ? "credit" : "credits"}
                   </p>
                   <span className="text-xs text-[#20221e] opacity-0 group-hover:opacity-100 transition-opacity">
                     +

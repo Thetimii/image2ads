@@ -24,6 +24,11 @@ import {
   trackMetaSubscribedButtonClick,
 } from '@/lib/meta-events'
 
+// Older chat history was saved with emojis ("Image generated ✅") - show it clean.
+const EMOJI_RE = /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B50}\u{2705}\u{2728}\u{200D}\u{FE0F}]+\s?/gu
+const cleanChatText = (text: string) =>
+  (text || '').replace(EMOJI_RE, '').replace(/\b(Image|Video|Music) generated\b/, '$1 ready').trim()
+
 // Generate UUID that works on both server and client
 const generateId = () => {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) {
@@ -55,85 +60,85 @@ const GENERATE_ENDPOINT = `${SUPABASE_FUNCTIONS_BASE}/generate`
 const CHECK_JOB_STATUS_ENDPOINT = `${SUPABASE_FUNCTIONS_BASE}/check-job-status`
 
 const TAB_META: Record<string, { title: string; subtitle: string; locked?: boolean; model: string; resultType: 'image' | 'video' | 'music' }> = {
-  'text-to-image': { title: '✨ Create Image', subtitle: 'Generate product-ready visuals from ideas', model: 'gemini', resultType: 'image' },
-  'image-to-image': { title: '🖼 Image to Image', subtitle: 'Transform or restyle an input image', model: 'gemini', resultType: 'image' },
-  'text-to-video': { title: '🎬 Text to Video', subtitle: 'Bring concepts to motion with AI video', locked: true, model: 'veo3_fast', resultType: 'video' },
-  'image-to-video': { title: '🎥 Image to Video', subtitle: 'Animate a still into dynamic video', locked: true, model: 'veo3_fast', resultType: 'video' },
-  'text-to-music': { title: '🎵 Text to Music', subtitle: 'Create original music from text descriptions', locked: true, model: 'suno', resultType: 'music' },
+  'text-to-image': { title: 'Create Image', subtitle: 'Generate product-ready visuals from ideas', model: 'gemini', resultType: 'image' },
+  'image-to-image': { title: 'Image to Image', subtitle: 'Transform or restyle an input image', model: 'gemini', resultType: 'image' },
+  'text-to-video': { title: 'Text to Video', subtitle: 'Bring concepts to motion with AI video', locked: true, model: 'veo3_fast', resultType: 'video' },
+  'image-to-video': { title: 'Image to Video', subtitle: 'Animate a still into dynamic video', locked: true, model: 'veo3_fast', resultType: 'video' },
+  'text-to-music': { title: 'Text to Music', subtitle: 'Create original music from text descriptions', locked: true, model: 'suno', resultType: 'music' },
 }
 
 const EXAMPLES: Record<string, Array<{ short: string; full: string }>> = {
   'text-to-image': [
     {
-      short: '☕ Coffee Cup on Wooden Table',
+      short: 'Coffee Cup on Wooden Table',
       full: 'Ultra-detailed cinematic product photo of a double-walled glass coffee mug filled with creamy latte topped with intricate heart-shaped latte art foam, placed on a wet rustic wooden counter at sunrise, soft volumetric light through a foggy café window, gentle steam rising, shallow depth of field (50mm f/1.8), realistic micro-droplets on the glass, warm morning tones, crisp reflections, professional food photography, editorial style'
     },
     {
-      short: '💄 Skincare Bottle with Water Splash',
+      short: 'Skincare Bottle with Water Splash',
       full: 'Ultra-detailed cinematic product photo of a premium skincare serum bottle on a rippled water surface with crystal-clear gel splashes frozen mid-air, soft morning spa ambience, diffused natural daylight, gentle mist and reflections, elegant pastel tones, minimalist luxury aesthetic, studio macro photography, 85mm lens, ultra high resolution, editorial beauty lighting'
     },
     {
-      short: '🏃‍♀️ Sport Bottle in Motion',
+      short: 'Sport Bottle in Motion',
       full: 'Ultra-detailed cinematic action shot of a dynamic sport water bottle mid-squeeze, crystal droplets suspended in air, illuminated by dramatic rim and back lighting, stadium tunnel background with subtle motion blur, vibrant energetic color grading, high-speed photography, 85mm lens, ultra-sharp focus, professional commercial lighting, editorial sports aesthetic'
     }
   ],
 
   'image-to-image': [
     {
-      short: '🌃 Moody Cyberpunk Neon Scene',
+      short: 'Moody Cyberpunk Neon Scene',
       full: 'Restyle this into a moody cyberpunk neon scene, rain-soaked surfaces, teal and magenta glow, cinematic contrast, atmospheric haze'
     },
     {
-      short: '🏔️ Minimalist Scandinavian Aesthetic',
+      short: 'Minimalist Scandinavian Aesthetic',
       full: 'Transform into a minimalist Scandinavian aesthetic: soft neutral tones, gentle indirect light, matte textures, editorial clarity'
     },
     {
-      short: '🏖️ Bright Summer Beach Lifestyle',
+      short: 'Bright Summer Beach Lifestyle',
       full: 'Convert to a bright summer beach lifestyle shot with warm golden hour lighting, subtle lens flare, airy composition'
     }
   ],
 
   'text-to-video': [
     {
-      short: '🎤 Street Interview in the City',
+      short: 'Street Interview in the City',
       full: '10 second cinematic street interview scene with a friendly reporter holding a microphone, asking a smiling passerby “What makes you happiest in life?” on a busy urban sidewalk. The passerby laughs and replies warmly, mentioning spending time with family. Natural city ambience with footsteps, crowd chatter, and light traffic. Soft daylight, shallow depth of field, authentic handheld motion, realistic dialogue audio, subtle background blur.'
     },
     {
-      short: '🦊 Talking Fox in Forest',
+      short: 'Talking Fox in Forest',
       full: '8 second whimsical cinematic shot of a red fox sitting in a misty forest clearing at sunrise, softly speaking in a calm, expressive voice about appreciating nature and peace — saying “Every dawn feels like a fresh start.” Gentle lip-sync animation, warm forest ambience with birds chirping and rustling leaves, soft golden-hour lighting, shallow depth of field, gentle camera dolly-in, natural color grading.'
     },
     {
-      short: '🍃 Misty Mountain Valley at Sunrise',
+      short: 'Misty Mountain Valley at Sunrise',
       full: '10 second ultra-realistic cinematic nature shot of a misty mountain valley at sunrise. Soft fog rolling through pine trees, sunlight beams scattering through clouds, occasional birds gliding through frame. No human sound — only gentle wind, distant birds, and ambient nature echo. Wide aerial view, natural color grading, cinematic stabilization, 8K film look.'
     }
   ],
 
   'image-to-video': [
     {
-      short: '✨ Parallax Depth Reveal',
+      short: 'Parallax Depth Reveal',
       full: 'Animate into a subtle 6s parallax reveal: foreground lifts gently, depth layers move at different speeds, soft ambient particles, cinematic ease in-out'
     },
     {
-      short: '🔄 Rotating Hero Product Motion',
+      short: 'Rotating Hero Product Motion',
       full: 'Create a seamless looping rotation with gentle perspective shift, premium product hero motion, soft ambient studio light transitions'
     },
     {
-      short: '🌫️ Atmospheric Fog & Light Motion',
+      short: 'Atmospheric Fog & Light Motion',
       full: 'Add dynamic atmospheric motion: drifting fog layers, gentle light shifts, subtle camera push forward, premium film tone'
     }
   ],
 
   'text-to-music': [
     {
-      short: '🤠 Country Love Song – Sunset Bar',
+      short: 'Country Love Song – Sunset Bar',
       full: 'Country-style song about a man and woman falling in love at a small-town bar during sunset. Start soft with acoustic guitar and warm vocals, build up to a heartfelt chorus with fiddle and drums, then fade into gentle steel guitar. Include romantic storytelling lyrics like: “She smiled through the dust and neon light.”'
     },
     {
-      short: '🎸 Country Duet – Long Drive Home',
+      short: 'Country Duet – Long Drive Home',
       full: 'Country duet between a man and woman driving home under moonlight after their first date. Begin with slow acoustic strumming, add light percussion and harmony on the second verse, final chorus introduces pedal steel and vocal layering. Include simple love lyrics like: “Every mile, your hand in mine feels like forever.”'
     },
     {
-      short: '🎶 Image2Ad.com Jingle – One Click Creation',
+      short: 'Image2Ad.com Jingle – One Click Creation',
       full: 'Upbeat catchy commercial jingle for Image2Ad.com. Fun pop-country rhythm with claps, guitar, and light synths. Vocals sing a short memorable hook: “At Image2Ad dot com — make your vision come alive, with just one click and you’re ready to shine!” Include cheerful melody, tagline repeats at the end, and smooth beat transitions showing the AI can create images, videos, and songs in seconds.'
     }
   ]
@@ -521,7 +526,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
               const assistantMessage: ChatMessage = {
                 id: `assistant-${job.id}`,
                 role: 'assistant',
-                content: job.status === 'completed' ? `${job.result_type === 'video' ? 'Video' : 'Image'} generated ✅` :
+                content: job.status === 'completed' ? `${job.result_type === 'video' ? 'Video' : 'Image'} ready` :
                   job.status === 'failed' ? (job.error_message || 'Generation failed') :
                     'Generating…',
                 createdAt: new Date(job.created_at).getTime() + 1000, // Slightly after user message
@@ -662,7 +667,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
 
           // Show success toast notification
           const contentType = tab.includes('video') ? 'Video' : tab.includes('music') ? 'Music' : 'Image'
-          toast.success(`${contentType} generated successfully! 🎉`, {
+          toast.success(`${contentType} generated successfully!`, {
             description: 'Your content is ready to view',
             duration: 5000,
           })
@@ -676,7 +681,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
 
             gen.updateMessage(tab, messageId, {
               status: 'complete',
-              content: `${tab.includes('video') ? 'Video' : tab.includes('music') ? 'Music' : 'Image'} generated ✅`,
+              content: `${tab.includes('video') ? 'Video' : tab.includes('music') ? 'Music' : 'Image'} ready`,
               mediaUrl: signedUrl.signedUrl,
               mediaType: tab.includes('video') ? 'video' : tab.includes('music') ? 'music' : 'image'
             })
@@ -869,7 +874,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
     const assistantPlaceholder: ChatMessage = {
       id: generateId(),
       role: 'assistant',
-      content: shouldHighlightGenerate ? '☕ Brewing your ad...' : 'Generating…',
+      content: shouldHighlightGenerate ? 'Brewing your ad...' : 'Generating…',
       createdAt: Date.now(),
       status: 'pending'
     }
@@ -878,10 +883,10 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
     // If this is the first generation, show animated progress messages
     if (shouldHighlightGenerate) {
       const messages = [
-        '☕ Brewing your ad...',
-        '🎨 Adding the perfect lighting...',
-        '📸 Capturing the final shot...',
-        '✨ Almost ready...'
+        'Brewing your ad...',
+        'Adding the perfect lighting...',
+        'Capturing the final shot...',
+        'Almost ready...'
       ]
       let messageIndex = 0
       const progressInterval = setInterval(() => {
@@ -1091,12 +1096,12 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
               const contentType = meta.resultType === 'image' ? 'Image' : meta.resultType === 'video' ? 'Video' : 'Music'
               if (shouldHighlightGenerate && !profile.tutorial_completed) {
                 const remainingCredits = profile.credits - requiredCredits
-                toast.success('🔥 That\'s your first AI-generated ad!', {
+                toast.success('That\'s your first AI-generated ad!', {
                   description: `Try another — you've got ${remainingCredits} free ${remainingCredits === 1 ? 'image' : 'images'} left today.`,
                   duration: 6000,
                 })
               } else {
-                toast.success(`${contentType} generated successfully! 🎉`, {
+                toast.success(`${contentType} generated successfully!`, {
                   description: 'Your content is ready to view',
                   duration: 5000,
                 })
@@ -1124,7 +1129,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
               // Update the message with the result
               gen.updateMessage(gen.activeTab, assistantPlaceholder.id, {
                 status: 'complete',
-                content: `${contentType} generated ✅`,
+                content: `${contentType} ready`,
                 mediaUrl,
                 mediaType: meta.resultType,
                 coverUrl: coverUrl || undefined
@@ -1196,13 +1201,13 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
               if (shouldHighlightGenerate && !profile.tutorial_completed) {
                 // First-time user - show special encouragement message
                 const remainingCredits = profile.credits - 1 // They just used 1
-                toast.success('🔥 That\'s your first AI-generated ad!', {
+                toast.success('That\'s your first AI-generated ad!', {
                   description: `Try another — you've got ${remainingCredits} free ${remainingCredits === 1 ? 'image' : 'images'} left today.`,
                   duration: 6000,
                 })
               } else {
                 // Regular success message
-                toast.success(`${contentType} generated successfully! 🎉`, {
+                toast.success(`${contentType} generated successfully!`, {
                   description: 'Your content is ready to view',
                   duration: 5000,
                 })
@@ -1239,7 +1244,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
                 messageId: assistantPlaceholder.id,
                 activeTab: gen.activeTab,
                 status: 'complete',
-                content: meta.resultType === 'image' ? 'Image generated ✅' : meta.resultType === 'video' ? 'Video generated ✅' : 'Music generated ✅',
+                content: meta.resultType === 'image' ? 'Image ready' : meta.resultType === 'video' ? 'Video ready' : 'Music ready',
                 mediaUrl,
                 coverUrl: coverUrl || undefined,
                 mediaType: meta.resultType
@@ -1247,7 +1252,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
 
               const updateData: any = {
                 status: 'complete',
-                content: meta.resultType === 'image' ? 'Image generated ✅' : meta.resultType === 'video' ? 'Video generated ✅' : 'Music generated ✅',
+                content: meta.resultType === 'image' ? 'Image ready' : meta.resultType === 'video' ? 'Video ready' : 'Music ready',
                 mediaUrl,
                 mediaType: meta.resultType
               }
@@ -1602,7 +1607,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
             )}
             <div className={`sc-bubble ${m.role === 'user' ? 'is-user' : 'is-assistant'}`}>
               <div className="sc-bubble-text">
-                {m.content}
+                {cleanChatText(m.content)}
               </div>
               {m.status === 'pending' && (
                 <div className="sc-pending">

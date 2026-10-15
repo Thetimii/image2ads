@@ -31,7 +31,6 @@ export default function ModelSelector({ selectedModel, onSelectModel, selectedRe
         >
           <div className="sc-model-top">
             <span className="sc-model-name">Standard</span>
-            {selectedModel === 'nano-banana' && <span className="sc-model-check"><Icon name="check" /></span>}
           </div>
           <span className="sc-model-desc">Fast, great for testing ideas</span>
           <div className="sc-model-foot">
@@ -57,7 +56,6 @@ export default function ModelSelector({ selectedModel, onSelectModel, selectedRe
             <span className="sc-model-name">
               Pro <span className="sc-tag">Up to 4K</span>
             </span>
-            {selectedModel === 'nano-banana-pro' && <span className="sc-model-check"><Icon name="check" /></span>}
             {!isPro && <span className="sc-model-lock"><Icon name="lock" /> Paid plans</span>}
           </div>
           <span className="sc-model-desc">Sharpest detail and text, for final ads</span>
