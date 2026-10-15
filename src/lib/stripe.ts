@@ -130,7 +130,22 @@ export async function createCheckoutSession({
     sessionOptions.customer_email = customerEmail;
   }
 
-  return stripe.checkout.sessions.create(sessionOptions);
+  try {
+    return await stripe.checkout.sessions.create(sessionOptions);
+  } catch (err) {
+    // A coupon that was deleted/archived in Stripe must never block a sale:
+    // fall back to full price (promo-code field) instead of failing checkout.
+    const e = err as { code?: string; param?: string; message?: string };
+    const couponGone =
+      !!sessionOptions.discounts &&
+      (e.code === "resource_missing" || /coupon/i.test(e.message || "")) &&
+      /coupon|discounts/i.test(`${e.param || ""} ${e.message || ""}`);
+    if (!couponGone) throw err;
+    console.error("[checkout] coupon unavailable, continuing without it:", couponId, e.message);
+    delete sessionOptions.discounts;
+    sessionOptions.allow_promotion_codes = interval === "month" ? true : undefined;
+    return stripe.checkout.sessions.create(sessionOptions);
+  }
 }
 
 /** One-time credit pack purchase. Credits are granted by the webhook. */
