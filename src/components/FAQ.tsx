@@ -21,15 +21,15 @@ const faqs = [
   },
   {
     q: "How do creative credits work?",
-    a: "Your plan includes a monthly credit allocation. Each generation uses credits, and the amount varies by format and model. Your workspace shows your available balance.",
+    a: "1 credit = 1 HD image. Nano Banana Pro images use 6 credits, an 8-second video 8 and a music track 3. Monthly plans add credits every month, yearly plans add the whole year upfront, and unused credits roll over. Prefer no subscription? One-time credit packs never expire.",
   },
   {
     q: "Can I try it before choosing a plan?",
-    a: "Yes. The free plan includes 3 free images every day, no card required. Choose a paid plan when you need more images, HD quality, video or music.",
+    a: "Yes. Every new account gets 3 free images, no card required (free previews carry a small watermark). Choose a plan or a credit pack for HD downloads without watermark, video and music - everything you already made unlocks too.",
   },
   {
     q: "Can I cancel my subscription?",
-    a: "Yes. Manage or cancel your subscription from Usage & Billing in your workspace. Paid plans renew monthly until canceled.",
+    a: "Yes. Manage or cancel your subscription from Usage & Billing in your workspace. Plans renew at the end of each billing period (monthly or yearly) until canceled, and you keep your credits.",
   },
 ];
 export default function FAQ() {

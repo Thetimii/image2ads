@@ -126,7 +126,7 @@ export default function GeneratorPageWrapper({ user, profile, onShowUpgrade }: G
   // Lock navigation if tutorial not completed
   const isNavigationLocked = !profile.tutorial_completed
 
-  const handleSubscribe = async (plan: 'starter' | 'pro' | 'business', couponId?: string) => {
+  const handleSubscribe = async (plan: 'starter' | 'pro' | 'business', couponId?: string, interval: 'month' | 'year' = 'month') => {
     setIsUpgrading(plan)
     const metaOptions = {
       plan,
@@ -161,6 +161,7 @@ export default function GeneratorPageWrapper({ user, profile, onShowUpgrade }: G
         },
         body: JSON.stringify({
           plan,
+          interval,
           successUrl: `${window.location.origin}/billing?success=true`,
           cancelUrl: `${window.location.origin}${window.location.pathname}?checkout=cancelled`,
           // Apply discount if active and Pro plan

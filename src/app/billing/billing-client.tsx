@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import type { User } from '@supabase/supabase-js'
 import type { Profile } from '@/lib/validations'
-import { type StripePlan, STRIPE_PLANS } from '@/lib/stripe-plans'
+import { type StripePlan } from '@/lib/stripe-plans'
 import DashboardLayout from '@/components/DashboardLayout'
 import PricingPlans from '@/components/PricingPlans'
 import {
@@ -119,88 +119,47 @@ export default function BillingClient({ user, profile }: BillingClientProps) {
     }
   }, [])
 
-  // Track successful purchase when user returns from Stripe
+  // Track successful purchase when user returns from Stripe. The value comes
+  // from the checkout session itself (yearly plans and credit packs have
+  // different amounts); the event id matches the webhook's CAPI event so
+  // Meta dedupes them into one conversion.
   useEffect(() => {
     const searchParams = new URLSearchParams(window.location.search)
-    const isSuccess = searchParams.get('success')
+    if (searchParams.get('success') !== 'true') return
+    const stripeSessionId = searchParams.get('session_id')
+    window.history.replaceState({}, '', '/billing')
+    if (!stripeSessionId) return
 
-    if (isSuccess === 'true') {
-      // Determine which plan was purchased based on profile
-      const planName = profile.subscription_id?.toLowerCase() || ''
-      let planValue = 0
-      let planDisplayName = 'Subscription'
-      let planKey: 'starter' | 'pro' | 'business' | undefined
+    const eventId = `purchase_${stripeSessionId}`
+    fetch(`/api/stripe/session-summary?session_id=${encodeURIComponent(stripeSessionId)}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((summary) => {
+        if (!summary || !(summary.amount > 0)) return
+        const planKey = summary.plan === 'starter' || summary.plan === 'pro' || summary.plan === 'business' ? summary.plan : undefined
+        const contentName = summary.pack
+          ? `Credit pack ${summary.pack}`
+          : `${planKey ? planKey.charAt(0).toUpperCase() + planKey.slice(1) : 'Subscription'} Plan (${summary.interval === 'year' ? 'yearly' : 'monthly'})`
+        const value = Number(summary.amount)
 
-      if (planName.includes('starter')) {
-        planValue = STRIPE_PLANS.starter.price
-        planDisplayName = 'Starter Plan'
-        planKey = 'starter'
-      } else if (planName.includes('pro')) {
-        planValue = STRIPE_PLANS.pro.price
-        planDisplayName = 'Pro Plan'
-        planKey = 'pro'
-      } else if (planName.includes('business')) {
-        planValue = STRIPE_PLANS.business.price
-        planDisplayName = 'Business Plan'
-        planKey = 'business'
-      }
-
-      // Deterministic event ID (Stripe checkout session id) so this client
-      // pixel fire and the webhook's server-side CAPI fire dedupe as one
-      // conversion in Meta, instead of double-counting or (if the browser
-      // never returns here) reaching Meta only via the webhook.
-      const stripeSessionId = searchParams.get('session_id')
-      const eventId = stripeSessionId
-        ? `purchase_${stripeSessionId}`
-        : `purchase_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
-
-      // Fire Meta Pixel Purchase event
-      if (typeof window !== 'undefined' && (window as any).fbq) {
-        const cookieConsent = localStorage.getItem('cookieConsent')
-        if (cookieConsent === 'accepted' && planValue > 0) {
-          if (profile.subscription_status === 'trialing') {
-            (window as any).fbq('track', 'StartTrial', {
-              value: planValue,
-              currency: 'USD',
-            }, { eventID: eventId })
-            console.log(`🔥 Meta Pixel: StartTrial event fired for ${planDisplayName} ($${planValue}) [eventID: ${eventId}]`)
+        if (typeof window !== 'undefined' && (window as any).fbq && localStorage.getItem('cookieConsent') === 'accepted') {
+          if (summary.isTrial) {
+            (window as any).fbq('track', 'StartTrial', { value, currency: summary.currency }, { eventID: eventId })
           } else {
             (window as any).fbq('track', 'Purchase', {
-              value: planValue,
-              currency: 'USD',
-              content_name: planDisplayName,
+              value,
+              currency: summary.currency,
+              content_name: contentName,
               content_type: 'product',
-              content_ids: [planName || 'subscription'],
+              content_ids: [summary.pack || planKey || 'subscription'],
             }, { eventID: eventId })
-            console.log(`🔥 Meta Pixel: Purchase event fired for ${planDisplayName} ($${planValue}) [eventID: ${eventId}]`)
           }
         }
-      }
-
-      if (planValue > 0) {
-        if (profile.subscription_status === 'trialing') {
-          trackMetaStartTrial({
-            ...(planKey ? { plan: planKey } : {}),
-            value: planValue,
-            contentName: planDisplayName,
-            source: 'billing_success',
-            eventId,
-          })
-        } else {
-          trackMetaPurchase({
-            ...(planKey ? { plan: planKey } : {}),
-            value: planValue,
-            contentName: planDisplayName,
-            source: 'billing_success',
-            eventId,
-          })
-        }
-      }
-
-      // Clean up URL (remove success parameter)
-      window.history.replaceState({}, '', '/billing')
-    }
-  }, [profile.subscription_id])
+        const opts = { ...(planKey ? { plan: planKey } : {}), value, contentName, source: 'billing_success', eventId }
+        if (summary.isTrial) trackMetaStartTrial(opts)
+        else trackMetaPurchase(opts)
+      })
+      .catch(() => {})
+  }, [])
 
   // Function to determine plan display name based on subscription_id (which now contains product ID)
   const getPlanDisplayName = () => {
@@ -234,6 +193,7 @@ export default function BillingClient({ user, profile }: BillingClientProps) {
       }
       return 'Subscribed Plan'
     }
+    if ((profile as { has_paid?: boolean }).has_paid) return 'Pay as you go'
     return 'Free Plan'
   }
 
@@ -248,7 +208,7 @@ export default function BillingClient({ user, profile }: BillingClientProps) {
     return 'Free Plan'
   }
 
-  const handleSubscribe = async (plan: StripePlan, couponId?: string) => {
+  const handleSubscribe = async (plan: StripePlan, couponId?: string, interval: 'month' | 'year' = 'month') => {
     setIsLoading(plan)
     const metaOptions = {
       plan,
@@ -284,6 +244,7 @@ export default function BillingClient({ user, profile }: BillingClientProps) {
         },
         body: JSON.stringify({
           plan,
+          interval,
           successUrl: `${window.location.origin}/billing?success=true`,
           cancelUrl: `${window.location.origin}/billing?cancelled=true`,
           // Apply discount if active and user is selecting Pro plan
@@ -418,24 +379,11 @@ export default function BillingClient({ user, profile }: BillingClientProps) {
               <div>
                 <p className="text-sm font-medium text-gray-600">Next Billing</p>
                 <p className="text-lg font-bold text-gray-900">
-                  {(profile.subscription_status === 'active' || profile.subscription_status === 'trialing') && profile.updated_at ?
-                    (() => {
-                      const nextBilling = new Date(profile.updated_at);
-                      // If trialing, add 3 days from updated_at
-                      if (profile.subscription_status === 'trialing') {
-                        nextBilling.setDate(nextBilling.getDate() + 3);
-                      }
-                      // If active, add 30 days from updated_at
-                      else {
-                        nextBilling.setDate(nextBilling.getDate() + 30);
-                      }
-                      return nextBilling.toLocaleDateString('en-US', {
-                        month: 'short',
-                        day: 'numeric',
-                        year: 'numeric'
-                      });
-                    })()
-                    : 'N/A'}
+                  {profile.subscription_status === 'trialing'
+                    ? 'After trial'
+                    : profile.subscription_status === 'active'
+                      ? 'Auto-renews'
+                      : 'N/A'}
                 </p>
               </div>
               <div className="w-12 h-12 bg-orange-100 rounded-xl flex items-center justify-center">
@@ -472,8 +420,8 @@ export default function BillingClient({ user, profile }: BillingClientProps) {
         {/* Pricing plans */}
         <div className="bg-white rounded-2xl border border-gray-200 mb-8 overflow-hidden">
           <div className="p-6 border-b border-gray-200">
-            <h2 className="text-lg font-semibold text-gray-900 mb-1">Subscription Plans</h2>
-            <p className="text-sm text-gray-600">Choose the plan that best fits your needs.</p>
+            <h2 className="text-lg font-semibold text-gray-900 mb-1">Plans & credits</h2>
+            <p className="text-sm text-gray-600">Pay yearly and save about a third, or grab a one-time credit pack.</p>
           </div>
 
           <PricingPlans
@@ -501,11 +449,15 @@ export default function BillingClient({ user, profile }: BillingClientProps) {
 
                   <li className="flex items-start">
                     <span className="text-blue-500 mr-2">•</span>
-                    Credits are renewed monthly with your subscription
+                    1 credit = 1 HD image · Pro images 6 · video 8 · music 3
                   </li>
                   <li className="flex items-start">
                     <span className="text-blue-500 mr-2">•</span>
-                    Unused credits do not roll over to the next month
+                    Monthly plans add credits every month; yearly plans add the whole year upfront
+                  </li>
+                  <li className="flex items-start">
+                    <span className="text-blue-500 mr-2">•</span>
+                    Unused credits roll over, and credit packs never expire
                   </li>
                 </ul>
               </div>

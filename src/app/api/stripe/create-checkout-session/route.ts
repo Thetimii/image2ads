@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createCheckoutSessionSchema } from '@/lib/validations'
-import { createCheckoutSession } from '@/lib/stripe'
+import { createCheckoutSession, createCreditPackCheckoutSession } from '@/lib/stripe'
 
 export async function POST(request: NextRequest) {
   try {
@@ -41,7 +41,23 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { plan, successUrl, cancelUrl, couponId, applyProDiscount } = validation.data
+    const { plan, interval = 'month', pack, successUrl, cancelUrl, couponId, applyProDiscount } = validation.data
+
+    // One-time credit pack
+    if (pack) {
+      const session = await createCreditPackCheckoutSession({
+        userId: user.id,
+        packId: pack,
+        successUrl,
+        cancelUrl,
+        customerEmail: user.email || undefined,
+        stripeCustomerId: stripeCustomerId || undefined,
+      })
+      return NextResponse.json({ sessionId: session.id, url: session.url })
+    }
+    if (!plan) {
+      return NextResponse.json({ error: 'Missing plan' }, { status: 400 })
+    }
 
     console.log('Creating checkout session with:', {
       userId: user.id,
@@ -53,8 +69,14 @@ export async function POST(request: NextRequest) {
     })
 
     // If applyProDiscount is true and plan is Pro, use the special 20% discount coupon
-    let finalCouponId = couponId
-    if (applyProDiscount && plan === 'pro') {
+    // Never trust an arbitrary coupon id from the browser (the account has
+    // 100%-off coupons for internal use). Only the in-app offer coupons pass.
+    const CLIENT_ALLOWED_COUPONS = ['VbLhruZu', 'fqVEydW3']
+    // A client coupon is only honored as a request for the timed Pro offer,
+    // and only while that offer is still valid for this user (checked below).
+    const wantsOffer = !!applyProDiscount || (!!couponId && CLIENT_ALLOWED_COUPONS.includes(couponId))
+    let finalCouponId: string | undefined = undefined
+    if (wantsOffer && plan === 'pro' && interval === 'month') {
       // Verify the discount is still valid (check if expiry time is in the future)
       const { data: discountProfile } = await supabase
         .from('profiles')
@@ -80,6 +102,7 @@ export async function POST(request: NextRequest) {
     const session = await createCheckoutSession({
       userId: user.id,
       plan,
+      interval,
       successUrl,
       cancelUrl,
       customerEmail: user.email || undefined, // Pass user's email to prefill if no existing customer

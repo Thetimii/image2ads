@@ -75,7 +75,7 @@ export function useOnboarding(user: User, profile: Profile) {
   }, [user.id, supabase])
 
   const checkCreditsAndShowUpgrade = useCallback(() => {
-    // Free plan user who has used today's free images
+    // Out of credits without an active subscription (free users, pack buyers)
     const subscribed = profile.subscription_status === 'active' || profile.subscription_status === 'trialing'
     if (!subscribed) {
       setShouldShowUpgrade(true)

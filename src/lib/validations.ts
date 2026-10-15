@@ -121,12 +121,15 @@ export const uploadUrlSchema = z.object({
 
 // Stripe schemas
 export const createCheckoutSessionSchema = z.object({
-  plan: z.enum(["starter", "pro", "business"]),
+  // Either a subscription plan or a one-time credit pack.
+  plan: z.enum(["starter", "pro", "business"]).optional(),
+  interval: z.enum(["month", "year"]).optional(),
+  pack: z.enum(["pack_100", "pack_350"]).optional(),
   successUrl: z.string().url(),
   cancelUrl: z.string().url(),
   couponId: z.string().optional(),
   applyProDiscount: z.boolean().optional(), // For the 20% Pro discount offer
-});
+}).refine((v) => !!v.plan !== !!v.pack, { message: "Provide exactly one of plan or pack" });
 
 // Usage event schema
 export const usageEventSchema = z.object({

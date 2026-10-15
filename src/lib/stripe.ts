@@ -1,5 +1,13 @@
 import Stripe from "stripe";
-import { STRIPE_PLANS, type StripePlan } from "./stripe-plans";
+import {
+  CREDIT_PACKS,
+  STRIPE_PLANS,
+  creditsFor,
+  priceFor,
+  type BillingInterval,
+  type CreditPackId,
+  type StripePlan,
+} from "./stripe-plans";
 
 export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: "2025-08-27.basil",
@@ -25,6 +33,7 @@ export async function createStripeCustomer({
 export async function createCheckoutSession({
   userId,
   plan,
+  interval = "month",
   successUrl,
   cancelUrl,
   customerEmail,
@@ -33,104 +42,138 @@ export async function createCheckoutSession({
 }: {
   userId: string;
   plan: StripePlan;
+  interval?: BillingInterval;
   successUrl: string;
   cancelUrl: string;
   customerEmail?: string;
   stripeCustomerId?: string;
   couponId?: string;
 }) {
-  console.log('createCheckoutSession called with:', {
-    userId,
-    plan,
-    hasStripeCustomerId: !!stripeCustomerId,
-    hasCustomerEmail: !!customerEmail
-  });
-
   const planData = STRIPE_PLANS[plan];
+  const credits = creditsFor(plan, interval);
+  const amountCents = Math.round(priceFor(plan, interval) * 100);
+  const planMetadata = {
+    user_id: userId,
+    plan,
+    interval,
+    credits: String(credits),
+    pricing_version: "v2",
+  };
 
-  console.log('Plan data:', {
-    planName: planData.name,
-    priceId: planData.priceId,
-    price: planData.price
-  });
-
-  if (!planData.priceId) {
-    throw new Error(`Price ID not configured for plan: ${plan}`);
-  }
-
-  // Prepare checkout session options
   const sessionOptions: Stripe.Checkout.SessionCreateParams = {
     mode: "subscription",
     payment_method_types: ["card"],
     line_items: [
       {
-        price: planData.priceId,
         quantity: 1,
+        price_data: {
+          currency: "usd",
+          product: planData.productId,
+          unit_amount: amountCents,
+          recurring: { interval },
+        },
       },
     ],
     // Stripe replaces {CHECKOUT_SESSION_ID} on redirect, giving the client a
-    // stable id to build a Purchase eventId that matches the webhook's —
+    // stable id to build a Purchase eventId that matches the webhook's -
     // required so Meta dedupes the client pixel + server CAPI Purchase events.
-    success_url: successUrl.includes('?')
-      ? `${successUrl}&session_id={CHECKOUT_SESSION_ID}`
-      : `${successUrl}?session_id={CHECKOUT_SESSION_ID}`,
+    success_url: withSessionId(successUrl),
     cancel_url: cancelUrl,
-    metadata: {
-      user_id: userId,
-      plan: plan,
-    },
-    // Enable automatic tax calculation if configured
-    automatic_tax: {
-      enabled: false, // Set to true if you've configured tax in Stripe
-    },
-    // Ensure payment methods support 3D Secure (SCA compliance)
+    metadata: planMetadata,
+    // Renewals only see the subscription, so it carries the plan too.
+    subscription_data: { metadata: planMetadata },
+    automatic_tax: { enabled: false },
     payment_method_options: {
-      card: {
-        request_three_d_secure: 'automatic', // Automatically request 3DS when needed
-      },
+      card: { request_three_d_secure: "automatic" },
     },
-    // Set billing address collection
-    billing_address_collection: 'auto',
+    billing_address_collection: "auto",
   };
 
-  // If a couponId is provided, add it to the session as discounts
-  // Otherwise, allow promotion codes (cannot have both)
-  if (couponId) {
-    // Stripe v2025 supports discounts param; use discounts with coupon
-    // Note: coupon must exist in Stripe dashboard
-    // Cannot use allow_promotion_codes when discounts is specified
-    console.log('Applying coupon to checkout session:', couponId);
-    (sessionOptions as any).discounts = [{ coupon: couponId }]
-  } else {
-    // Only allow promotion codes if NO coupon is provided (Stripe doesn't allow both)
-    sessionOptions.allow_promotion_codes = true;
+  // Discounts only on monthly plans - yearly is already ~35% off, and the
+  // whole year of credits is granted upfront, so a promo code there would
+  // hand out thousands of credits for (almost) nothing.
+  if (interval === "month") {
+    if (couponId) {
+      sessionOptions.discounts = [{ coupon: couponId }];
+    } else {
+      sessionOptions.allow_promotion_codes = true;
+    }
   }
 
-  // If user has existing Stripe customer ID, use it
   if (stripeCustomerId) {
-    console.log('Using existing Stripe customer:', stripeCustomerId);
     sessionOptions.customer = stripeCustomerId;
   } else {
-    // If no existing customer, prefill email for new customer creation
-    console.log('Creating new customer with email:', customerEmail);
     sessionOptions.customer_email = customerEmail;
   }
 
-  console.log('Final session options:', {
-    mode: sessionOptions.mode,
-    hasCustomer: !!sessionOptions.customer,
-    hasCustomerEmail: !!sessionOptions.customer_email,
-    priceId: sessionOptions.line_items?.[0]?.price
-  });
+  return stripe.checkout.sessions.create(sessionOptions);
+}
 
-  try {
-    const session = await stripe.checkout.sessions.create(sessionOptions as any);
-    console.log('Stripe session created successfully:', session.id);
-    return session;
-  } catch (stripeError) {
-    console.error('Stripe session creation failed:', stripeError);
-    throw stripeError;
+/** One-time credit pack purchase. Credits are granted by the webhook. */
+export async function createCreditPackCheckoutSession({
+  userId,
+  packId,
+  successUrl,
+  cancelUrl,
+  customerEmail,
+  stripeCustomerId,
+}: {
+  userId: string;
+  packId: CreditPackId;
+  successUrl: string;
+  cancelUrl: string;
+  customerEmail?: string;
+  stripeCustomerId?: string;
+}) {
+  const pack = CREDIT_PACKS[packId];
+  const sessionOptions: Stripe.Checkout.SessionCreateParams = {
+    mode: "payment",
+    payment_method_types: ["card"],
+    line_items: [
+      {
+        quantity: 1,
+        price_data: {
+          currency: "usd",
+          unit_amount: Math.round(pack.price * 100),
+          product_data: {
+            name: `Image2Ad ${pack.name} - ${pack.credits} credits`,
+            description: "One-time purchase. Credits never expire.",
+          },
+        },
+      },
+    ],
+    success_url: withSessionId(successUrl),
+    cancel_url: cancelUrl,
+    metadata: {
+      user_id: userId,
+      type: "credit_pack",
+      pack: pack.id,
+      credits: String(pack.credits),
+      pricing_version: "v2",
+    },
+    payment_intent_data: {
+      metadata: { user_id: userId, type: "credit_pack", pack: pack.id },
+    },
+    // No promo codes on packs (they're already the entry-level offer).
+    billing_address_collection: "auto",
+  };
+
+  if (stripeCustomerId) {
+    sessionOptions.customer = stripeCustomerId;
+  } else {
+    sessionOptions.customer_email = customerEmail;
+    // Payment-mode sessions don't create a customer unless asked to, and the
+    // webhook links purchases to profiles through the customer id.
+    sessionOptions.customer_creation = "always";
   }
+
+  return stripe.checkout.sessions.create(sessionOptions);
+}
+
+function withSessionId(url: string): string {
+  return url.includes("?")
+    ? `${url}&session_id={CHECKOUT_SESSION_ID}`
+    : `${url}?session_id={CHECKOUT_SESSION_ID}`;
 }
 
 export async function createPortalSession({

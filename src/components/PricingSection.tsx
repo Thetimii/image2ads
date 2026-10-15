@@ -1,22 +1,65 @@
 "use client";
 
+import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { STRIPE_PLANS, type StripePlan } from "@/lib/stripe-plans";
+import {
+  CREDIT_PACKS,
+  STRIPE_PLANS,
+  creditsFor,
+  yearlyMonthlyEquivalent,
+  yearlySavingsPercent,
+  type BillingInterval,
+  type StripePlan,
+} from "@/lib/stripe-plans";
 import { trackMetaSubscribedButtonClick } from "@/lib/meta-events";
 import { Reveal } from "./studio/StudioMotion";
 import { Icon } from "./studio/StudioIcons";
 
-const descriptions = {
-  starter: "For the first spark of an idea.",
-  pro: "For your next creative chapter.",
-  business: "For bigger ideas and more of them.",
+const descriptions: Record<StripePlan, string> = {
+  starter: "HD product ads for one brand.",
+  pro: "Images, video and music for a growing store.",
+  business: "A whole catalog of creative, every month.",
 };
+
+const features: Record<StripePlan, string[]> = {
+  starter: ['HD images, no watermark', 'AI video, music & Nano Banana Pro', 'Commercial use'],
+  pro: ['Everything in Starter', '3x the credits of Starter', 'Built for weekly ad testing'],
+  business: ['Everything in Pro', 'For agencies & big catalogs', 'Lowest price per credit'],
+};
+
+function money(n: number) {
+  return Number.isInteger(n) ? `$${n}` : `$${n.toFixed(2)}`;
+}
+
+// Remembered so the paywall opens right after signup with this choice.
+function rememberIntent(intent: Record<string, string>) {
+  try {
+    localStorage.setItem(
+      "i2a_checkout_intent",
+      JSON.stringify({ ...intent, ts: Date.now() }),
+    );
+  } catch {}
+}
+
 export default function PricingSection() {
   const router = useRouter();
+  const [interval, setBillingInterval] = useState<BillingInterval>("year");
+  const yearly = interval === "year";
+
   function subscribe(plan: StripePlan) {
-    trackMetaSubscribedButtonClick({ plan, source: "marketing_pricing" });
-    router.push("/signin");
+    trackMetaSubscribedButtonClick({
+      plan,
+      source: `marketing_pricing_${interval}`,
+    });
+    rememberIntent({ plan, interval });
+    router.push("/signup");
   }
+  function buyPack(pack: string) {
+    trackMetaSubscribedButtonClick({ plan: pack, source: "marketing_pricing_pack" });
+    rememberIntent({ pack });
+    router.push("/signup");
+  }
+
   return (
     <section
       id="pricing"
@@ -34,13 +77,30 @@ export default function PricingSection() {
             </h2>
           </div>
           <div className="studio-pricing-note">
-            <span className="studio-billing-pill">
-              <span className="studio-status-dot" /> BILLED MONTHLY
-            </span>
+            <div className="studio-interval-toggle" role="tablist" aria-label="Billing interval">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={yearly}
+                className={yearly ? "is-active" : ""}
+                onClick={() => setBillingInterval("year")}
+              >
+                YEARLY <em>SAVE {yearlySavingsPercent("pro")}%</em>
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={!yearly}
+                className={!yearly ? "is-active" : ""}
+                onClick={() => setBillingInterval("month")}
+              >
+                MONTHLY
+              </button>
+            </div>
             <p>
-              No long-term commitments.
+              Start with 3 free images, no card required.
               <br />
-              Pick your pace. Cancel anytime.
+              Cancel anytime.
             </p>
           </div>
         </div>
@@ -49,6 +109,7 @@ export default function PricingSection() {
         {(["starter", "pro", "business"] as const).map((key, index) => {
           const plan = STRIPE_PLANS[key];
           const popular = key === "pro";
+          const perMonth = yearly ? yearlyMonthlyEquivalent(key) : plan.price;
           return (
             <Reveal
               key={key}
@@ -68,7 +129,7 @@ export default function PricingSection() {
                   height="26"
                 />
                 {popular ? (
-                  <span className="studio-popular">THE SWEET SPOT</span>
+                  <span className="studio-popular">MOST POPULAR</span>
                 ) : (
                   <span>0{index + 1}</span>
                 )}
@@ -76,29 +137,26 @@ export default function PricingSection() {
               <h3>{plan.name}</h3>
               <p className="studio-plan-description">{descriptions[key]}</p>
               <div className="studio-price">
-                ${plan.price}
+                {money(perMonth)}
                 <span>/ month</span>
               </div>
+              <p className="studio-price-sub">
+                {yearly ? (
+                  <>
+                    {money(plan.yearlyPrice)} billed yearly{" "}
+                    <s>{money(plan.price * 12)}</s>
+                  </>
+                ) : (
+                  "Billed monthly"
+                )}
+              </p>
               <div className="studio-credit-allocation">
-                <strong>{plan.credits}</strong>
-                <span>creative credits / month</span>
+                <strong>{creditsFor(key, interval).toLocaleString("en-US")}</strong>
+                <span>{yearly ? "credits, all upfront" : "credits / month"}</span>
                 <Icon name="spark" width="18" height="18" />
               </div>
               <ul>
-                {[
-                  "Text-to-image & image-to-image",
-                  ...(key === "starter"
-                    ? [
-                        "Build your product image library",
-                        "Explore new visual directions",
-                      ]
-                    : [
-                        "Text-to-video & image-to-video",
-                        "Text-to-music generation",
-                      ]),
-                  "Download your generated assets",
-                  "Manage your creative library",
-                ].map((feature) => (
+                {features[key].map((feature) => (
                   <li key={feature}>
                     <Icon name="check" width="15" height="15" />
                     {feature}
@@ -118,15 +176,31 @@ export default function PricingSection() {
         })}
       </div>
       <Reveal>
+        <div className="studio-packs">
+          <div>
+            <strong>No subscription? Buy credits once.</strong>
+            <span>Credits never expire · HD, no watermark</span>
+          </div>
+          {Object.values(CREDIT_PACKS).map((pack) => (
+            <button key={pack.id} type="button" onClick={() => buyPack(pack.id)}>
+              <span>
+                {pack.name} · {pack.credits} credits
+              </span>
+              <strong>{money(pack.price)}</strong>
+            </button>
+          ))}
+        </div>
+      </Reveal>
+      <Reveal>
         <div className="studio-pricing-footnote">
           <p>
-            Start free with 3 images every day, no card required. Image,
-            video, and music generations use different amounts of credits.
+            1 credit = 1 HD image. Nano Banana Pro images use 6, an 8-second
+            video 8, a music track 3. Unused credits roll over.
           </p>
           <div>
             <span>
               <Icon name="check" width="14" height="14" />
-              Monthly billing
+              Commercial use
             </span>
             <span>
               <Icon name="check" width="14" height="14" />

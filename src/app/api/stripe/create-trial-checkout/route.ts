@@ -1,12 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import Stripe from 'stripe'
+import { STRIPE_PLANS } from '@/lib/stripe-plans'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: '2025-08-27.basil',
 })
 
+// Pricing v2: the $5 / 3-day trial is retired (it delayed cash and could be
+// repeated for cheap credits). The paywall sells yearly plans and packs.
+const TRIAL_ENABLED = false
+
 export async function POST(request: NextRequest) {
+  if (!TRIAL_ENABLED) {
+    return NextResponse.json({ error: 'The trial is no longer available. See /billing for plans.' }, { status: 410 })
+  }
   try {
     const supabase = await createClient()
     
@@ -83,8 +91,15 @@ export async function POST(request: NextRequest) {
       payment_method_types: ['card'],
       line_items: [
         {
-          price: process.env.STRIPE_PRO_PRICE_ID!, // Main Pro subscription ($19.99/mo)
+          // Pro monthly at the current catalog price (inline price_data,
+          // see src/lib/stripe-plans.ts)
           quantity: 1,
+          price_data: {
+            currency: 'usd',
+            product: STRIPE_PLANS.pro.productId,
+            unit_amount: Math.round(STRIPE_PLANS.pro.price * 100),
+            recurring: { interval: 'month' },
+          },
         },
         {
           price: trialPriceId, // $5 one-time setup fee
@@ -97,6 +112,9 @@ export async function POST(request: NextRequest) {
           user_id: user.id,
           is_trial: 'true',
           plan: 'pro',
+          interval: 'month',
+          credits: String(STRIPE_PLANS.pro.credits),
+          pricing_version: 'v2',
         },
       },
       success_url: successUrl,

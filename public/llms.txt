@@ -12,10 +12,12 @@
 
 ## Pricing
 
-- Free: signup credits included, no card required
-- Starter: $9.99/month, 70 credits
-- Pro: $19.99/month, 200 credits, HD generation, video/music, full commercial usage rights
-- Business: $49.99/month, 500 credits
+- Free: 3 images on signup (watermarked previews), no card required
+- Starter: $19/month or $149/year, 100 credits per month, HD, no watermark, video/music, commercial use
+- Pro: $39/month or $299/year, 300 credits per month
+- Business: $99/month or $799/year, 1,000 credits per month
+- Credit packs (one-time, never expire): $29 for 100 credits, $79 for 350 credits
+- Yearly plans grant the full year of credits upfront
 
 ## Key pages
 

@@ -131,7 +131,7 @@ export default function ProUpsellModal({ onCloseAction, onUpgradeAction, isUpgra
     return `${mins}:${secs}`
   }
 
-  const handleSubscribe = async (plan: 'starter' | 'pro' | 'business', couponId?: string) => {
+  const handleSubscribe = async (plan: 'starter' | 'pro' | 'business', couponId?: string, interval: 'month' | 'year' = 'month') => {
     setIsUpgradingLocal(plan)
     const metaOptions = {
       plan,
@@ -146,6 +146,7 @@ export default function ProUpsellModal({ onCloseAction, onUpgradeAction, isUpgra
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           plan,
+          interval,
           successUrl: `${window.location.origin}/billing?success=true`,
           cancelUrl: `${window.location.origin}/billing?checkout=cancelled`,
           // Only apply discount to Pro plan

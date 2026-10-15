@@ -75,8 +75,9 @@ const organizationJsonLd = {
       description: SITE_DESCRIPTION,
       url: SITE_URL,
       offers: {
-        "@type": "Offer",
-        price: "9.99",
+        "@type": "AggregateOffer",
+        lowPrice: "19",
+        highPrice: "799",
         priceCurrency: "USD",
       },
       publisher: { "@id": `${SITE_URL}/#organization` },

@@ -1,7 +1,7 @@
 import Stripe from "stripe";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { STRIPE_PLANS } from "@/lib/stripe-plans";
+import { CREDIT_PACKS, STRIPE_PLANS, isCreditPackId, resolveSubscriptionPlan } from "@/lib/stripe-plans";
 import { trackPurchase } from "@/lib/tiktok-events";
 import { sendMetaEvent } from "@/lib/meta-capi";
 
@@ -23,33 +23,39 @@ const supabaseAdmin = createClient(
   }
 );
 
-// Helper function to get credits for a given Stripe price ID
-function getCreditsByPriceId(priceId: string): number {
-  if (priceId === process.env.STRIPE_STARTER_PRICE_ID) {
-    return STRIPE_PLANS.starter.credits;
-  } else if (priceId === process.env.STRIPE_PRO_PRICE_ID) {
-    return STRIPE_PLANS.pro.credits;
-  } else if (priceId === process.env.STRIPE_BUSINESS_PRICE_ID) {
-    return STRIPE_PLANS.business.credits;
-  }
-  return 0;
+type PriceLike = {
+  id?: string;
+  product?: string | { id: string } | null;
+  recurring?: { interval?: string } | null;
+} | null | undefined;
+
+// Plan + credits for a subscription: v2 subscriptions carry it in metadata,
+// legacy ones are matched by their fixed price id (see stripe-plans.ts).
+function planOf(subscription: Stripe.Subscription) {
+  const price = subscription.items.data[0]?.price as PriceLike;
+  return resolveSubscriptionPlan({
+    metadata: subscription.metadata,
+    priceId: price?.id,
+    productId: typeof price?.product === "string" ? price.product : price?.product?.id,
+    interval: price?.recurring?.interval,
+  });
 }
 
-// Helper function to get plan info by product ID
-function getPlanByProductId(productId: string): { credits: number; planName: string } | null {
-  // Map Stripe product IDs to our plan structure
-  const productIdToPlan: Record<string, { credits: number; planName: string }> = {
-    // Use actual Stripe product IDs from environment variables
-    [process.env.STRIPE_PRODUCT_ID_STARTER!]: { credits: STRIPE_PLANS.starter.credits, planName: 'starter' },
-    [process.env.STRIPE_PRODUCT_ID_PRO!]: { credits: STRIPE_PLANS.pro.credits, planName: 'pro' },
-    [process.env.STRIPE_PRODUCT_ID_BUSINESS!]: { credits: STRIPE_PLANS.business.credits, planName: 'business' },
-    // Fallback for metadata-based plan names
-    'starter': { credits: STRIPE_PLANS.starter.credits, planName: 'starter' },
-    'pro': { credits: STRIPE_PLANS.pro.credits, planName: 'pro' },
-    'business': { credits: STRIPE_PLANS.business.credits, planName: 'business' },
-  };
-  
-  return productIdToPlan[productId] || null;
+function planOfPrice(price: PriceLike) {
+  if (!price) return null;
+  return resolveSubscriptionPlan({
+    priceId: price.id,
+    productId: typeof price.product === "string" ? price.product : price.product?.id,
+    interval: price.recurring?.interval,
+  });
+}
+
+async function markHasPaid(match: { userId?: string | null; customerId?: string | null }) {
+  const q = supabaseAdmin.from("profiles").update({ has_paid: true });
+  const { error } = match.userId
+    ? await q.eq("id", match.userId)
+    : await q.eq("stripe_customer_id", match.customerId ?? "");
+  if (error) console.error("markHasPaid failed:", error.message);
 }
 
 // Grants credits exactly once per Stripe object (checkout session, invoice,
@@ -229,6 +235,70 @@ export async function POST(req: NextRequest) {
           break;
         }
 
+        // One-time credit pack
+        if (session.mode === "payment" && session.metadata?.type === "credit_pack") {
+          const userId = session.metadata?.user_id;
+          const packId = session.metadata?.pack;
+          if (session.payment_status !== "paid" || !userId || !isCreditPackId(packId)) {
+            console.log("Credit pack session not paid or missing data:", session.id);
+            break;
+          }
+          const pack = CREDIT_PACKS[packId];
+          const customerId = typeof session.customer === "string" ? session.customer : session.customer?.id;
+
+          // Link the Stripe customer if the profile doesn't have one yet.
+          if (customerId) {
+            await supabaseAdmin
+              .from("profiles")
+              .update({ stripe_customer_id: customerId })
+              .eq("id", userId)
+              .is("stripe_customer_id", null);
+          }
+
+          const { error: grantError } = await supabaseAdmin.rpc("grant_credits_once", {
+            p_user: userId,
+            p_amount: pack.credits,
+            p_reason: `credit_pack:${pack.id}`,
+            p_ref: `pack:${session.id}`,
+          });
+          if (grantError) throw new Error(`Credit pack grant failed: ${grantError.message}`);
+          await markHasPaid({ userId });
+
+          const amount = (session.amount_total || 0) / 100;
+          const currency = (session.currency || "usd").toUpperCase();
+          const email = session.customer_details?.email || session.customer_email || undefined;
+          try {
+            if (email) {
+              await trackPurchase({
+                email,
+                userId,
+                value: amount,
+                currency,
+                contentId: pack.id,
+                contentName: pack.name,
+                url: `${process.env.NEXT_PUBLIC_SITE_URL || 'https://image2ad.com'}/billing`,
+              });
+            }
+            await sendMetaEvent({
+              eventName: 'Purchase',
+              eventSourceUrl: `${process.env.NEXT_PUBLIC_SITE_URL || 'https://image2ad.com'}/billing`,
+              actionSource: 'website',
+              eventId: `purchase_${session.id}`,
+              eventTime: Math.floor(Date.now() / 1000),
+              customData: { value: amount, currency, content_name: pack.name, content_type: 'product', content_ids: [pack.id] },
+              userData: { email, externalId: userId },
+            });
+            await supabaseAdmin.rpc('track_server_event', {
+              p_user_id: userId,
+              p_event_name: 'payment_completed',
+              p_properties: { amount, currency, plan: pack.id, mode: 'payment' },
+            });
+          } catch (error) {
+            console.error('❌ Failed to track credit pack purchase:', error);
+          }
+          break;
+        }
+
         if (session.mode === "subscription") {
           const subscription = await stripe.subscriptions.retrieve(
             session.subscription as string
@@ -242,24 +312,9 @@ export async function POST(req: NextRequest) {
             break;
           }
 
-          // Get plan info from the subscription line items using price ID
-          const planItem = subscription.items.data[0];
-          let creditsToAdd = 0;
-          let planName = null;
-
-          if (planItem?.price?.id) {
-            // Use price ID to determine plan directly
-            creditsToAdd = getCreditsByPriceId(planItem.price.id);
-            
-            // Determine plan name based on price ID
-            if (planItem.price.id === process.env.STRIPE_STARTER_PRICE_ID) {
-              planName = 'starter';
-            } else if (planItem.price.id === process.env.STRIPE_PRO_PRICE_ID) {
-              planName = 'pro';
-            } else if (planItem.price.id === process.env.STRIPE_BUSINESS_PRICE_ID) {
-              planName = 'business';
-            }
-          }
+          const resolved = planOf(subscription);
+          const creditsToAdd = resolved?.credits ?? 0;
+          const planName = resolved?.plan ?? null;
 
           // Create or update customer profile
           const { data: existingProfile } = await supabaseAdmin
@@ -310,35 +365,36 @@ export async function POST(req: NextRequest) {
             }
           }
 
-          // Cancel any other active subscriptions for this customer (plan changes)
-          const allSubscriptions = await stripe.subscriptions.list({
-            customer: customerId,
-            status: 'active',
-          });
-
-          // Cancel all other subscriptions except the current one
-          const currentSubscriptionId = subscription.id;
-          const subscriptionsToCancel = allSubscriptions.data.filter(
-            sub => sub.id !== currentSubscriptionId
+          // Plan change via a new checkout: stop the customer's other
+          // subscriptions. Monthly ones end now (as before); yearly ones were
+          // paid upfront, so they just stop renewing at the end of the year.
+          const [activeSubs, trialingSubs] = await Promise.all([
+            stripe.subscriptions.list({ customer: customerId, status: 'active' }),
+            stripe.subscriptions.list({ customer: customerId, status: 'trialing' }),
+          ]);
+          const subscriptionsToCancel = [...activeSubs.data, ...trialingSubs.data].filter(
+            sub => sub.id !== subscription.id
           );
-
-          if (subscriptionsToCancel.length > 0) {
-            console.log(`Found ${subscriptionsToCancel.length} other active subscriptions to cancel`);
-            
-            for (const subToCancel of subscriptionsToCancel) {
-              try {
+          for (const subToCancel of subscriptionsToCancel) {
+            try {
+              const isYearly = subToCancel.items.data[0]?.price?.recurring?.interval === 'year';
+              if (isYearly) {
+                await stripe.subscriptions.update(subToCancel.id, { cancel_at_period_end: true });
+                console.log(`Old yearly subscription set to end at period end: ${subToCancel.id}`);
+              } else {
                 await stripe.subscriptions.cancel(subToCancel.id);
                 console.log(`Canceled old subscription: ${subToCancel.id}`);
-              } catch (error) {
-                console.error(`Error canceling subscription ${subToCancel.id}:`, error);
               }
+            } catch (error) {
+              console.error(`Error canceling subscription ${subToCancel.id}:`, error);
             }
           }
 
-          // Add credits based on product ID
+          // Credits for the first period (yearly = the whole year upfront)
           if (creditsToAdd > 0) {
-            await grantCreditsOnce(customerId, creditsToAdd, `subscription_start:${planName ?? "unknown"}`, `checkout:${session.id}`);
+            await grantCreditsOnce(customerId, creditsToAdd, `subscription_start:${planName ?? "unknown"}:${resolved?.interval ?? "month"}`, `checkout:${session.id}`);
           }
+          await markHasPaid({ customerId });
 
           // Track TikTok purchase event
           if (customer.email && planName) {
@@ -360,7 +416,7 @@ export async function POST(req: NextRequest) {
                   value: amount,
                   currency: currency.toUpperCase(),
                   contentId: planName,
-                  contentName: `${planName.charAt(0).toUpperCase() + planName.slice(1)} Plan`,
+                  contentName: `${planName.charAt(0).toUpperCase() + planName.slice(1)} Plan (${resolved?.interval === 'year' ? 'yearly' : 'monthly'})`,
                   url: `${process.env.NEXT_PUBLIC_SITE_URL || 'https://image2ad.com'}/billing`,
                 });
                 
@@ -394,6 +450,7 @@ export async function POST(req: NextRequest) {
                     amount,
                     currency: currency.toUpperCase(),
                     plan: planName,
+                    interval: resolved?.interval ?? 'month',
                     mode: session.mode,
                   },
                 });
@@ -479,22 +536,18 @@ export async function POST(req: NextRequest) {
       case "customer.subscription.updated": {
         const subscription = event.data.object as Stripe.Subscription;
 
-        // Get plan info from the subscription line items using price ID
         const planItem = subscription.items.data[0];
-        let creditsToAdd = 0;
-        let planName = null;
+        const resolved = planOf(subscription);
+        const creditsToAdd = resolved?.credits ?? 0;
+        const planName = resolved?.plan ?? null;
 
-        if (planItem?.price?.id) {
-          // Use price ID to determine plan directly
-          creditsToAdd = getCreditsByPriceId(planItem.price.id);
-          
-          // Determine plan name based on price ID
-          if (planItem.price.id === process.env.STRIPE_STARTER_PRICE_ID) {
-            planName = 'starter';
-          } else if (planItem.price.id === process.env.STRIPE_PRO_PRICE_ID) {
-            planName = 'pro';
-          } else if (planItem.price.id === process.env.STRIPE_BUSINESS_PRICE_ID) {
-            planName = 'business';
+        // An outgoing subscription (set to end because the customer bought a
+        // new plan) must not overwrite the new plan on the profile.
+        if (subscription.cancel_at_period_end) {
+          const others = await stripe.subscriptions.list({ customer: subscription.customer as string, status: "active" });
+          if (others.data.some((s) => s.id !== subscription.id && !s.cancel_at_period_end)) {
+            console.log(`Skipping profile update for outgoing subscription ${subscription.id}`);
+            break;
           }
         }
 
@@ -520,9 +573,10 @@ export async function POST(req: NextRequest) {
         // Upgrades only, the credit difference (Pro -> Business = +300), and at
         // most ONE upgrade grant per subscription per billing period, so
         // switching plans back and forth can't farm credits.
-        const previous = (event.data as { previous_attributes?: { items?: { data?: Array<{ price?: { id?: string } }> } } }).previous_attributes;
-        const previousPriceId = previous?.items?.data?.[0]?.price?.id;
-        const previousCredits = previousPriceId ? getCreditsByPriceId(previousPriceId) : 0;
+        const previous = (event.data as { previous_attributes?: { items?: { data?: Array<{ price?: PriceLike }> } } }).previous_attributes;
+        const previousPrice = previous?.items?.data?.[0]?.price;
+        const previousPriceId = previousPrice?.id;
+        const previousCredits = planOfPrice(previousPrice)?.credits ?? 0;
         const upgradeCredits = creditsToAdd - previousCredits;
         if (
           event.type === "customer.subscription.updated" &&
@@ -581,8 +635,7 @@ export async function POST(req: NextRequest) {
 
         if (subscriptionId) {
           const subscription = await stripe.subscriptions.retrieve(subscriptionId);
-          const planItem = subscription.items.data[0];
-          const creditsToAdd = planItem?.price?.id ? getCreditsByPriceId(planItem.price.id) : 0;
+          const creditsToAdd = planOf(subscription)?.credits ?? 0;
 
           // Only recurring cycles grant here; the first invoice of a new
           // subscription is covered by checkout.session.completed.
@@ -616,6 +669,80 @@ export async function POST(req: NextRequest) {
             console.error("Error updating failed payment status:", error);
           }
         }
+        break;
+      }
+
+      // Refunds / chargebacks: yearly plans and packs grant credits upfront,
+      // so take back what was granted for that payment (never below 0) and
+      // drop paid status. Partial refunds are left alone (goodwill credits).
+      // Requires these events to be enabled on the Stripe webhook endpoint.
+      case "charge.refunded":
+      case "charge.dispute.created": {
+        const obj = event.data.object as Stripe.Charge | Stripe.Dispute;
+        const charge: Stripe.Charge =
+          event.type === "charge.refunded"
+            ? (obj as Stripe.Charge)
+            : await stripe.charges.retrieve(
+                typeof (obj as Stripe.Dispute).charge === "string"
+                  ? ((obj as Stripe.Dispute).charge as string)
+                  : ((obj as Stripe.Dispute).charge as Stripe.Charge).id
+              );
+        if (event.type === "charge.refunded" && !charge.refunded) {
+          console.log(`Partial refund on ${charge.id}, credits kept`);
+          break;
+        }
+        const customerId = typeof charge.customer === "string" ? charge.customer : charge.customer?.id;
+        if (!customerId) break;
+        const { data: profile } = await supabaseAdmin
+          .from("profiles")
+          .select("id")
+          .eq("stripe_customer_id", customerId)
+          .single();
+        if (!profile) break;
+
+        // Which credit grants did this payment produce?
+        //  - credit pack / first subscription payment: the Checkout session
+        //  - renewals: the invoice (Charge.invoice is gone in API basil, so
+        //    go through invoice payments)
+        const refs: string[] = [];
+        const piId = typeof charge.payment_intent === "string" ? charge.payment_intent : charge.payment_intent?.id;
+        if (piId) {
+          const sessions = await stripe.checkout.sessions.list({ payment_intent: piId, limit: 1 });
+          if (sessions.data[0]) refs.push(`pack:${sessions.data[0].id}`, `checkout:${sessions.data[0].id}`);
+          const invoicePayments = await stripe.invoicePayments.list({
+            payment: { type: "payment_intent", payment_intent: piId },
+            limit: 1,
+          });
+          const inv = invoicePayments.data[0]?.invoice;
+          const invId = typeof inv === "string" ? inv : inv?.id;
+          if (invId) {
+            refs.push(`invoice:${invId}`);
+            const invoice = await stripe.invoices.retrieve(invId);
+            const subId = invoiceSubscriptionId(invoice);
+            if (invoice.billing_reason === "subscription_create" && subId) {
+              const subSessions = await stripe.checkout.sessions.list({ subscription: subId, limit: 1 });
+              if (subSessions.data[0]) refs.push(`checkout:${subSessions.data[0].id}`);
+            }
+          }
+        }
+        let granted = 0;
+        if (refs.length) {
+          const { data: grants } = await supabaseAdmin
+            .from("credit_grants")
+            .select("amount")
+            .in("source_ref", refs)
+            .gt("amount", 0);
+          granted = (grants ?? []).reduce((sum, g: { amount: number }) => sum + (g.amount ?? 0), 0);
+        }
+        // One clawback per charge, whichever event (refund or dispute) comes first.
+        const { data: applied, error } = await supabaseAdmin.rpc("clawback_credits_once", {
+          p_user: profile.id,
+          p_amount: granted,
+          p_ref: `clawback:${charge.id}`,
+          p_paid_refs: refs,
+        });
+        if (error) throw new Error(`refund clawback failed: ${error.message}`);
+        console.log(`${event.type}: ${applied ? `removed up to ${granted}` : "already handled"} credits for ${profile.id} (charge ${charge.id})`);
         break;
       }
 

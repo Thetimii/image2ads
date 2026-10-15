@@ -115,7 +115,18 @@ export default function DashboardLayout({
   const generator = null;
 
   // Determine if user has pro access (not free)
-  const hasPro = profile.subscription_status !== "free";
+  // Paid access unlocks video/music/pro features: an active subscription, or
+  // anyone who has ever paid (credit packs, ex-subscribers with credits).
+  const hasPro =
+    profile.subscription_status === "active" ||
+    profile.subscription_status === "trialing" ||
+    (profile as { has_paid?: boolean }).has_paid === true;
+  // Active subscribers never see the out-of-credits paywall; everyone else
+  // (free users, pack buyers, ex-subscribers) does when they hit 0.
+  const isSubscribed =
+    profile.subscription_status === "active" ||
+    profile.subscription_status === "trialing";
+  const [paywallInterval, setPaywallInterval] = useState<"month" | "year">("year");
 
   // Lock body scroll when sidebar is open on mobile
   useEffect(() => {
@@ -144,8 +155,8 @@ export default function DashboardLayout({
   // Check credits and show appropriate modal
   useEffect(() => {
     const checkCreditsAndShowModal = async () => {
-      // Only show modals for free users
-      if (hasPro) return;
+      // Only for users without an active subscription
+      if (isSubscribed) return;
 
       // Don't show if any modal is already open
       if (
@@ -169,7 +180,7 @@ export default function DashboardLayout({
     checkCreditsAndShowModal();
   }, [
     profile.credits,
-    hasPro,
+    isSubscribed,
     showUpgrade,
     showProUpsellModal,
     showProDiscountModal,
@@ -177,6 +188,23 @@ export default function DashboardLayout({
     discountModalDismissed,
     trialModalDismissed,
   ]);
+
+  // Visitors who picked a plan / pack on the pricing page see the paywall
+  // right after signing up (once), instead of only when credits run out.
+  useEffect(() => {
+    if (hasPro) return;
+    try {
+      const raw = localStorage.getItem("i2a_checkout_intent");
+      if (!raw) return;
+      localStorage.removeItem("i2a_checkout_intent");
+      const intent = JSON.parse(raw) as { ts?: number; interval?: string };
+      if (intent.ts && Date.now() - intent.ts < 24 * 60 * 60 * 1000) {
+        setPaywallInterval(intent.interval === "month" ? "month" : "year");
+        setShowProTrialModal(true);
+      }
+    } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
@@ -203,6 +231,7 @@ export default function DashboardLayout({
   const handleSubscribe = async (
     plan: "starter" | "pro" | "business",
     couponId?: string,
+    interval: "month" | "year" = "month",
   ) => {
     setIsUpgrading(plan);
     const metaOptions = {
@@ -221,6 +250,7 @@ export default function DashboardLayout({
         },
         body: JSON.stringify({
           plan,
+          interval,
           successUrl: `${window.location.origin}/billing?success=true`,
           cancelUrl: `${window.location.origin}${pathname}?checkout=cancelled`,
         }),
@@ -566,11 +596,13 @@ export default function DashboardLayout({
           />
         )}
 
-        {/* Pro Trial Modal ($5 at 0 credits) */}
+        {/* Paywall (yearly plans + packs) at 0 credits */}
         {showProTrialModal && (
           <ProTrialModal
+            defaultInterval={paywallInterval}
             onCloseAction={() => {
               setShowProTrialModal(false);
+              setPaywallInterval("year");
               setTrialModalDismissed(true);
               // Save to localStorage to persist across page navigations
               localStorage.setItem(`trial-modal-dismissed-${user.id}`, "true");
@@ -621,8 +653,8 @@ export default function DashboardLayout({
               {/* Footer */}
               <div className="border-t border-gray-200 px-6 py-4 bg-gray-50 rounded-b-2xl">
                 <p className="text-xs text-gray-500 text-center">
-                  💳 Secure payment powered by Stripe • Auto-renews monthly •
-                  Cancel anytime
+                  💳 Secure payment powered by Stripe • Cancel anytime •
+                  Credit packs never expire
                 </p>
               </div>
             </div>

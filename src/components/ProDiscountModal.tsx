@@ -1,5 +1,7 @@
 'use client'
 
+import { STRIPE_PLANS } from '@/lib/stripe-plans'
+
 import { useState, useEffect } from 'react'
 import {
   trackMetaAddPaymentInfo,
@@ -164,7 +166,7 @@ export default function ProDiscountModal({ onCloseAction, onUpgradeAction }: Pro
     }
   }
 
-  const originalPrice = 19.99
+  const originalPrice = STRIPE_PLANS.pro.price
   const discountedPrice = (originalPrice * 0.5).toFixed(2) // 50% off
 
   return (
@@ -273,7 +275,7 @@ export default function ProDiscountModal({ onCloseAction, onUpgradeAction }: Pro
             disabled={isUpgrading}
             className="w-full mt-3 sm:mt-4 text-gray-600 hover:text-gray-800 py-2 text-xs sm:text-sm font-medium transition-colors disabled:opacity-50 px-2"
           >
-            Continue with 3 free images a day and miss out on this deal
+            Continue on the free plan and miss out on this deal
           </button>
         </div>
 

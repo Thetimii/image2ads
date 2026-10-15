@@ -132,9 +132,15 @@ export async function startGeneration(job: JobRow, opts: GenerateOptions): Promi
     return { http: 200, body: { success: true, jobId: job.id, taskId: job.task_id, status: job.status, result_type: resultType } };
   }
 
-  const { data: profile, error: pErr } = await db().from("profiles").select("subscription_status").eq("id", job.user_id).maybeSingle();
+  let { data: profile, error: pErr } = await db().from("profiles").select("subscription_status, has_paid").eq("id", job.user_id).maybeSingle();
+  if (pErr && /has_paid/.test(pErr.message ?? "")) {
+    // has_paid not migrated yet - fall back to subscription status only.
+    ({ data: profile, error: pErr } = await db().from("profiles").select("subscription_status").eq("id", job.user_id).maybeSingle());
+  }
   if (pErr || !profile) return { http: 404, body: { success: false, error: "Profile not found", code: "PROFILE_NOT_FOUND", jobId: job.id } };
-  const paid = profile.subscription_status === "active" || profile.subscription_status === "trialing";
+  // Paid tier = active subscriber, or anyone who has ever paid (credit pack
+  // buyers, former subscribers spending leftover credits).
+  const paid = profile.subscription_status === "active" || profile.subscription_status === "trialing" || (profile as { has_paid?: boolean }).has_paid === true;
 
   // Older callers didn't always set has_images; image_ids is authoritative.
   if (!job.has_images && Array.isArray(job.image_ids) && job.image_ids.length > 0) job = { ...job, has_images: true };
@@ -171,7 +177,7 @@ export async function startGeneration(job: JobRow, opts: GenerateOptions): Promi
   if (started === "insufficient_credits") {
     const msg = paid
       ? friendlyMessage("insufficient_credits")
-      : `You've used today's ${FREE_DAILY_CREDITS} free images. They refill tomorrow — or upgrade to keep creating now.`;
+      : `You've used your ${FREE_DAILY_CREDITS} free images. Pick a plan or a credit pack to keep creating - with HD quality and no watermark.`;
     await failJob(job.id, "insufficient_credits", "insufficient credits", msg, { requireStatus: "pending" });
     return { http: 402, body: { success: false, error: msg, code: paid ? "INSUFFICIENT_CREDITS" : "FREE_LIMIT_REACHED", jobId: job.id } };
   }

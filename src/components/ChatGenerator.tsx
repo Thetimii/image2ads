@@ -272,12 +272,18 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
   const isMusicMode = gen.activeTab === 'text-to-music'
   const isImageMode = gen.activeTab === 'text-to-image' || gen.activeTab === 'image-to-image'
   // Video / music are subscriber features (also covers a null subscription_status)
-  const isLocked = !!meta.locked && !(profile?.subscription_status === 'active' || profile?.subscription_status === 'trialing')
+  // Paid = active subscriber, or anyone who has ever paid (credit packs,
+  // former subscribers spending leftover credits).
+  const hasPaidAccess =
+    profile?.subscription_status === 'active' ||
+    profile?.subscription_status === 'trialing' ||
+    (profile as { has_paid?: boolean } | null)?.has_paid === true
+  const isLocked = !!meta.locked && !hasPaidAccess
   const chatContainerRef = useRef<HTMLDivElement | null>(null)
 
   // Helper to get credit text based on user type
   // Treat any status other than 'active' or 'trialing' as free
-  const isPro = profile?.subscription_status === 'active' || profile?.subscription_status === 'trialing'
+  const isPro = hasPaidAccess
   const isFreeUser = !isPro
   const hasPro = isPro
 
@@ -289,10 +295,10 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
 
   const getCreditText = () => {
     if (isFreeUser) {
-      // Free plan: 3 free credits a day (1 image = 1 credit). More than that
-      // means leftover purchased credits - just show the balance.
+      // Free plan: 3 free credits once per account (1 image = 1 credit).
       if (profile.credits > 3) return `${profile.credits} credits`
-      return profile.credits === 1 ? '1 free image left today' : `${profile.credits} free images left today`
+      if (profile.credits <= 0) return 'No free images left'
+      return profile.credits === 1 ? '1 free image left' : `${profile.credits} free images left`
     }
     return `${profile.credits} credits`
   }
@@ -366,7 +372,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
     requestAnimationFrame(() => scrollToBottom('auto'))
   }
 
-  const handleSubscribe = async (plan: 'starter' | 'pro' | 'business', couponId?: string) => {
+  const handleSubscribe = async (plan: 'starter' | 'pro' | 'business', couponId?: string, interval: 'month' | 'year' = 'month') => {
     setIsUpgrading(plan)
     const metaOptions = {
       plan,
@@ -401,6 +407,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
         },
         body: JSON.stringify({
           plan,
+          interval,
           successUrl: `${window.location.origin}/billing?success=true`,
           cancelUrl: `${window.location.origin}${window.location.pathname}?checkout=cancelled`,
           // Apply discount if active and Pro plan
@@ -650,7 +657,6 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
         console.log(`🔍 Polling job ${jobId}: status=${jobStatus.status}, elapsed=${Math.round(elapsed / 1000)}s`)
 
         if (jobStatus.status === 'completed' && jobStatus.result_url) {
-          console.log(`✅ Job ${jobId} completed! Getting signed URL...`)
           notifyFirstGenerationCompleted()
 
           // Show success toast notification
@@ -1101,7 +1107,6 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
                 .createSignedUrl(updatedJob.result_url, 3600)
 
               const mediaUrl = signedUrl?.signedUrl || ''
-              console.log(`[ChatGenerator] 🖼️ Media URL: ${mediaUrl}`)
 
               // For music, also get cover URL if available
               let coverUrl = ''
@@ -1203,15 +1208,12 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
               }
 
               // Create signed URL - same as library does
-              console.log(`[ChatGenerator] 🔗 Creating signed URL...`)
               const { data: signedUrl } = await supabase.storage
                 .from('results')
                 .createSignedUrl(statusData.result_url, 3600)
 
-              console.log(`[ChatGenerator] 🔗 Signed URL result:`, signedUrl)
 
               const mediaUrl = signedUrl?.signedUrl || ''
-              console.log(`[ChatGenerator] 🖼️ FINAL MEDIA URL: ${mediaUrl}`)
 
               if (!mediaUrl) {
                 console.error(`[ChatGenerator] ❌ NO MEDIA URL - CANNOT SHOW IMAGE!`)
@@ -1222,7 +1224,6 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
               // For music, also get cover URL if available
               let coverUrl = ''
               if (meta.resultType === 'music' && statusData.cover_url) {
-                console.log(`[ChatGenerator] 🎨 Creating cover signed URL...`)
                 const { data: coverSignedUrl } = await supabase.storage
                   .from('results')
                   .createSignedUrl(statusData.cover_url, 3600)
@@ -1257,7 +1258,6 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
               gen.updateMessage(gen.activeTab, assistantPlaceholder.id, updateData)
 
               console.log(`[ChatGenerator] ✅ MESSAGE UPDATE COMPLETED!`)
-              console.log(`[ChatGenerator] 🎯 Final message should show image with URL: ${mediaUrl}`)
 
               // Refresh profile to get updated credit count
               console.log(`[ChatGenerator] 💳 Refreshing profile to get updated credits...`)
@@ -1478,8 +1478,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
             <button
               onClick={(e) => {
                 e.stopPropagation()
-                console.log('$5 Pro Trial button clicked, onShowUpgrade exists:', !!onShowUpgrade)
-                // Always show the $5 trial modal
+                                // Opens the paywall (yearly plans + packs)
                 if (onShowUpgrade) {
                   onShowUpgrade()
                 } else {
@@ -1489,9 +1488,9 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
                 }
               }}
               className="text-sm bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white px-4 py-2 rounded-full font-semibold shadow-md hover:shadow-lg hover:scale-105 transition-all cursor-pointer whitespace-nowrap"
-              title="Get Pro access - $5 for 3 days"
+              title="See plans"
             >
-              ✨ $5 Pro Trial
+              ✨ Upgrade
             </button>
           )}
 
@@ -1675,13 +1674,14 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
               {m.mediaUrl && m.mediaType === 'image' && (
                 <div className="mt-2 sm:mt-3 relative group">
                   <Image
-                    src={m.mediaUrl}
+                    // Free plan sees the watermarked preview (server-rendered)
+                    src={isFreeUser && m.jobId ? `/api/download-image?jobId=${m.jobId}&inline=1` : m.mediaUrl}
                     alt="Generated result"
                     width={400}
                     height={400}
                     unoptimized
                     className="rounded-lg w-full max-w-full sm:max-w-[350px] lg:max-w-[400px] shadow-sm cursor-pointer hover:shadow-lg transition-shadow"
-                    onClick={() => m.mediaUrl && window.open(m.mediaUrl, '_blank')}
+                    onClick={() => m.mediaUrl && window.open(isFreeUser && m.jobId ? `/api/download-image?jobId=${m.jobId}&inline=1` : m.mediaUrl, '_blank')}
                   />
                   <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
                     <button

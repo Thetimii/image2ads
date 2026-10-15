@@ -40,7 +40,7 @@ export default function UpgradePrompt({ isOpen, onCloseAction, onOpenPricingActi
           {/* Body */}
           <div className="p-8">
             <p className="text-gray-700 text-lg mb-6 text-center">
-              You've used today's <span className="font-semibold text-blue-600">3 free images</span>. They refill tomorrow — or pick a plan for more images, HD quality and AI video right now.
+              You're <span className="font-semibold text-blue-600">out of credits</span>. Pick a plan or a one-time credit pack to keep creating - HD quality, no watermark, AI video.
             </p>
 
             <div className="space-y-3">

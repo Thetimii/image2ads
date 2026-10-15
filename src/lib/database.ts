@@ -23,7 +23,7 @@ export async function getUserProfile(userId: string): Promise<Profile | null> {
     if (guardError) console.warn("apply_signup_ip_guard failed:", guardError.message);
   }
 
-  // Free plan: top up today's 3 free credits (once per day, no-op for
+  // Free plan: grant the one-time 3 welcome credits (no-op once granted, for
   // subscribers) so the balance shown is current. Never blocks page loads.
   const { error: refillError } = await supabase.rpc("refill_my_free_credits");
   if (refillError) console.warn("refill_my_free_credits failed:", refillError.message);

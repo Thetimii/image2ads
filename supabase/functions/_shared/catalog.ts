@@ -21,9 +21,12 @@ export const KIE_USD_PER_CREDIT = 0.005;
  * We use the Pro figure as the planning number - it is the most common plan.
  */
 export const NET_REVENUE_USD_PER_CREDIT = 0.0955;
+// Pricing v2 (Oct 2026): Pro is $39 / 300 credits (0.1253/credit net) and
+// yearly Pro $299 / 3600 (0.0802/credit net). 0.0955 stays the planning
+// number - it sits between the two.
 
-/** Free plan: non-subscribers are topped up to this many credits once per
- * UTC day (1 standard image = 1 credit -> 3 free images a day). The real
+/** Free plan: new accounts get this many credits ONCE (pricing v2, Oct
+ * 2026 - it used to refill daily). 1 standard image = 1 credit. The real
  * value lives in SQL, public.free_daily_credits(); this copy is for
  * messages and the margin report only. */
 export const FREE_DAILY_CREDITS = 3;
