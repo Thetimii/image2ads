@@ -17,6 +17,7 @@ import ProUpsellModal from './ProUpsellModal'
 
 import ProDiscountModal from './ProDiscountModal'
 import ModelSelector from './ModelSelector'
+import { Icon } from '@/components/studio/StudioIcons'
 import {
   trackMetaAddPaymentInfo,
   trackMetaInitiateCheckout,
@@ -1399,7 +1400,7 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
   }
 
   return (
-    <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
+    <div className="sc-root flex flex-col flex-1 min-h-0 overflow-hidden">
       {/* Tutorial Dark Overlay - covers everything */}
       {shouldHighlightGenerate && (
         <div className="fixed inset-0 bg-black/60 z-[9999] pointer-events-none" />
@@ -1464,33 +1465,30 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
       )} */}
 
       {/* Header */}
-      {/* Fixed header inside generator area */}
-      <div
-        className="flex items-center justify-between border-b border-gray-200 bg-white px-6 h-16 flex-shrink-0"
-      >
-        <div className="flex flex-col justify-center">
-          <h1 className="text-base font-semibold text-gray-800 leading-tight">{meta.title}</h1>
-          <p className="text-xs text-gray-500 leading-tight">{meta.subtitle}</p>
+      <div className="sc-header">
+        <div className="sc-header-title">
+          <h1>{meta.title}</h1>
+          <p>{meta.subtitle}</p>
         </div>
-        <div className="flex items-center gap-3 flex-shrink-0">
+        <div className="sc-header-actions">
           {/* Upgrade Button - Always visible for free users */}
           {isFreeUser && (
             <button
               onClick={(e) => {
                 e.stopPropagation()
-                                // Opens the paywall (yearly plans + packs)
+                // Opens the paywall (yearly plans + packs)
                 if (onShowUpgrade) {
                   onShowUpgrade()
                 } else {
                   console.warn('onShowUpgrade not available, using fallback')
-                  // Fallback to locked feature handler
                   onLockedFeature?.()
                 }
               }}
-              className="text-sm bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white px-4 py-2 rounded-full font-semibold shadow-md hover:shadow-lg hover:scale-105 transition-all cursor-pointer whitespace-nowrap"
+              className="sc-upgrade"
               title="See plans"
             >
-              ✨ Upgrade
+              <Icon name="spark" />
+              Upgrade
             </button>
           )}
 
@@ -1498,23 +1496,22 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
           {!isFreeUser && (
             <button
               onClick={() => {
-                // Call onLockedFeature to show 3-plan upgrade modal
                 onLockedFeature?.()
               }}
-              className="text-xs bg-gradient-to-r from-purple-500 to-pink-500 text-white px-3 py-1.5 rounded-full font-medium shadow-sm hover:shadow-lg hover:scale-105 transition-all cursor-pointer whitespace-nowrap"
+              className="sc-credits"
               title="Click to get more credits"
             >
-              ⭐ {getCreditText()}
+              <span className="sc-credits-dot" />
+              {getCreditText()}
             </button>
           )}
         </div>
       </div>
 
-      {/* Chat scroll area */}
-      {/* Scrollable chat body only */}
+      {/* Scrollable chat body */}
       <div
         ref={chatContainerRef}
-        className="flex-1 min-h-0 overflow-y-auto px-6 py-4 bg-[#f7f7f8] space-y-4 relative"
+        className="sc-body"
         onDragOver={(e) => { e.preventDefault(); if (requiresImage) setIsDragging(true) }}
         onDragLeave={() => setIsDragging(false)}
         onDrop={(e) => {
@@ -1530,92 +1527,61 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
         }}
       >
         {isDragging && requiresImage && (
-          <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/80 backdrop-blur-sm border-2 border-dashed border-purple-400 rounded-xl">
-            <div className="text-center text-purple-600 font-medium text-sm flex flex-col items-center gap-2">
-              <span className="text-4xl">📁</span>
+          <div className="sc-dropzone">
+            <div>
+              <Icon name="upload" />
               Drop your reference image here
             </div>
           </div>
         )}
         {history.length === 0 && (
-          <div className="flex items-center justify-center h-full px-4">
+          <div className="sc-empty-wrap">
             <div
               onClick={requiresImage ? handleUploadClick : undefined}
-              className={`max-w-lg w-full text-center px-4 py-6 sm:px-6 sm:py-8 lg:px-8 lg:py-12 rounded-xl border-2 ${requiresImage
-                ? 'border-dashed border-purple-300 bg-purple-50/30 cursor-pointer hover:bg-purple-50/50 hover:border-purple-400 transition-all'
-                : 'border-gray-200 bg-white'
-                }`}
+              className={`sc-empty ${requiresImage ? 'is-upload' : ''}`}
             >
               {requiresImage ? (
                 <>
-                  <div className="flex justify-center gap-3 mb-4 text-4xl">
-                    <span>📷</span>
-                    <span>🖼️</span>
-                    <span>📁</span>
-                  </div>
-                  <h3 className="text-base font-semibold text-gray-800 mb-2">Upload Your Reference Image</h3>
-                  <p className="text-sm text-gray-600 leading-relaxed mb-1">
-                    Click here or drag & drop an image to start transforming.
-                  </p>
-                  <div className="flex items-center justify-between mt-3">
-                    <p className="text-xs text-gray-500">
-                      Supports JPG, PNG up to 10MB
-                    </p>
-                    <div className="bg-green-50 border border-green-200 px-3 py-1 rounded-xl">
-                      <span className="text-xs font-medium text-green-700">
-                        {gen.activeTab === 'image-to-video' ? '8 credits per video' : '1 credit per image'}
-                      </span>
-                    </div>
+                  <span className="sc-empty-icon"><Icon name="upload" /></span>
+                  <span className="sc-eyebrow">Step 1 · Your product</span>
+                  <h3>Upload your product photo</h3>
+                  <p>Click here or drag &amp; drop an image to start transforming it.</p>
+                  <div className="sc-empty-foot">
+                    <span>JPG or PNG · up to 10MB</span>
+                    <span className="sc-chip">{gen.activeTab === 'image-to-video' ? '8 credits per video' : '1 credit per image'}</span>
                   </div>
                 </>
               ) : gen.activeTab.includes('video') ? (
                 <>
-                  <div className="text-5xl mb-4">🎬</div>
-                  <h3 className="text-base font-semibold text-gray-800 mb-2">Describe Your Video Scene</h3>
-                  <p className="text-sm text-gray-600 leading-relaxed">
-                    Describe motion, camera movements, duration, and visual storytelling. Include scene transitions, object movements, and cinematic style.
-                  </p>
-                  <div className="flex items-center justify-between mt-3">
-                    <p className="text-xs text-gray-400">
-                      Example: "8-second dolly shot of a luxury perfume bottle rotating on marble, soft lighting, elegant motion blur"
-                    </p>
-                    <div className="bg-orange-50 border border-orange-200 px-3 py-1 rounded-xl">
-                      <span className="text-xs font-medium text-orange-700">8 credits per video</span>
-                    </div>
+                  <span className="sc-empty-icon"><Icon name="video" /></span>
+                  <span className="sc-eyebrow">Text to video</span>
+                  <h3>Describe your video scene</h3>
+                  <p>Describe motion, camera movement and style. Include how objects move and the mood of the shot.</p>
+                  <div className="sc-empty-foot">
+                    <span>&ldquo;8-second dolly shot of a perfume bottle rotating on marble, soft light&rdquo;</span>
+                    <span className="sc-chip">8 credits per video</span>
                   </div>
                 </>
               ) : isMusicMode ? (
                 <>
-                  <div className="text-3xl sm:text-4xl lg:text-5xl mb-2 sm:mb-3">🎵</div>
-                  <h3 className="text-sm sm:text-base font-semibold text-gray-800 mb-1.5 sm:mb-2">Describe Your Music</h3>
-                  <p className="text-xs sm:text-sm text-gray-600 leading-relaxed">
-                    Describe the style, mood, instruments, tempo, and energy level.
-                  </p>
-                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-0 mt-2 sm:mt-3">
-                    <p className="text-xs text-gray-400">
-                      Example: "Upbeat rock with electric guitars, energetic"
-                    </p>
-                    <div className="bg-purple-50 border border-purple-200 px-2 sm:px-3 py-1 rounded-xl">
-                      <span className="text-xs font-medium text-purple-700">3 credits</span>
-                    </div>
+                  <span className="sc-empty-icon"><Icon name="music" /></span>
+                  <span className="sc-eyebrow">Text to music</span>
+                  <h3>Describe your music</h3>
+                  <p>Describe the style, mood, instruments, tempo and energy level.</p>
+                  <div className="sc-empty-foot">
+                    <span>&ldquo;Upbeat rock with electric guitars, energetic&rdquo;</span>
+                    <span className="sc-chip">3 credits</span>
                   </div>
                 </>
               ) : (
                 <>
-                  <div className="text-3xl sm:text-4xl lg:text-5xl mb-2 sm:mb-3">✨</div>
-                  <h3 className="text-sm sm:text-base font-semibold text-gray-800 mb-1.5 sm:mb-2">Describe Your Vision</h3>
-                  <p className="text-xs sm:text-sm text-gray-600 leading-relaxed">
-                    Use rich details: lighting, materials, mood, camera angles, and visual style.
-                  </p>
-                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-0 mt-2 sm:mt-3">
-                    <p className="text-xs text-gray-400">
-                      Example: "Luxury watch on marble surface, dramatic lighting"
-                    </p>
-                    <div className={`${selectedModel === 'nano-banana-pro' ? 'bg-amber-50 border-amber-200' : 'bg-green-50 border-green-200'} border px-2 sm:px-3 py-1 rounded-xl flex-shrink-0`}>
-                      <span className={`text-xs font-medium ${selectedModel === 'nano-banana-pro' ? 'text-amber-700' : 'text-green-700'}`}>
-                        {selectedModel === 'nano-banana-pro' ? '6 credits' : '1 credit'}
-                      </span>
-                    </div>
+                  <span className="sc-empty-icon"><Icon name="spark" /></span>
+                  <span className="sc-eyebrow">New ad</span>
+                  <h3>Describe your vision</h3>
+                  <p>Add a product photo below, then describe lighting, materials, mood, camera angle and style.</p>
+                  <div className="sc-empty-foot">
+                    <span>&ldquo;Luxury watch on a marble surface, dramatic lighting&rdquo;</span>
+                    <span className="sc-chip">{selectedModel === 'nano-banana-pro' ? '6 credits' : '1 credit'}</span>
                   </div>
                 </>
               )}
@@ -1623,56 +1589,33 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
           </div>
         )}
         {history.length > 0 && canLoadMore && (
-          <div className="flex justify-center">
-            <button
-              onClick={loadOlderMessages}
-              className="px-3 py-1.5 text-xs rounded-full bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 shadow-sm"
-            >
+          <div className="sc-load-more">
+            <button onClick={loadOlderMessages}>
               Load previous {Math.min(DEFAULT_VISIBLE_MESSAGES, history.length - visibleHistory.length)} messages
             </button>
           </div>
         )}
         {visibleHistory.map(m => (
-          <div key={m.id} className={`flex w-full ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-            <div className={`${m.role === 'user' ? 'bg-purple-600 text-white rounded-2xl rounded-br-sm' : 'bg-white border border-gray-200 rounded-2xl rounded-bl-sm'} px-3 sm:px-4 py-2 sm:py-3 shadow-sm text-xs sm:text-sm max-w-[85%] sm:max-w-[75%] lg:max-w-[65%]`}>
-              <div className="whitespace-pre-wrap leading-relaxed">
+          <div key={m.id} className={`sc-row ${m.role === 'user' ? 'is-user' : 'is-assistant'}`}>
+            {m.role !== 'user' && (
+              <span className="sc-avatar" aria-hidden="true"><Icon name="spark" /></span>
+            )}
+            <div className={`sc-bubble ${m.role === 'user' ? 'is-user' : 'is-assistant'}`}>
+              <div className="sc-bubble-text">
                 {m.content}
               </div>
               {m.status === 'pending' && (
-                <div className="mt-2 sm:mt-3 w-full sm:w-[220px] lg:w-[260px] h-[120px] sm:h-[140px] lg:h-[170px] rounded-lg bg-gradient-to-br from-purple-50 via-pink-50 to-purple-50 relative overflow-hidden border border-purple-200/50">
-                  {/* Animated shimmer */}
-                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/50 to-transparent animate-[shimmer_2s_infinite] -translate-x-full" />
-
-                  {/* Pulsing dots */}
-                  <div className="absolute top-2 sm:top-3 lg:top-4 left-2 sm:left-3 lg:left-4 flex gap-0.5 sm:gap-1">
-                    <div className="w-1.5 sm:w-2 h-1.5 sm:h-2 bg-purple-400 rounded-full animate-bounce [animation-delay:-0.3s]" />
-                    <div className="w-1.5 sm:w-2 h-1.5 sm:h-2 bg-pink-400 rounded-full animate-bounce [animation-delay:-0.15s]" />
-                    <div className="w-1.5 sm:w-2 h-1.5 sm:h-2 bg-purple-400 rounded-full animate-bounce" />
+                <div className="sc-pending">
+                  <div className="sc-pending-top">
+                    <span className="sc-pending-dots"><i /><i /><i /></span>
+                    <span className="sc-pending-time">{meta.resultType === 'video' ? '2–5 min' : '30–60 sec'}</span>
                   </div>
-
-                  {/* Rotating spinner */}
-                  <div className="absolute top-2 sm:top-3 lg:top-4 right-2 sm:right-3 lg:right-4">
-                    <div className="w-3 sm:w-4 h-3 sm:h-4 border-2 border-purple-300 border-t-purple-600 rounded-full animate-spin" />
-                  </div>
-
-                  {/* Center text with typing animation */}
-                  <div className="absolute inset-0 flex flex-col items-center justify-center text-center px-2">
-                    <div className="text-purple-600 font-medium text-xs sm:text-sm mb-0.5 sm:mb-1">
-                      Generating {meta.resultType}
-                    </div>
-                    <div className="text-[10px] sm:text-xs text-purple-500/70 animate-pulse">
-                      {meta.resultType === 'video' ? '2-5 min' : '30-60 sec'}
-                    </div>
-                  </div>
-
-                  {/* Progress bar */}
-                  <div className="absolute bottom-2 sm:bottom-3 lg:bottom-4 left-2 sm:left-3 lg:left-4 right-2 sm:right-3 lg:right-4 h-0.5 sm:h-1 bg-purple-100 rounded-full overflow-hidden">
-                    <div className="h-full bg-gradient-to-r from-purple-500 to-pink-500 rounded-full animate-[progress_3s_ease-in-out_infinite]" />
-                  </div>
+                  <div className="sc-pending-label">Generating {meta.resultType}</div>
+                  <div className="sc-pending-bar"><span /></div>
                 </div>
               )}
               {m.mediaUrl && m.mediaType === 'image' && (
-                <div className="mt-2 sm:mt-3 relative group">
+                <div className="sc-media group">
                   <Image
                     // Free plan sees the watermarked preview (server-rendered)
                     src={isFreeUser && m.jobId ? `/api/download-image?jobId=${m.jobId}&inline=1` : m.mediaUrl}
@@ -1680,134 +1623,119 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
                     width={400}
                     height={400}
                     unoptimized
-                    className="rounded-lg w-full max-w-full sm:max-w-[350px] lg:max-w-[400px] shadow-sm cursor-pointer hover:shadow-lg transition-shadow"
+                    className="sc-media-img"
                     onClick={() => m.mediaUrl && window.open(isFreeUser && m.jobId ? `/api/download-image?jobId=${m.jobId}&inline=1` : m.mediaUrl, '_blank')}
                   />
-                  <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button
-                      onClick={async () => {
-                        try {
-                          // Routed through the server so free-tier nano-banana-pro
-                          // downloads get watermarked (original stays untouched)
-                          const downloadUrl = m.jobId
-                            ? `/api/download-image?jobId=${m.jobId}`
-                            : m.mediaUrl!
-                          const response = await fetch(downloadUrl)
-                          const blob = await response.blob()
-                          const url = window.URL.createObjectURL(blob)
-                          const a = document.createElement('a')
-                          a.href = url
-                          a.download = `generated-image-${Date.now()}.png`
-                          import('@/lib/analytics').then(({ track }) => track('result_downloaded', { media_type: 'image', source: 'chat' })).catch(() => {})
-                          document.body.appendChild(a)
-                          a.click()
-                          window.URL.revokeObjectURL(url)
-                          document.body.removeChild(a)
-                        } catch (e) {
-                          console.error('Download failed:', e)
-                        }
-                      }}
-                      className="bg-black/50 hover:bg-black/70 text-white p-2 rounded-full text-sm transition-colors"
-                      title="Download image"
-                    >
-                      ⬇️
-                    </button>
-                  </div>
+                  <button
+                    onClick={async () => {
+                      try {
+                        // Routed through the server so free-tier downloads get
+                        // watermarked (original stays untouched)
+                        const downloadUrl = m.jobId
+                          ? `/api/download-image?jobId=${m.jobId}`
+                          : m.mediaUrl!
+                        const response = await fetch(downloadUrl)
+                        const blob = await response.blob()
+                        const url = window.URL.createObjectURL(blob)
+                        const a = document.createElement('a')
+                        a.href = url
+                        a.download = `generated-image-${Date.now()}.png`
+                        import('@/lib/analytics').then(({ track }) => track('result_downloaded', { media_type: 'image', source: 'chat' })).catch(() => {})
+                        document.body.appendChild(a)
+                        a.click()
+                        window.URL.revokeObjectURL(url)
+                        document.body.removeChild(a)
+                      } catch (e) {
+                        console.error('Download failed:', e)
+                      }
+                    }}
+                    className="sc-download"
+                    title="Download image"
+                  >
+                    <Icon name="download" />
+                  </button>
                 </div>
               )}
               {m.mediaUrl && m.mediaType === 'video' && (
-                <div className="mt-2 sm:mt-3 relative group">
+                <div className="sc-media group">
                   <video
                     src={m.mediaUrl}
                     controls
-                    className="rounded-lg w-full max-w-full sm:max-w-[400px] lg:max-w-[500px] shadow-md"
+                    className="sc-media-video"
                   />
-                  <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button
-                      onClick={async () => {
-                        try {
-                          const response = await fetch(m.mediaUrl!)
-                          const blob = await response.blob()
-                          const url = window.URL.createObjectURL(blob)
-                          const a = document.createElement('a')
-                          a.href = url
-                          a.download = `generated-video-${Date.now()}.mp4`
-                          import('@/lib/analytics').then(({ track }) => track('result_downloaded', { media_type: 'video', source: 'chat' })).catch(() => {})
-                          document.body.appendChild(a)
-                          a.click()
-                          window.URL.revokeObjectURL(url)
-                          document.body.removeChild(a)
-                        } catch (e) {
-                          console.error('Download failed:', e)
-                        }
-                      }}
-                      className="bg-black/50 hover:bg-black/70 text-white p-2 rounded-full text-sm transition-colors"
-                      title="Download video"
-                    >
-                      ⬇️
-                    </button>
-                  </div>
+                  <button
+                    onClick={async () => {
+                      try {
+                        const response = await fetch(m.mediaUrl!)
+                        const blob = await response.blob()
+                        const url = window.URL.createObjectURL(blob)
+                        const a = document.createElement('a')
+                        a.href = url
+                        a.download = `generated-video-${Date.now()}.mp4`
+                        import('@/lib/analytics').then(({ track }) => track('result_downloaded', { media_type: 'video', source: 'chat' })).catch(() => {})
+                        document.body.appendChild(a)
+                        a.click()
+                        window.URL.revokeObjectURL(url)
+                        document.body.removeChild(a)
+                      } catch (e) {
+                        console.error('Download failed:', e)
+                      }
+                    }}
+                    className="sc-download"
+                    title="Download video"
+                  >
+                    <Icon name="download" />
+                  </button>
                 </div>
               )}
               {m.mediaUrl && m.mediaType === 'music' && (
-                <div className="mt-2 sm:mt-3 relative group">
-                  <div className="bg-gradient-to-r from-purple-500 to-pink-500 rounded-lg overflow-hidden max-w-full sm:max-w-[400px] lg:max-w-[500px]">
-                    {/* Cover Image */}
+                <div className="sc-media group">
+                  <div className="sc-music">
                     {m.coverUrl && (
-                      <div className="relative w-full aspect-square">
+                      <div className="sc-music-cover">
                         <Image
                           src={m.coverUrl}
-                          alt="Music Cover Art"
+                          alt="Music cover art"
                           fill
                           className="object-cover"
                           unoptimized
                         />
                       </div>
                     )}
-
-                    {/* Music Info and Player */}
-                    <div className="p-4">
-                      <div className="flex items-center gap-3 mb-2">
-                        <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center">
-                          <span className="text-2xl">🎵</span>
-                        </div>
-                        <div className="flex-1 text-white">
-                          <div className="font-semibold">Generated Music</div>
-                          <div className="text-xs opacity-90">AI-Generated Audio</div>
+                    <div className="sc-music-body">
+                      <div className="sc-music-head">
+                        <span className="sc-music-icon"><Icon name="music" /></span>
+                        <div>
+                          <div className="sc-music-title">Generated music</div>
+                          <div className="sc-music-sub">AI-generated audio</div>
                         </div>
                       </div>
-                      <audio
-                        src={m.mediaUrl}
-                        controls
-                        className="w-full"
-                      />
+                      <audio src={m.mediaUrl} controls className="w-full" />
                     </div>
                   </div>
-                  <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button
-                      onClick={async () => {
-                        try {
-                          const response = await fetch(m.mediaUrl!)
-                          const blob = await response.blob()
-                          const url = window.URL.createObjectURL(blob)
-                          const a = document.createElement('a')
-                          a.href = url
-                          a.download = `generated-music-${Date.now()}.mp3`
-                          import('@/lib/analytics').then(({ track }) => track('result_downloaded', { media_type: 'music', source: 'chat' })).catch(() => {})
-                          document.body.appendChild(a)
-                          a.click()
-                          window.URL.revokeObjectURL(url)
-                          document.body.removeChild(a)
-                        } catch (e) {
-                          console.error('Download failed:', e)
-                        }
-                      }}
-                      className="bg-black/50 hover:bg-black/70 text-white p-2 rounded-full text-sm transition-colors"
-                      title="Download music"
-                    >
-                      ⬇️
-                    </button>
-                  </div>
+                  <button
+                    onClick={async () => {
+                      try {
+                        const response = await fetch(m.mediaUrl!)
+                        const blob = await response.blob()
+                        const url = window.URL.createObjectURL(blob)
+                        const a = document.createElement('a')
+                        a.href = url
+                        a.download = `generated-music-${Date.now()}.mp3`
+                        import('@/lib/analytics').then(({ track }) => track('result_downloaded', { media_type: 'music', source: 'chat' })).catch(() => {})
+                        document.body.appendChild(a)
+                        a.click()
+                        window.URL.revokeObjectURL(url)
+                        document.body.removeChild(a)
+                      } catch (e) {
+                        console.error('Download failed:', e)
+                      }
+                    }}
+                    className="sc-download"
+                    title="Download music"
+                  >
+                    <Icon name="download" />
+                  </button>
                 </div>
               )}
             </div>
@@ -1816,16 +1744,15 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
         <div ref={bottomRef} />
       </div>
 
-      {/* Bottom input bar */}
-      {/* Fixed input section inside generator area */}
+      {/* Composer */}
       <div
-        className="flex-shrink-0 border-t border-gray-200 bg-white px-6 py-3 flex flex-col gap-2 shadow-inner"
+        className="sc-composer"
         style={shouldHighlightGenerate ? {
-          paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 10px)',
+          paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 12px)',
           position: 'relative',
           zIndex: shouldHighlightGenerate && !shouldShowOnboarding ? 10001 : 0
         } : {
-          paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 10px)'
+          paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 12px)'
         }}
       >
         {/* Local overlay for this section only - only show when highlight is active AND modal is closed */}
@@ -1833,225 +1760,194 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
           <div className="absolute inset-0 bg-black/60 pointer-events-none" style={{ zIndex: 1 }} />
         )}
 
-        {/* Examples */}
-        <div className="flex gap-2 overflow-x-auto text-xs text-gray-600 pb-1 scrollbar-hide pr-4 -mx-1 px-1 relative">
-          {EXAMPLES[gen.activeTab].map(ex => (
-            <button
-              key={ex.short}
-              onClick={() => handleExample(ex.full)}
-              className="px-3 py-1.5 rounded-full bg-gray-100 hover:bg-gray-200 transition text-gray-600 whitespace-nowrap border border-gray-200 hover:border-gray-300"
-              title={ex.full}
-            >
-              {ex.short}
-            </button>
-          ))}
-        </div>
-
-        {/* Collapsible Settings Bar */}
-        <div className="flex flex-wrap items-center gap-2 mb-3 relative">
-          {/* Upload Button - enabled for image-to-image/video AND text-to-image (merged) */}
-          {(requiresImage || gen.activeTab === 'text-to-image') && (
-            <button
-              onClick={handleUploadClick}
-              className={`flex items-center gap-2 px-3 py-2 bg-white border border-gray-200 rounded-lg hover:border-purple-300 hover:bg-purple-50/50 transition text-sm h-[38px] ${shouldHighlightGenerate && !shouldShowOnboarding && tutorialMode === 'product' && localFiles.length === 0
-                ? 'ring-4 ring-purple-400 ring-opacity-50 animate-pulse relative z-10'
-                : ''
-                }`}
-              title="Upload reference images"
-            >
-              <span className="text-gray-600">📎 Upload:</span>
-              <span className="font-medium text-gray-900">
-                {localFiles.length > 0 ? `${localFiles.length} image${localFiles.length > 1 ? 's' : ''}` : 'None'}
-              </span>
-            </button>
-          )}
-
-          {/* Aspect Ratio Preview/Toggle - only for images/videos */}
-          {!isMusicMode && (
-            <button
-              onClick={() => setShowAspectRatio(!showAspectRatio)}
-              className="flex items-center gap-2 px-3 py-2 bg-white border border-gray-200 rounded-lg hover:border-purple-300 hover:bg-purple-50/50 transition text-sm"
-            >
-              <span className="text-gray-600">📐 Ratio:</span>
-              <span className="font-medium text-gray-900">
-                {aspectOptions.find(opt => opt.value === gen.aspectRatio)?.label || '16:9'}
-              </span>
-              <svg className={`w-4 h-4 text-gray-400 transition-transform ${showAspectRatio ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-              </svg>
-            </button>
-          )}
-
-          {/* Model Selector Preview/Toggle - only for image generation modes */}
-          {isImageMode && (
-            <button
-              onClick={() => setShowModelSelector(!showModelSelector)}
-              className="flex items-center gap-2 px-3 py-2 bg-white border border-gray-200 rounded-lg hover:border-purple-300 hover:bg-purple-50/50 transition text-sm"
-            >
-              <span className="text-gray-600">🍌 Model:</span>
-              <span className="font-medium text-gray-900">
-                {selectedModel === 'nano-banana-pro' ? `Pro (${selectedResolution})` : 'Regular'}
-              </span>
-              <svg className={`w-4 h-4 text-gray-400 transition-transform ${showModelSelector ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-              </svg>
-            </button>
-          )}
-
-          {/* Music Options Preview/Toggle */}
-          {isMusicMode && (
-            <button
-              onClick={() => setShowMusicOptions(!showMusicOptions)}
-              className="flex items-center gap-2 px-3 py-2 bg-white border border-gray-200 rounded-lg hover:border-purple-300 hover:bg-purple-50/50 transition text-sm"
-            >
-              <span className="text-gray-600">🎵 Options:</span>
-              <span className="font-medium text-gray-900">
-                {musicDuration < 60 ? `${musicDuration}s` : `${musicDuration / 60}m`}
-                {makeInstrumental && ' • Instrumental'}
-                {musicTags && ' • ' + musicTags.split(',')[0].trim()}
-              </span>
-              <svg className={`w-4 h-4 text-gray-400 transition-transform ${showMusicOptions ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-              </svg>
-            </button>
-          )}
-        </div>
-
-        {/* Expandable Aspect Ratio Controls */}
-        {!isMusicMode && showAspectRatio && (
-          <div className="flex justify-center gap-3 mb-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
-            {aspectOptions.map(opt => (
+        <div className="sc-composer-inner">
+          {/* Examples */}
+          <div className="sc-examples scrollbar-hide">
+            <span className="sc-examples-label">Try</span>
+            {EXAMPLES[gen.activeTab].map(ex => (
               <button
-                key={opt.value}
-                onClick={() => gen.setAspectRatio(opt.value)}
-                className={`flex flex-col items-center justify-center gap-2 p-3 rounded-lg transition ${gen.aspectRatio === opt.value
-                  ? 'bg-purple-100 border-2 border-purple-500'
-                  : 'bg-white border-2 border-gray-200 hover:bg-gray-50'
-                  }`}
+                key={ex.short}
+                onClick={() => handleExample(ex.full)}
+                className="sc-example"
+                title={ex.full}
               >
-                <div
-                  className={`rounded border-2 ${gen.aspectRatio === opt.value ? 'border-purple-500 bg-purple-200' : 'border-gray-400 bg-gray-200'
-                    } ${opt.value === 'landscape' ? 'w-10 h-6' : 'w-6 h-10'
-                    }`}
-                />
-                <span className={`text-sm font-medium ${gen.aspectRatio === opt.value ? 'text-purple-700' : 'text-gray-600'
-                  }`}>
-                  {opt.label}
-                </span>
+                {ex.short}
               </button>
             ))}
           </div>
-        )}
 
-        {/* Expandable Model Selector */}
-        {isImageMode && showModelSelector && (
-          <div className="mb-3">
-            <ModelSelector
-              selectedModel={selectedModel}
-              onSelectModel={setSelectedModel}
-              selectedResolution={selectedResolution}
-              onSelectResolution={setSelectedResolution}
-              disabled={isSubmitting || isLocked}
-              isPro={hasPro}
-              onShowUpgrade={onShowUpgrade}
-            />
+          {/* Settings */}
+          <div className="sc-settings">
+            {(requiresImage || gen.activeTab === 'text-to-image') && (
+              <button
+                onClick={handleUploadClick}
+                className={`sc-setting ${localFiles.length > 0 ? 'is-set' : ''} ${shouldHighlightGenerate && !shouldShowOnboarding && tutorialMode === 'product' && localFiles.length === 0
+                  ? 'sc-highlight relative z-10'
+                  : ''
+                  }`}
+                title="Upload reference images"
+              >
+                <Icon name="paperclip" />
+                <span className="sc-setting-label">Photo</span>
+                <span className="sc-setting-value">
+                  {localFiles.length > 0 ? `${localFiles.length} image${localFiles.length > 1 ? 's' : ''}` : 'Add'}
+                </span>
+              </button>
+            )}
+
+            {!isMusicMode && (
+              <button
+                onClick={() => setShowAspectRatio(!showAspectRatio)}
+                className={`sc-setting ${showAspectRatio ? 'is-open' : ''}`}
+              >
+                <Icon name="ratio" />
+                <span className="sc-setting-label">Ratio</span>
+                <span className="sc-setting-value">
+                  {aspectOptions.find(opt => opt.value === gen.aspectRatio)?.label || '16:9'}
+                </span>
+                <Icon name="chevron" className="sc-chevron" />
+              </button>
+            )}
+
+            {isImageMode && (
+              <button
+                onClick={() => setShowModelSelector(!showModelSelector)}
+                className={`sc-setting ${showModelSelector ? 'is-open' : ''}`}
+              >
+                <Icon name="layers" />
+                <span className="sc-setting-label">Model</span>
+                <span className="sc-setting-value">
+                  {selectedModel === 'nano-banana-pro' ? `Pro · ${selectedResolution}` : 'Standard'}
+                </span>
+                <Icon name="chevron" className="sc-chevron" />
+              </button>
+            )}
+
+            {isMusicMode && (
+              <button
+                onClick={() => setShowMusicOptions(!showMusicOptions)}
+                className={`sc-setting ${showMusicOptions ? 'is-open' : ''}`}
+              >
+                <Icon name="settings" />
+                <span className="sc-setting-label">Options</span>
+                <span className="sc-setting-value">
+                  {musicDuration < 60 ? `${musicDuration}s` : `${musicDuration / 60}m`}
+                  {makeInstrumental && ' · Instrumental'}
+                  {musicTags && ' · ' + musicTags.split(',')[0].trim()}
+                </span>
+                <Icon name="chevron" className="sc-chevron" />
+              </button>
+            )}
           </div>
-        )}
 
-        {/* Expandable Music Options */}
-        {isMusicMode && showMusicOptions && (
-          <div className="flex flex-col gap-3 p-4 bg-gradient-to-br from-purple-50 to-pink-50 rounded-xl border border-purple-200/50 mb-3">
-            {/* Duration */}
-            <div className="flex flex-col gap-2">
-              <label className="text-sm font-medium text-gray-700">⏱️ Duration</label>
-              <div className="flex gap-2">
-                {[10, 30, 60, 120, 180].map(duration => (
-                  <button
-                    key={duration}
-                    onClick={() => setMusicDuration(duration as 10 | 30 | 60 | 120 | 180)}
-                    className={`flex-1 text-sm px-3 py-2 rounded-lg transition font-medium ${musicDuration === duration
-                      ? 'bg-purple-600 text-white shadow-sm'
-                      : 'bg-white text-gray-600 hover:bg-gray-50 border border-purple-200'
-                      }`}
-                  >
-                    {duration < 60 ? `${duration}s` : `${duration / 60}m`}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Lyrics Mode */}
-            <div className="flex flex-col gap-2">
-              <label className="text-sm font-medium text-gray-700">✍️ Lyrics</label>
-              <div className="flex gap-2">
+          {/* Aspect ratio panel */}
+          {!isMusicMode && showAspectRatio && (
+            <div className="sc-panel sc-ratios">
+              {aspectOptions.map(opt => (
                 <button
-                  type="button"
-                  onClick={() => setLyricsMode('ai')}
-                  className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition ${lyricsMode === 'ai'
-                    ? 'bg-purple-600 text-white shadow-sm'
-                    : 'bg-white text-gray-600 hover:bg-gray-50 border border-purple-200'
-                    }`}
+                  key={opt.value}
+                  onClick={() => gen.setAspectRatio(opt.value)}
+                  className={`sc-ratio ${gen.aspectRatio === opt.value ? 'is-active' : ''}`}
                 >
-                  🤖 AI Generate
+                  <span className={`sc-ratio-shape ${opt.value === 'landscape' ? 'is-landscape' : 'is-portrait'}`} />
+                  <span>{opt.label}</span>
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setLyricsMode('custom')}
-                  className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition ${lyricsMode === 'custom'
-                    ? 'bg-purple-600 text-white shadow-sm'
-                    : 'bg-white text-gray-600 hover:bg-gray-50 border border-purple-200'
-                    }`}
-                >
-                  📝 Your Own
-                </button>
-              </div>
-              {lyricsMode === 'custom' && (
-                <p className="text-xs text-purple-600 mt-1">
-                  💡 Type your lyrics in the main input field below
-                </p>
-              )}
+              ))}
             </div>
+          )}
 
-            {/* Cover Prompt */}
-            <div className="flex flex-col gap-2">
-              <label className="text-sm font-medium text-gray-700">
-                🎨 Cover Image <span className="text-gray-400 font-normal">(optional)</span>
-              </label>
-              <input
-                type="text"
-                value={coverPrompt}
-                onChange={(e) => setCoverPrompt(e.target.value)}
-                placeholder="Describe cover art style..."
-                className="text-sm border border-purple-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white placeholder:text-gray-400"
+          {/* Model panel */}
+          {isImageMode && showModelSelector && (
+            <div className="sc-panel-plain">
+              <ModelSelector
+                selectedModel={selectedModel}
+                onSelectModel={setSelectedModel}
+                selectedResolution={selectedResolution}
+                onSelectResolution={setSelectedResolution}
+                disabled={isSubmitting || isLocked}
+                isPro={hasPro}
+                onShowUpgrade={onShowUpgrade}
               />
             </div>
-          </div>
-        )}
+          )}
 
-        {/* Image Previews - show when images are uploaded */}
-        {requiresImage && localPreviews.length > 0 && (
-          <div className="flex gap-2 flex-wrap mb-2 p-2 bg-gray-50 rounded-lg border border-gray-200">
-            {localPreviews.map((preview, index) => (
-              <div key={index} className="relative group">
-                <Image src={preview} alt={`preview ${index + 1}`} width={60} height={60} className="rounded-lg object-cover border-2 border-purple-200" />
-                <button
-                  onClick={() => removeFile(index)}
-                  className="absolute -top-2 -right-2 bg-red-500 hover:bg-red-600 text-white rounded-full w-5 h-5 flex items-center justify-center text-sm font-bold shadow-md"
-                  title="Remove image"
-                >
-                  ×
-                </button>
+          {/* Music panel */}
+          {isMusicMode && showMusicOptions && (
+            <div className="sc-panel sc-music-options">
+              <div className="sc-field">
+                <label>Duration</label>
+                <div className="sc-segment">
+                  {[10, 30, 60, 120, 180].map(duration => (
+                    <button
+                      key={duration}
+                      onClick={() => setMusicDuration(duration as 10 | 30 | 60 | 120 | 180)}
+                      className={musicDuration === duration ? 'is-active' : ''}
+                    >
+                      {duration < 60 ? `${duration}s` : `${duration / 60}m`}
+                    </button>
+                  ))}
+                </div>
               </div>
-            ))}
-          </div>
-        )}
 
-        {/* Hidden file input */}
-        <input ref={fileInputRef} onChange={handleFileChange} type="file" accept="image/*" multiple className="hidden" />
+              <div className="sc-field">
+                <label>Lyrics</label>
+                <div className="sc-segment">
+                  <button
+                    type="button"
+                    onClick={() => setLyricsMode('ai')}
+                    className={lyricsMode === 'ai' ? 'is-active' : ''}
+                  >
+                    AI writes them
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setLyricsMode('custom')}
+                    className={lyricsMode === 'custom' ? 'is-active' : ''}
+                  >
+                    My own
+                  </button>
+                </div>
+                {lyricsMode === 'custom' && (
+                  <p className="sc-hint">Type your lyrics in the message box below.</p>
+                )}
+              </div>
 
-        {/* Prompt Row */}
-        <div className="flex flex-col gap-2 relative" style={{ zIndex: 2 }}>
-          <div className="flex items-end gap-2">
+              <div className="sc-field">
+                <label>Cover image <span>(optional)</span></label>
+                <input
+                  type="text"
+                  value={coverPrompt}
+                  onChange={(e) => setCoverPrompt(e.target.value)}
+                  placeholder="Describe the cover art style…"
+                  className="sc-input"
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Uploaded image previews */}
+          {(requiresImage || gen.activeTab === 'text-to-image') && localPreviews.length > 0 && (
+            <div className="sc-previews">
+              {localPreviews.map((preview, index) => (
+                <div key={index} className="sc-preview">
+                  <Image src={preview} alt={`preview ${index + 1}`} width={56} height={56} className="sc-preview-img" />
+                  <button
+                    onClick={() => removeFile(index)}
+                    className="sc-preview-remove"
+                    title="Remove image"
+                  >
+                    <Icon name="close" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Hidden file input */}
+          <input ref={fileInputRef} onChange={handleFileChange} type="file" accept="image/*" multiple className="hidden" />
+
+          {/* Prompt row */}
+          <div className="sc-prompt" style={{ zIndex: 2 }}>
             <textarea
               ref={textareaRef}
               value={input}
@@ -2062,11 +1958,11 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
                   ? (lyricsMode === 'custom'
                     ? "Paste your lyrics here (verse, chorus, etc.)..."
                     : "Describe your music: style, mood, instruments, tempo...")
-                  : "Describe your idea or drop an image…"
+                  : "Describe your ad, or drop a product photo…"
               }
               rows={1}
-              className="flex-1 w-full border border-gray-300 rounded-2xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none overflow-hidden min-h-[40px] max-h-[120px] bg-white"
-              style={{ height: '40px' }}
+              className="sc-textarea"
+              style={{ height: '44px' }}
             />
             <button
               id="generateButton"
@@ -2080,15 +1976,16 @@ export default function ChatGenerator({ user, profile, onLockedFeature, onShowUp
                 sendPrompt()
               }}
               disabled={shouldHighlightGenerate ? false : (gen.isGenerating || isSubmitting || (requiresImage && localFiles.length === 0) || !input.trim())}
-              className={`bg-gradient-to-r from-purple-500 to-pink-500 text-white w-10 h-10 rounded-full text-xl font-semibold hover:scale-[1.05] active:scale-[0.95] transition ${shouldHighlightGenerate ? '' : 'disabled:opacity-50'} disabled:hover:scale-100 flex items-center justify-center flex-shrink-0 ${shouldHighlightGenerate ? 'ring-4 ring-blue-400 ring-offset-4' : ''}`}
-              style={shouldHighlightGenerate ? {
-                animation: 'soft-glow-pulse 2s ease-in-out infinite',
-                boxShadow: '0 0 0 4px rgba(59, 130, 246, 0.4), 0 0 0 8px rgba(59, 130, 246, 0.2), 0 0 30px 4px rgba(59, 130, 246, 0.6)',
-              } : undefined}
+              className={`sc-send ${shouldHighlightGenerate ? 'sc-highlight' : ''}`}
               title={`Generate (${getButtonCreditText()})`}
             >
-              ➤
+              <span className="sc-send-label">Generate</span>
+              <Icon name="arrow" />
             </button>
+          </div>
+          <div className="sc-meta">
+            <span>Enter to send · Shift + Enter for a new line</span>
+            <span>{getButtonCreditText()}</span>
           </div>
         </div>
       </div>

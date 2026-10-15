@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -13,6 +13,12 @@ export default function SignInPage() {
   const [message, setMessage] = useState("");
   const router = useRouter();
   const supabase = createClient();
+
+  // Show errors passed back from /auth/callback (e.g. Google sign-in failed)
+  useEffect(() => {
+    const err = new URLSearchParams(window.location.search).get("error");
+    if (err) setMessage(err);
+  }, []);
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -40,7 +46,7 @@ export default function SignInPage() {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
-          redirectTo: `${process.env.NEXT_PUBLIC_APP_URL || window.location.origin}/auth/callback`,
+          redirectTo: `${window.location.origin}/auth/callback`,
         },
       });
       if (error) throw error;

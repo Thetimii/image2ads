@@ -430,11 +430,11 @@ export default function DashboardLayout({
                 setShowUpgrade(true);
               }
             }}
-            className="studio-dashboard-profile w-full px-6 py-4 border-b border-gray-200 flex-shrink-0 hover:bg-purple-50/30 transition-colors cursor-pointer text-left group"
+            className="studio-dashboard-profile w-full px-6 py-4 border-b border-gray-200 flex-shrink-0 hover:bg-[#eef1e4] transition-colors cursor-pointer text-left group"
             title="Click to get more credits"
           >
             <div className="flex items-center space-x-3">
-              <div className="w-14 h-9 bg-gradient-to-r from-blue-500 to-purple-500 rounded-2xl flex items-center justify-center">
+              <div className="w-14 h-9 bg-gradient-to-r bg-[#20221e] rounded-2xl flex items-center justify-center">
                 <span className="text-white font-semibold text-sm">
                   {profile.full_name
                     ? profile.full_name.charAt(0).toUpperCase()
@@ -446,11 +446,11 @@ export default function DashboardLayout({
                   {profile.full_name || "User"}
                 </p>
                 <div className="flex items-center space-x-1">
-                  <div className="w-2 h-2 bg-green-400 rounded-full"></div>
-                  <p className="text-xs text-gray-500 group-hover:text-purple-600 transition-colors">
+                  <div className="w-2 h-2 bg-[#d1f45a] rounded-full ring-2 ring-[#d1f45a]/40"></div>
+                  <p className="text-xs text-gray-500 group-hover:text-[#20221e] transition-colors">
                     {profile.credits} credits
                   </p>
-                  <span className="text-xs text-purple-500 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <span className="text-xs text-[#20221e] opacity-0 group-hover:opacity-100 transition-opacity">
                     +
                   </span>
                 </div>
@@ -503,8 +503,8 @@ export default function DashboardLayout({
                   className={`relative group flex items-center px-3 py-2.5 text-sm font-medium rounded-xl transition-all duration-150 w-full text-left
                     ${
                       isCurrentPath(item.href)
-                        ? "bg-gradient-to-r from-purple-50 to-pink-50 text-purple-700"
-                        : "text-gray-700 hover:bg-purple-50/50 hover:text-purple-600"
+                        ? "bg-[#20221e] text-[#d1f45a]"
+                        : "text-gray-700 hover:bg-[#e9eddf] hover:text-[#20221e]"
                     }
                     ${loadingPath === item.href ? "opacity-75" : ""}
                     ${isLocked ? "opacity-60 cursor-pointer" : ""}
@@ -546,8 +546,8 @@ export default function DashboardLayout({
                   group flex items-center px-3 py-2.5 text-sm font-medium rounded-xl transition-all duration-150 w-full text-left
                   ${
                     isCurrentPath(item.href)
-                      ? "bg-gradient-to-r from-purple-50 to-pink-50 text-purple-700"
-                      : "text-gray-700 hover:bg-purple-50/50 hover:text-purple-600"
+                      ? "bg-[#20221e] text-[#d1f45a]"
+                      : "text-gray-700 hover:bg-[#e9eddf] hover:text-[#20221e]"
                   }
                   ${loadingPath === item.href ? "opacity-75" : ""}
                   ${isNavigationLocked ? "cursor-not-allowed" : ""}
@@ -556,10 +556,10 @@ export default function DashboardLayout({
                 {loadingPath === item.href ? (
                   <>
                     <span className="mr-3">
-                      <div className="w-5 h-5 border-2 border-purple-500/30 border-t-purple-500 rounded-full animate-spin"></div>
+                      <div className="w-5 h-5 border-2 border-[#20221e]/20 border-t-[#20221e] rounded-full animate-spin"></div>
                     </span>
                     <span>{item.name}</span>
-                    <span className="ml-auto text-xs text-purple-500">
+                    <span className="ml-auto text-xs text-[#707567]">
                       Loading...
                     </span>
                   </>

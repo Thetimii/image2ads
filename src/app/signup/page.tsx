@@ -40,10 +40,31 @@ export default function SignUpPage() {
       return;
     }
 
+    // Make sure the email is real before creating the account
+    let cleanEmail = email.trim();
+    try {
+      setLoadingMessage("Checking your email...");
+      const res = await fetch("/api/validate-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: cleanEmail }),
+      });
+      const check = await res.json().catch(() => null);
+      if (check && check.ok === false) {
+        setMessage(check.message || "Please enter a valid email address.");
+        setIsLoading(false);
+        setLoadingMessage("");
+        return;
+      }
+      if (check?.ok && check.email) cleanEmail = check.email;
+    } catch {
+      // Network hiccup: the server re-checks after signup, so don't block here.
+    }
+
     try {
       setLoadingMessage("Creating your account...");
       const { data, error } = await supabase.auth.signUp({
-        email,
+        email: cleanEmail,
         password,
         options: {
           emailRedirectTo: `${process.env.NEXT_PUBLIC_APP_URL || window.location.origin}/auth/callback`,
@@ -155,7 +176,7 @@ export default function SignUpPage() {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
-          redirectTo: `${process.env.NEXT_PUBLIC_APP_URL || window.location.origin}/auth/callback`,
+          redirectTo: `${window.location.origin}/auth/callback`,
         },
       });
       if (error) throw error;

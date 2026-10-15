@@ -1,34 +1,58 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextRequest, NextResponse } from "next/server";
 
+// Only allow same-site relative paths as the post-login destination.
+function safeNext(raw: string | null): string {
+  if (!raw || !raw.startsWith("/") || raw.startsWith("//") || raw.startsWith("/\\")) {
+    return "/dashboard";
+  }
+  return raw;
+}
+
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const code = searchParams.get("code");
-  const next = searchParams.get("next") ?? "/dashboard";
+  const next = safeNext(searchParams.get("next"));
 
-  // Use production URL in production, localhost in development
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin;
+  // Stay on the host the user is on (www vs apex). The PKCE verifier and the
+  // new session cookies are host-only, so bouncing between hosts loses them.
+  const baseUrl = request.nextUrl.origin;
 
-  if (code) {
-    const supabase = await createClient();
-    const { data, error } = await supabase.auth.exchangeCodeForSession(code);
-    if (!error && data.user) {
-      // Check if this is a new user (created very recently)
-      const userCreatedAt = new Date(data.user.created_at);
-      const now = new Date();
-      const timeDiff = now.getTime() - userCreatedAt.getTime();
-      const isNewUser = timeDiff < 60000; // Less than 1 minute ago = new user
-      
-      if (isNewUser) {
-        // Redirect new users to signup success tracking page
-        return NextResponse.redirect(`${baseUrl}/auth/signup-success`);
-      } else {
-        // Existing users go directly to their destination
-        return NextResponse.redirect(`${baseUrl}${next}`);
-      }
-    }
+  const providerError = searchParams.get("error_description") || searchParams.get("error");
+  if (providerError) {
+    console.error("[auth/callback] provider error:", providerError);
+    return NextResponse.redirect(
+      `${baseUrl}/signin?error=${encodeURIComponent(providerError)}`
+    );
   }
 
-  // return the user to an error page with instructions
-  return NextResponse.redirect(`${baseUrl}/auth/auth-code-error`);
+  const supabase = await createClient();
+
+  if (code) {
+    const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+    if (!error && data.user) {
+      // New user (created in the last minute) -> signup tracking page
+      const createdMs = new Date(data.user.created_at).getTime();
+      const isNewUser = Date.now() - createdMs < 60000;
+      return NextResponse.redirect(
+        isNewUser ? `${baseUrl}/auth/signup-success` : `${baseUrl}${next}`
+      );
+    }
+    console.error("[auth/callback] code exchange failed:", error?.message);
+  }
+
+  // The code may already have been used (double redirect / refresh) while the
+  // session was still created - if so, just continue.
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (user) {
+    return NextResponse.redirect(`${baseUrl}${next}`);
+  }
+
+  return NextResponse.redirect(
+    `${baseUrl}/signin?error=${encodeURIComponent(
+      "Google sign-in didn't complete. Please try again."
+    )}`
+  );
 }

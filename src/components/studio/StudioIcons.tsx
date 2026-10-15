@@ -19,7 +19,12 @@ export type IconName =
   | "grid"
   | "settings"
   | "card"
-  | "logout";
+  | "logout"
+  | "chevron"
+  | "ratio"
+  | "lock"
+  | "paperclip"
+  | "model";
 const paths: Record<IconName, React.ReactNode> = {
   arrow: (
     <>
@@ -99,6 +104,26 @@ const paths: Record<IconName, React.ReactNode> = {
     </>
   ),
   logout: <path d="M9 3H4v18h5m5-14 5 5-5 5M9 12h10" />,
+  chevron: <path d="m6 9 6 6 6-6" />,
+  ratio: (
+    <>
+      <rect x="3" y="6" width="18" height="12" rx="2" />
+      <path d="M7 10v4h4" />
+    </>
+  ),
+  lock: (
+    <>
+      <rect x="4" y="11" width="16" height="10" rx="2" />
+      <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+    </>
+  ),
+  paperclip: <path d="m20 11-8.5 8.5a5 5 0 0 1-7-7L13 4a3.5 3.5 0 0 1 5 5l-8.5 8.5a2 2 0 0 1-3-3L14 7" />,
+  model: (
+    <>
+      <rect x="4" y="4" width="16" height="16" rx="3" />
+      <path d="M9 9h6v6H9zM9 1v3M15 1v3M9 20v3M15 20v3M1 9h3M1 15h3M20 9h3M20 15h3" />
+    </>
+  ),
 };
 export function Icon({
   name,

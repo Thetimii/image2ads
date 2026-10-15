@@ -57,6 +57,27 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
+  // 🔑 OAuth safety net: if Supabase sends the login code to any page other
+  // than /auth/callback (e.g. it falls back to the Site URL because the
+  // redirect URL isn't allow-listed), forward it to the callback on the SAME
+  // host so the PKCE verifier cookie is present and the session gets created.
+  const authCode = request.nextUrl.searchParams.get("code");
+  if (
+    authCode &&
+    // Supabase PKCE auth codes are UUIDs - leave any other ?code= alone
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(authCode) &&
+    !pathname.startsWith("/auth/") &&
+    !pathname.startsWith("/api/") &&
+    !pathname.startsWith("/reset-password")
+  ) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/auth/callback";
+    url.search = "";
+    url.searchParams.set("code", authCode);
+    url.searchParams.set("next", pathname === "/" ? "/dashboard" : pathname);
+    return NextResponse.redirect(url);
+  }
+
   // ✅ Always refresh Supabase session
   const response = await updateSession(request);
 
